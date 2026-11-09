@@ -145,6 +145,30 @@ class JournalWriter:
         if envelope.version != 1:
             raise ValueError
 
+        return await self._write_event(connection, incoming, current, generation)
+
+    async def _write_event(
+        self,
+        connection: AsyncConnection,
+        incoming: ValidatedEnvelope,
+        current: sa.RowMapping,
+        generation: int,
+    ) -> int:
+        """Route a validated, nonduplicate event to its projection writer.
+
+        For example, turn transitions use the same generation-aware writer.
+
+        Returns
+        -------
+        int
+            The new journal cursor assigned by the selected writer.
+
+        Raises
+        ------
+        ValueError
+            If no writer supports this event type.
+        """
+        envelope = incoming.envelope
         if envelope.type in {"ready", "error"}:
             return await self._ingest_collector_event(
                 connection, incoming, current, generation

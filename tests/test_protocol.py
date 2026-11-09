@@ -3,7 +3,12 @@
 import msgspec
 import pytest
 
-from ishiban.protocol import ProtocolError, StreamPosition, decode_event
+from ishiban.protocol import (
+    ProtocolError,
+    StreamPosition,
+    decode_catalogue,
+    decode_event,
+)
 
 
 def event_line(**changes: object) -> bytes:
@@ -85,3 +90,45 @@ def test_metadata_snapshot_can_omit_machine_identity() -> None:
     assert not event.session.machine_id, (
         "Missing machine identity must remain explicitly unknown."
     )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"sessionId": "another"},
+        {"state": "broken"},
+        {"source": "guessed"},
+        {"freshness": "recent"},
+        {"latestTurn": {"userTurnId": "turn", "state": "broken"}},
+        {"activeTurns": [{"userTurnId": "", "state": "running"}]},
+    ],
+)
+def test_invalid_session_fields_do_not_consume_a_stream_position(
+    changes: dict[str, object],
+) -> None:
+    """Every session field family must validate before the stream advances."""
+    session: dict[str, object] = {"sessionId": "session", **changes}
+    position = StreamPosition()
+    with pytest.raises(ProtocolError):
+        decode_event(
+            event_line(type="snapshot", sessionId="session", session=session),
+            "workspace",
+            position,
+        )
+    assert (position.stream_id, position.sequence) == (None, 0), (
+        "Rejected session metadata or turns must not consume their envelope."
+    )
+
+
+@pytest.mark.parametrize("identities", [[""], ["session", "session"]])
+def test_catalogue_rejects_missing_and_duplicate_session_ids(
+    identities: list[str],
+) -> None:
+    """Catalogue reconciliation needs nonempty unique stable session identities."""
+    data = msgspec.json.encode({
+        "ok": True,
+        "workspaceId": "workspace",
+        "sessions": [{"id": identity} for identity in identities],
+    })
+    with pytest.raises(ProtocolError, match="missing or duplicate"):
+        decode_catalogue(data)

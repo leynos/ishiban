@@ -115,3 +115,22 @@ async def test_browser_assets_are_not_reused_after_a_local_rebuild(
             assert response.headers.get("cache-control") == "no-store", (
                 "Unversioned browser assets must be fetched again after a rebuild."
             )
+
+
+@pytest.mark.asyncio
+async def test_future_cursor_emits_one_reset_and_ends_the_stream(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A cursor from a replaced journal must trigger a fresh client snapshot."""
+    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'reset.sqlite3'}", "workspace")
+    await store.initialize()
+    try:
+        stream = EventsResource(store).tail(1)
+        reset = await anext(stream)
+        assert reset.event == "reset_required", (
+            "A future cursor must produce a reset rather than wait indefinitely."
+        )
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    finally:
+        await store.close()

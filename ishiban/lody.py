@@ -249,12 +249,13 @@ def _pr_results(urls: list[str], result: GitHubResult) -> _PullRequestLookup:
     """
     records: dict[str, PullRequest] = {}
     is_partial = result.data is None
+    repositories = result.data or {}
     for index, url in enumerate(urls):
-        repository = (result.data or {}).get(f"p{index}")
-        pr = repository.get("pullRequest") if repository is not None else None
-        if pr is not None:
-            status = "draft" if pr.is_draft else pr.state.lower()
-            records[url] = PullRequest(url=url, status=status, title=pr.title)
-        else:
+        repository = repositories.get(f"p{index}") or {}
+        pr = repository.get("pullRequest")
+        if pr is None:
             is_partial = True
+            continue
+        status = "draft" if pr.is_draft else pr.state.lower()
+        records[url] = PullRequest(url=url, status=status, title=pr.title)
     return _PullRequestLookup(records=records, is_partial=is_partial)

@@ -5,10 +5,14 @@ workspace or a gap before any database mutation occurs.
 """
 
 import dataclasses as dc
+import typing as typ
 
 import msgspec
 
 from ishiban.domain import Envelope
+
+if typ.TYPE_CHECKING:
+    from ishiban.domain import ObservedSession
 
 SESSION_STATES = frozenset({"idle", "pending", "running", "waiting", "unknown"})
 EVENT_TYPES = frozenset({
@@ -88,10 +92,8 @@ def decode_catalogue(data: bytes) -> Catalogue:
     if not catalogue.ok or not catalogue.workspace_id:
         message = "Catalogue response is not a successful workspace snapshot."
         raise ProtocolError(message)
-    identities = [session.id for session in catalogue.sessions]
-    if any(not identity for identity in identities) or len(set(identities)) != len(
-        identities
-    ):
+    identities = {session.id for session in catalogue.sessions}
+    if "" in identities or len(identities) != len(catalogue.sessions):
         message = "Catalogue has missing or duplicate session identities."
         raise ProtocolError(message)
     return catalogue
@@ -140,14 +142,27 @@ def _validate_identity(
     if event.version != 1 or event.workspace_id != workspace:
         message = "Unknown version or foreign workspace in observer stream."
         raise ProtocolError(message)
+    _validate_stream_position(event, position)
+    if event.observed_at < 0:
+        message = "Observer timestamp must be nonnegative."
+        raise ProtocolError(message)
+
+
+def _validate_stream_position(event: Envelope, position: StreamPosition) -> None:
+    """Check process-local stream identity and contiguous sequence order.
+
+    For example, reconnecting starts a new position rather than reusing one.
+
+    Raises
+    ------
+    ProtocolError
+        If the stream is absent, changed, or not contiguous.
+    """
     if not event.stream_id or event.sequence != position.sequence + 1:
         message = "Observer sequence is missing, duplicated, or out of order."
         raise ProtocolError(message)
     if position.stream_id is not None and event.stream_id != position.stream_id:
         message = "Observer stream identity changed within one child process."
-        raise ProtocolError(message)
-    if event.observed_at < 0:
-        message = "Observer timestamp must be nonnegative."
         raise ProtocolError(message)
 
 
@@ -169,7 +184,21 @@ def _validate_payload(event: Envelope) -> None:
         raise ProtocolError(message)
     if event.type in {"snapshot", "session.changed"}:
         _validate_session(event)
-    if event.type in {"turn.started", "turn.finished"} and not event.user_turn_id:
+    if event.type in {"turn.started", "turn.finished"}:
+        _validate_turn_event(event)
+
+
+def _validate_turn_event(event: Envelope) -> None:
+    """Require a turn identity and a known terminal outcome when finishing.
+
+    For example, a started turn requires identity but has no terminal outcome.
+
+    Raises
+    ------
+    ProtocolError
+        If the turn identity or completion outcome is absent or invalid.
+    """
+    if not event.user_turn_id:
         message = "Turn event is missing the user turn identity."
         raise ProtocolError(message)
     if event.type == "turn.finished" and event.outcome not in {
@@ -193,6 +222,20 @@ def _validate_session(event: Envelope) -> None:
     if session is None or session.session_id != event.session_id:
         message = "Session projection identity does not match the event."
         raise ProtocolError(message)
+    _validate_session_evidence(session)
+    _validate_session_turns(session)
+
+
+def _validate_session_evidence(session: ObservedSession) -> None:
+    """Admit only observed activity, provenance, and freshness vocabulary.
+
+    For example, an arbitrary source label cannot become durable evidence.
+
+    Raises
+    ------
+    ProtocolError
+        If a session activity or evidence enum is unknown.
+    """
     if session.state not in SESSION_STATES or session.source not in {
         "metadata",
         "persisted",
@@ -202,6 +245,18 @@ def _validate_session(event: Envelope) -> None:
     if session.freshness not in {"synced", "unavailable"}:
         message = "Session evidence freshness is unknown."
         raise ProtocolError(message)
+
+
+def _validate_session_turns(session: ObservedSession) -> None:
+    """Validate the same identity and state contract for active and latest turns.
+
+    For example, metadata may omit every turn but cannot contain an empty ID.
+
+    Raises
+    ------
+    ProtocolError
+        If any supplied turn has an unknown state or empty identity.
+    """
     turns = [*session.active_turns]
     if session.latest_turn is not None:
         turns.append(session.latest_turn)

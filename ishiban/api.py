@@ -163,12 +163,12 @@ class EventsResource:
                 yield asgi.SSEvent(json=row, event=category, event_id=str(cursor))
             if rows:
                 idle = 0
-            else:
-                idle += 1
-                if idle >= HEARTBEAT_POLLS:
-                    yield asgi.SSEvent(comment="heartbeat")
-                    idle = 0
-                await asyncio.sleep(0.25)
+                continue
+            idle += 1
+            if idle >= HEARTBEAT_POLLS:
+                yield asgi.SSEvent(comment="heartbeat")
+                idle = 0
+            await asyncio.sleep(0.25)
 
 
 class HealthResource:
