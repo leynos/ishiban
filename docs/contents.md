@@ -35,3 +35,35 @@ reference material.
 - [Scripting standards](scripting-standards.md) explains the preferred Python
   scripting stack, command execution patterns, and test expectations for helper
   scripts.
+
+## Frontend architecture and testing
+
+These shared reference guides inform implementation. Ishiban's design and
+decision records define the project's selected scope and tooling.
+
+- [v2a front-end stack](v2a-front-end-stack.md) describes the shared mockup and
+  full application tiers, their dependencies, and integration boundaries.
+- [React and Tailwind with Bun](react-tailwind-with-bun.md) walks through
+  building, serving, and bundling a React interface with Bun.
+- [Effect 4.0 in TypeScript](effect-4-0-in-typescript.md) explains typed effects
+  and their use in TypeScript applications.
+- [Data model-driven card architecture](data-model-driven-card-architecture.md)
+  explains entity-backed rendering, localization, and measurement boundaries.
+- [Pure, accessible, and localizable React components](pure-accessible-and-localizable-react-components.md)
+  covers component boundaries, accessibility, and localization with Radix,
+  TanStack, and daisyUI.
+- [Accessibility-first component testing](high-velocity-accessibility-first-component-testing.md)
+  describes a layered testing strategy for fast feedback and accessible
+  components.
+
+## Frontend styling
+
+- [Tailwind v4 guide](tailwind-v4-guide.md) explains Tailwind CSS v4 conventions
+  and implementation patterns.
+- [daisyUI v5 guide](daisyui-v5-guide.md) provides component classes, themes,
+  and usage guidance for daisyUI 5 with Tailwind CSS 4.
+- [Semantic Tailwind with daisyUI](semantic-tailwind-with-daisyui-best-practice.md)
+  describes semantic markup and styling with Tailwind, daisyUI, and Radix.
+- [Enforcing semantic Tailwind](enforcing-semantic-tailwind-best-practice.md)
+  explains automated rules for semantic, accessible markup and token-based
+  styling.
