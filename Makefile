@@ -1,4 +1,5 @@
 MDLINT ?= markdownlint-cli2
+BUN ?= bun
 NIXIE ?= nixie
 MDTABLEFIX ?= mdtablefix
 MDTABLEFIX_VERSION ?= 0.6.1
@@ -45,7 +46,7 @@ PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) --f
 
 
 .PHONY: help all audit clean build build-release lint lint-python fmt check-fmt \
-        check-python-sources \
+        check-python-sources install-js fmt-js check-fmt-js lint-js typecheck-js test-js audit-js \
         markdownlint nixie spelling test typecheck dead-code duplication install-nose lint-actions validate $(TOOLS) $(VENV_TOOLS)
 
 .DEFAULT_GOAL := all
@@ -69,6 +70,30 @@ endef
 build: .venv ## Build virtual-env and install deps
 	$(UV_ENV) $(UV) sync --group dev
 
+install-js: ## Install the locked TypeScript tooling with Bun 1.4.x
+	$(call ensure_tool,$(BUN))
+	@case "$$($(BUN) --version)" in 1.4.*) ;; *) \
+	  printf 'Error: Bun 1.4.x is required\n' >&2; exit 1 ;; esac
+	$(BUN) install --frozen-lockfile
+
+fmt-js: install-js ## Format JavaScript, TypeScript, CSS, and JSON with Biome
+	$(BUN) run fmt
+
+check-fmt-js: install-js ## Check Biome formatting without linting
+	$(BUN) run check:fmt
+
+lint-js: install-js ## Run Biome and type-aware Oxlint with df12 rules
+	$(BUN) run lint
+
+typecheck-js: install-js ## Check TypeScript without emitting files
+	$(BUN) run check:types
+
+test-js: install-js ## Run JavaScript and TypeScript tests with Bun
+	$(BUN) run test
+
+audit-js: install-js ## Audit the locked JavaScript dependencies
+	$(BUN) run audit
+
 build-release: ## Build artefacts (sdist & wheel)
 	$(call ensure_uv)
 	$(UV_ENV) $(UV) run python -m build --sdist --wheel
@@ -76,7 +101,7 @@ build-release: ## Build artefacts (sdist & wheel)
 clean: ## Remove build artefacts
 	rm -rf build dist *.egg-info \
 	  .mypy_cache .pytest_cache .coverage coverage.* \
-	  lcov.info htmlcov .venv .uv-cache .uv-tools \
+	  lcov.info htmlcov .venv .uv-cache .uv-tools node_modules \
 	  .typos-oxendict-base.json .typos-oxendict-base.toml
 	find . -type d -name '__pycache__' -print0 | xargs -0 -r rm -rf
 
@@ -119,13 +144,13 @@ check-python-sources:
 	@:
 endif
 
-fmt: check-python-sources build $(MDTABLEFIX) ## Format sources
+fmt: check-python-sources build $(MDTABLEFIX) fmt-js ## Format sources
 	$(RUFF) format $(PYTHON_TARGETS)
 	$(RUFF) check --select I --fix $(PYTHON_TARGETS)
 
 	$(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
-check-fmt: check-python-sources build $(MDTABLEFIX) ## Verify formatting
+check-fmt: check-python-sources build $(MDTABLEFIX) check-fmt-js ## Verify formatting
 	$(RUFF) format --check $(PYTHON_TARGETS)
 
 	@test "$$($(MDTABLEFIX) --version)" = "mdtablefix $(MDTABLEFIX_VERSION)" || { \
@@ -133,7 +158,7 @@ check-fmt: check-python-sources build $(MDTABLEFIX) ## Verify formatting
 	}
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
-lint: lint-python dead-code duplication lint-actions ## Run linters
+lint: lint-python dead-code duplication lint-actions lint-js ## Run linters
 
 lint-python: check-python-sources build ## Run Python linters
 	$(RUFF) check $(PYTHON_TARGETS)
@@ -143,11 +168,11 @@ lint-python: check-python-sources build ## Run Python linters
 	$(AMBRLEAKS) tests
 
 
-typecheck: check-python-sources build ## Run typechecking
+typecheck: check-python-sources build typecheck-js ## Run typechecking
 	$(TY) --version
 	$(TY) check $(PYTHON_TARGETS)
 
-audit: build ## Audit dependencies for known vulnerabilities
+audit: build audit-js ## Audit dependencies for known vulnerabilities
 	$(UV_ENV) $(UV) run pip-audit
 
 
@@ -162,7 +187,7 @@ nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,$(NIXIE))
 	$(NIXIE) --no-sandbox
 
-test: build $(VENV_TOOLS) ## Run tests
+test: build $(VENV_TOOLS) test-js ## Run tests
 	$(UV_ENV) $(ACT_TEST_ENV) $(UV) run pytest -v -n $(PYTEST_XDIST_WORKERS)
 
 

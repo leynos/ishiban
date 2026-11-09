@@ -1,0 +1,28 @@
+{
+  "name": "ishiban",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.3",
+  "engines": {
+    "bun": "1.4.x"
+  },
+  "scripts": {
+    "audit": "bun audit",
+    "fmt": "biome format --write .",
+    "check:fmt": "biome check --linter-enabled=false --assist-enabled=false .",
+    "lint": "biome lint . && oxlint .",
+    "check:types": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "@types/node": "26.1.1",
+    "ai-deslop": "0.4.8",
+    "bun-types": "1.4.3",
+    "fast-check": "4.9.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2004",
+    "typescript": "6.0.3",
+    "zod": "4.6.6"
+  }
+}

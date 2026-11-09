@@ -94,6 +94,9 @@ ______________________________________________________________________
 
 ISC — see [LICENSE](LICENSE) for details.
 
+The imported df12 Oxlint plugin retains its
+[MIT licence](tools/oxlint-plugin-df12/LICENSE).
+
 ______________________________________________________________________
 
 ## Contributing
@@ -103,3 +106,6 @@ Contributions welcome! Start with the
 [developers' guide](docs/developers-guide.md), and follow the conventions in
 [AGENTS.md](AGENTS.md). Run `make all` for the standard local quality gates and
 `make markdownlint` for documentation linting and spelling.
+
+The combined gates require Bun 1.4.x and Node.js 24 or 26 alongside Python; see
+the [TypeScript tooling guide](docs/developers-guide.md#typescript-tooling).

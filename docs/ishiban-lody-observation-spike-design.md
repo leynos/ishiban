@@ -355,14 +355,18 @@ turn-classification logic.
 
 ## 8. React + Effect v4 presentation
 
-Use React + TypeScript (Vite), Effect **v4 core** for typed effects, lifecycle
-management, retry policy and runtime validation, plus the browser's native
-`EventSource` for the transport. Wrap it in a scoped Effect service:
-acquisition installs listeners; finalization closes the connection and removes
-listeners. Validate snapshot and event envelopes at the boundary with `Schema`;
-report malformed events as source errors rather than silently discarding them.
-Avoid making Ishiban's API depend on the experimental `effect/encoding/Sse`
-module unless there is a measured advantage over native `EventSource`.
+The [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
+imported quality gates and Bun runtime used for bundling and testing.
+
+Use React + TypeScript (Bun 1.4.x for bundling and testing), Effect **v4 core**
+for typed effects, lifecycle management, retry policy and runtime validation,
+plus the browser's native `EventSource` for the transport. Wrap it in a scoped
+Effect service: acquisition installs listeners; finalization closes the
+connection and removes listeners. Validate snapshot and event envelopes at the
+boundary with `Schema`; report malformed events as source errors rather than
+silently discarding them. Avoid making Ishiban's API depend on the experimental
+`effect/encoding/Sse` module unless there is a measured advantage over native
+`EventSource`.
 
 Keep an external normalized projection store keyed by
 `(workspaceId, sessionId)` and turn identity. SSE updates replace the relevant

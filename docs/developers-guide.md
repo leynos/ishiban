@@ -45,8 +45,63 @@ shell scripts with shellcheck. `make markdownlint` runs markdownlint-cli2 and
 the spelling gate. Spelling uses `typos-config-builder` with scope `all`.
 
 Run `make audit` as the dependency vulnerability gate. It runs `pip-audit` for
-Python dependencies, and Rust-enabled projects also run `cargo audit` from the
-`rust_extension` crate directory.
+Python dependencies and `bun audit` for the JavaScript lockfile. Rust-enabled
+projects also run `cargo audit` from the `rust_extension` crate directory.
+
+## TypeScript tooling
+
+Install Bun 1.4.x before running the JavaScript gates. CI and `package.json`
+pin Bun 1.4.3; `make install-js` rejects other release lines and installs the
+committed `bun.lock` with `--frozen-lockfile`. Oxlint's JavaScript plugin host
+uses Node.js 24 or 26; CI pins Node.js 24.11.1. With nvm, `nvm use 24` selects
+the matching release line. Both installed release lines pass the tooling suite.
+
+The shared Make targets include both language toolchains. The narrower targets
+are useful while developing the frontend or maintaining the lint plugin:
+
+| Target              | Purpose                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `make install-js`   | Install locked JavaScript development dependencies.      |
+| `make fmt-js`       | Apply Biome formatting.                                  |
+| `make check-fmt-js` | Check formatting without linting or writing files.       |
+| `make lint-js`      | Run Biome and type-aware Oxlint.                         |
+| `make typecheck-js` | Run TypeScript with no emitted output.                   |
+| `make test-js`      | Run Bun tests, property checks, and bundle verification. |
+| `make audit-js`     | Check the JavaScript lockfile for known vulnerabilities. |
+
+Table 1: JavaScript and TypeScript quality gates.
+
+Biome uses Simulacat's formatting and rule configuration: two spaces,
+120-column code, single quotes, semicolons, and no trailing commas. It enforces
+70-line functions, at most four parameters, and cognitive complexity eight.
+Oxlint adds McCabe complexity eight, nesting depth three, and the local df12
+predicate and documentation rules, alongside `unicorn` and `ai-deslop` rules.
+Type-aware checks use the pinned `oxlint-tsgolint` backend. Temporary
+suppressions must explain the invariant and link to the planned removal.
+
+`tsconfig.json` covers TypeScript and TSX in `src/` and `tests/`, with strict
+checking, exact optional properties, checked indexed access, explicit
+overrides, and bundler module resolution. The imported plugin and its fixtures
+remain JavaScript, checked by both linters and the Bun behavioural tests. No
+legacy JSDoc baseline is imported.
+
+The standalone HTML in `reference/` is supplied design material and stays
+outside the JavaScript tool scopes. The live frontend belongs in `src/`; its
+code must pass the same gates as the tooling tests.
+
+`tools/oxlint-plugin-df12/` is an imported implementation of the established
+df12 rules, split into predicate complexity, JSDoc validation, and internal
+JSDoc helpers to meet the repository's 400-line file limit. Those helpers are
+private to this plugin, and `tests/fixtures/oxlint.js` is private to its tests;
+neither is an application utility or public API. Preserve the plugin's bundled
+MIT licence when copying it elsewhere. The
+[tooling decision](adr-001-typescript-tooling.md) records its provenance,
+dependency pins, and scope.
+
+Bun 1.4.x owns JavaScript testing and bundling. The tooling suite verifies the
+bundle API using a disposable TypeScript entrypoint. Add an application bundle
+target when a real frontend entrypoint exists; no application bundle is
+produced by the current Python `make build` target.
 
 ## Automation scripts
 

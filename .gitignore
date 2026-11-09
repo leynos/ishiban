@@ -211,3 +211,10 @@ target/
 
 # Verified duplication detector installed by df12-duplication.
 .tools/
+
+# Bun dependencies and disposable tooling fixtures.
+node_modules/
+.toolchain-fixture-*/
+
+# Lock used while the duplication gate updates pyproject.toml.
+.pyproject.toml.df12.lock

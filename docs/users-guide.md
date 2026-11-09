@@ -2,6 +2,11 @@
 
 ## Quality Gates
 
+Install Bun 1.4.x and Node.js 24 or 26 before running the combined quality
+gates. CI pins Bun 1.4.3. JavaScript tooling dependencies are installed
+automatically from `bun.lock` when a JavaScript gate runs. `make install-js`
+can install them separately without creating the Python environment.
+
 Before the first quality-gate run, initialize Git at the generated project root
 with `git init`. Python source discovery and Markdown table formatting use Git
 repository metadata.
@@ -11,16 +16,24 @@ these targets in order:
 
 - `build`: create the local virtual environment and install development
   dependencies with `uv sync --group dev`.
-- `check-fmt`: check Ruff formatting for Python sources and, when Rust is
-  enabled, `cargo fmt` for the Rust extension.
-- `lint`: run `lint-python` and, when Rust is enabled, `lint-rust`.
-- `typecheck`: run `ty check`.
-- `test`: run pytest and, when Rust is enabled, Rust tests.
+- `check-fmt`: check Biome formatting for JavaScript, TypeScript, CSS, and JSON,
+  Ruff formatting for Python sources and, when Rust is enabled, `cargo fmt` for
+  the Rust extension.
+- `lint`: run `lint-python`, Biome, type-aware Oxlint, and, when Rust is
+  enabled, `lint-rust`.
+- `typecheck`: run `ty check` and TypeScript with no emitted files.
+- `test`: run pytest, Bun tests, and, when Rust is enabled, Rust tests.
 - `spelling`: regenerate `typos.toml` and check repository-wide spelling.
 
 Run `make markdownlint` separately to lint Markdown and run the same spelling
-gate. Run `make audit` separately to check dependencies with `pip-audit` and,
-when Rust is enabled, `cargo audit`.
+gate. Run `make audit` separately to check dependencies with `pip-audit`,
+`bun audit`, and, when Rust is enabled, `cargo audit`.
+
+`make fmt` applies both Python and JavaScript formatting plus Markdown table
+formatting. For JavaScript-only work, use `make fmt-js`, `make check-fmt-js`,
+`make lint-js`, `make typecheck-js`, and `make test-js`. The
+[developers' guide](developers-guide.md#typescript-tooling) explains the rules
+and checked source directories.
 
 The Python baseline is `3.14` (minimum: 3.12).
 
@@ -70,11 +83,12 @@ when the wrapper is missing. Install it yourself with `whitaker-installer` (see
 ## Dependency Auditing
 
 Run `make audit` to check generated project dependencies for known
-vulnerabilities. All generated projects run `pip-audit` against the Python
-environment created by `uv sync --group dev`. CI skips `make audit` for
-Dependabot pull requests; a weekly scheduled audit on the default branch is the
-compensating control. Rust-enabled projects also run `cargo audit` from the
-`rust_extension` crate directory.
+vulnerabilities. Ishiban also runs `bun audit` against its JavaScript lockfile.
+All generated projects run `pip-audit` against the Python environment created by
+`uv sync --group dev`. CI skips `make audit` for Dependabot pull requests; a
+weekly scheduled audit on the default branch is the compensating control.
+Rust-enabled projects also run `cargo audit` from the `rust_extension` crate
+directory.
 
 ## Scheduled Mutation Testing
 

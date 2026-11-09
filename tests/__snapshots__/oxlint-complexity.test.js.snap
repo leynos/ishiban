@@ -1,0 +1,8 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`df12/complex-conditional diagnostics checks diagnostic output for a complex conditional 1`] = `
+"<workspace>/diagnostic.ts:2:11: Conditional has 2 logical operators; extract a named predicate or split into guard clauses. [Error/df12(complex-conditional)]
+
+1 problem
+"
+`;

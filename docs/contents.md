@@ -5,6 +5,8 @@ reference material.
 
 ## Design and reference
 
+- [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
+  imported linting, formatting, compiler policy, and Bun runtime pins.
 - [Lody observation spike design](ishiban-lody-observation-spike-design.md)
   defines the proposed read-only workspace observer, persistence model, live
   interface, verification plan, and implementation sequence.
