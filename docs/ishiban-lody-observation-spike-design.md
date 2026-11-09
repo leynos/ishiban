@@ -27,7 +27,7 @@ Those require separate evidence and are outside this spike.
 ### Questions the spike must settle
 
 1. Can we run one Lody observer continuously, even with hundreds of historical
-   sessions, without excessive memory, synchronisation or process churn?
+   sessions, without excessive memory, synchronization or process churn?
 2. Can we persist every accepted observer message and update the queryable
    projection in one transaction?
 3. Can a browser disconnect, reconnect, reload or survive a collector restart

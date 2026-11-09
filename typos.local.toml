@@ -18,6 +18,10 @@ ignore = [
   # External environment variables retain their published spelling.
   '\bNO_COLOR\b',
   '\bCARGO_TERM_COLOR\b',
+  # CSS properties and values retain the spelling required by browsers.
+  '\b(?:border-)?color\s*:',
+  '\b(?:align-items|justify-content|text-align|place-items)\s*:\s*center\b',
+  '\bscroll-behavior\s*:',
 ]
 
 [files]
