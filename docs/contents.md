@@ -24,8 +24,8 @@ reference material.
 - [Repository layout](repository-layout.md) locates runtime, frontend, schema,
   test, and local state files.
 
-- [User guide](users-guide.md) explains how to use the generated project and
-  its public build and test commands.
+- [User guide](users-guide.md) explains read-only Lody observation, board
+  controls, session evidence, and proof-of-concept limitations.
 - [Developer guide](developers-guide.md) explains the contributor workflow and
   points maintainers to script automation standards.
 - [Documentation style guide](documentation-style-guide.md) defines the

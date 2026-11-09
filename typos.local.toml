@@ -28,6 +28,7 @@ ignore = [
   # Effect retains its published `Fiber` namespace spelling.
   "(?m)^import \\{Effect, Fiber\\} from 'effect';$",
   "(?m)^\\s*yield\\* Fiber\\.interrupt\\(connection\\);$",
+  '(?m)^type RecoveryScenario = \(store: BoardStore, connection: Fiber\.Fiber<void, unknown>\) => Effect\.Effect<void>;$',
   # Lody's external v1 outcome enum uses the published American spelling.
   '"canceled"',
 ]

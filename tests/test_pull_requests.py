@@ -169,6 +169,53 @@ async def test_nonzero_gh_exit_preserves_valid_partial_graphql_data(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lifecycle_case",
+    [
+        ("CLOSED", True, "closed"),
+        ("MERGED", True, "merged"),
+        ("OPEN", True, "draft"),
+    ],
+)
+async def test_terminal_github_state_takes_priority_over_draft_flag(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lifecycle_case: tuple[str, bool, str],
+) -> None:
+    """GitHub terminal state wins, while open draft PRs remain drafts."""
+    state, is_draft, expected_status = lifecycle_case
+    payload = {
+        "data": {
+            "p0": {
+                "pullRequest": {
+                    "title": "Late draft-state correction",
+                    "state": state,
+                    "isDraft": is_draft,
+                }
+            }
+        }
+    }
+    source = "\n".join([
+        f"#!{sys.executable}",
+        "import sys",
+        "sys.stdin.read()",
+        f"print({json.dumps(payload)!r})",
+        "",
+    ])
+    executable = fake_gh(tmp_path, source)
+    enable_fake_gh(monkeypatch, executable.parent)
+
+    result = await read_pull_requests([PR_URL])
+
+    assert result.records[PR_URL].status == expected_status, (
+        "Terminal lifecycle states must take precedence over the draft flag."
+    )
+    assert result.is_partial is False, (
+        "A complete PR response must remain complete after normalization."
+    )
+
+
+@pytest.mark.asyncio
 async def test_failed_middle_batch_preserves_surrounding_results_and_warning(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,

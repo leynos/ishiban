@@ -24,7 +24,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Apply migrations through an injected async-engine connection."""
+    """Apply migrations through an injected connection or standalone sync engine."""
     connection = context.config.attributes.get("connection")
     if connection is None:
         engine = sa.engine_from_config(

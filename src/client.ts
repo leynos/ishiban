@@ -144,7 +144,13 @@ function listen(source: EventSource, store: BoardStore) {
       );
     };
     const opened = () => store.status('Connected');
-    const failed = () => store.status('Reconnecting');
+    const failed = () => {
+      if (source.readyState === EventSource.CLOSED) {
+        resume(Effect.fail(new Error('Event stream closed')));
+        return;
+      }
+      store.status('Reconnecting');
+    };
     source.addEventListener('observation', observation);
     source.addEventListener('source', health);
     source.addEventListener('reset_required', malformed);

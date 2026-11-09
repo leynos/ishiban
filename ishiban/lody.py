@@ -256,6 +256,8 @@ def _pr_results(urls: list[str], result: GitHubResult) -> _PullRequestLookup:
         if pr is None:
             is_partial = True
             continue
-        status = "draft" if pr.is_draft else pr.state.lower()
+        status = pr.state.lower()
+        if status == "open" and pr.is_draft:
+            status = "draft"
         records[url] = PullRequest(url=url, status=status, title=pr.title)
     return _PullRequestLookup(records=records, is_partial=is_partial)
