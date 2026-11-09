@@ -1,5 +1,4 @@
-/** @file Render accessible evidence and pull-request details in a Radix dialog. */
-import * as Dialog from '@radix-ui/react-dialog';
+/** @file Render selected session evidence in the board's nonmodal dock. */
 import type {ReactElement} from 'react';
 import type {Session} from '../contracts';
 import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from './board-model';
@@ -7,7 +6,7 @@ import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from '.
 interface SessionInspectorProps {
   readonly session: Session;
   readonly currentGeneration: number;
-  readonly onRestoreFocus: () => void;
+  readonly onClose: () => void;
 }
 
 /** Allow pull-request links only when they use HTTP or HTTPS. */
@@ -59,70 +58,75 @@ function observedAtLabel(timestamp: number | null): string {
   }).format(timestamp);
 }
 
+/** Describe only the supplied latest turn, retaining its identity. */
+function latestTurnLabel(session: Session): string {
+  if (session.latestTurn === null) {
+    return 'No turn evidence supplied';
+  }
+  const failedContext = session.latestTurn.state === 'failed' ? ' (last known turn outcome)' : '';
+  return `${session.latestTurn.state}${failedContext} · ${session.latestTurn.userTurnId}`;
+}
+
 /**
- * Render session provenance, exact workflow reasoning, runtime evidence, and PR metadata.
+ * Render session provenance, workflow reasoning, runtime evidence, and PR metadata.
  * @param props Selected backend session and the snapshot generation for comparison.
- * @returns A Radix modal dialog with an accessible title, description, and close controls.
+ * @returns A named complementary panel with a keyboard-reachable close control.
  */
 export function SessionInspector(props: SessionInspectorProps): ReactElement {
-  const {session, currentGeneration, onRestoreFocus} = props;
+  const {session, currentGeneration, onClose} = props;
   const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
   const stage = STAGE_LABELS[session.stage];
-  const latestTurn = session.latestTurn?.state ?? 'No turn evidence supplied';
+  const latestTurn = latestTurnLabel(session);
+  const activity = activityOf(session.state);
+  const activityLabel = activity === 'waiting' ? `${activity} (blocked)` : activity;
   const activeTurnSummary =
     session.activeTurns.length === 0
       ? 'None supplied'
       : session.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
   return (
-    <Dialog.Portal>
-      <Dialog.Overlay className="inspector-overlay" />
-      <Dialog.Content
-        aria-describedby="inspector-description"
-        className="session-inspector"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          onRestoreFocus();
-        }}
-      >
-        <header className="session-inspector__header">
-          <p className="eyebrow">Session inspector</p>
-          <Dialog.Close aria-label="Close session inspector" className="btn btn-ghost btn-sm inspector-close">
-            Close
-          </Dialog.Close>
-        </header>
-        <Dialog.Title className="session-inspector__title">{session.title}</Dialog.Title>
-        <Dialog.Description className="session-inspector__description" id="inspector-description">
-          {session.stageReason}
-        </Dialog.Description>
-        <dl className="inspector-facts">
-          <dt>Repository</dt>
-          <dd>{repository}</dd>
-          <dt>Branch</dt>
-          <dd>{session.branchName ?? 'Not supplied'}</dd>
-          <dt>Workflow stage</dt>
-          <dd>{stage}</dd>
-          <dt>Stage reason</dt>
-          <dd>{session.stageReason}</dd>
-          <dt>Activity</dt>
-          <dd>
-            {activityOf(session.state)} ({session.state})
-          </dd>
-          <dt>Evidence</dt>
-          <dd>{evidenceLabel(session, currentGeneration)}</dd>
-          <dt>Source</dt>
-          <dd>
-            {session.source} · {session.freshness}
-          </dd>
-          <dt>Last turn</dt>
-          <dd>{latestTurn}</dd>
-          <dt>Active turns</dt>
-          <dd>{activeTurnSummary}</dd>
-          <dt>Observed</dt>
-          <dd>{observedAtLabel(session.lastObservedAt)}</dd>
-        </dl>
-        <PullRequestDetails session={session} />
-        <Dialog.Close className="btn btn-primary inspector-dismiss">Close inspector</Dialog.Close>
-      </Dialog.Content>
-    </Dialog.Portal>
+    <aside aria-labelledby="session-inspector-heading" className="session-inspector" id="session-inspector">
+      <header className="session-inspector__header">
+        <h2 className="eyebrow" id="session-inspector-heading">
+          Session inspector
+        </h2>
+        <button
+          aria-label="Close session inspector"
+          className="btn btn-ghost btn-sm inspector-close"
+          onClick={onClose}
+          type="button"
+        >
+          Close
+        </button>
+      </header>
+      <h3 className="session-inspector__title">{session.title}</h3>
+      <p className="session-inspector__description" id="inspector-description">
+        {session.stageReason}
+      </p>
+      <dl className="inspector-facts">
+        <dt>Repository</dt>
+        <dd>{repository}</dd>
+        <dt>Branch</dt>
+        <dd>{session.branchName ?? 'Not supplied'}</dd>
+        <dt>Workflow stage</dt>
+        <dd>{stage}</dd>
+        <dt>Stage reason</dt>
+        <dd>{session.stageReason}</dd>
+        <dt>Activity</dt>
+        <dd>{activityLabel}</dd>
+        <dt>Evidence</dt>
+        <dd>{evidenceLabel(session, currentGeneration)}</dd>
+        <dt>Source</dt>
+        <dd>
+          {session.source} · {session.freshness}
+        </dd>
+        <dt>Last known turn</dt>
+        <dd>{latestTurn}</dd>
+        <dt>Active turns</dt>
+        <dd>{activeTurnSummary}</dd>
+        <dt>Observed</dt>
+        <dd>{observedAtLabel(session.lastObservedAt)}</dd>
+      </dl>
+      <PullRequestDetails session={session} />
+    </aside>
   );
 }

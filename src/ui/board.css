@@ -300,11 +300,6 @@
   right: 2px;
 }
 
-.session-mark:hover {
-  filter: brightness(0.93);
-  transform: translateY(-1px);
-}
-
 .session-mark:focus-visible,
 .session-list-item:focus-visible,
 .board-controls :focus-visible,

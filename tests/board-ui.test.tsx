@@ -105,6 +105,31 @@ describe('Ishiban board renderer', () => {
     expect(markup).not.toContain('Archived-only fixture session');
     expect(markup).not.toContain('Turn completed');
     expect(markup).not.toContain('Activity stream');
+    expect(markup).not.toContain('last known turn failed');
+  });
+
+  it('keeps last-known turn failures separate from waiting and workflow stage', () => {
+    const snapshot = makeSnapshot();
+    const failedSession = makeSession({
+      latestTurn: {userTurnId: 'turn-failed-001', state: 'failed'},
+      stage: 'planning'
+    });
+    const blockedSession = makeSession({
+      sessionId: 'session-blocked-001',
+      title: 'Waiting on review',
+      state: 'waiting',
+      latestTurn: {userTurnId: 'turn-failed-002', state: 'failed'},
+      stage: 'building',
+      stageReason: 'The supplied pull request remains a draft.'
+    });
+    const markup = renderBoard({...snapshot, sessions: [failedSession, blockedSession]});
+
+    expect(markup).toContain('last known turn failed');
+    expect(markup).toContain('blocked');
+    expect(markup).toContain('data-last-turn-failed="true"');
+    expect(markup).toContain('data-blocked="true"');
+    expect(markup).toContain('data-stage="planning"');
+    expect(markup).toContain('data-stage="building"');
   });
 
   it('renders 120 repositories and exposes the 6, 10, and 13 mark stage totals', () => {
@@ -115,5 +140,17 @@ describe('Ishiban board renderer', () => {
     expect(markup).toContain('data-repository-stage-count="6" data-stage="planning"');
     expect(markup).toContain('data-repository-stage-count="10" data-stage="building"');
     expect(markup).toContain('data-repository-stage-count="13" data-stage="refine"');
+  });
+
+  it('labels the synthetic failed turn without changing its idle activity', () => {
+    const demo = createDemoSnapshot();
+    const first = demo.sessions[0];
+
+    expect(first?.latestTurn).toEqual({userTurnId: 'demo-turn-001', state: 'failed'});
+    const markup = renderBoard(demo);
+    expect(markup).toContain('Synthetic planning task 01');
+    expect(markup).toContain('idle');
+    expect(markup).toContain('last known turn failed');
+    expect(markup).toContain('data-stage="planning"');
   });
 });

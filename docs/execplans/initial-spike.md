@@ -1,9 +1,8 @@
 # Ishiban initial observation proof of concept
 
-Status: implemented and committed; deterministic and browser validation pass.
-Local review completion is blocked by authentication. The user authorized the
-existing design on 9 November 2026, including the additional PR classification
-rules. No remote publication or Lody writes are authorized.
+Status: review feedback is being addressed, alongside the user's board
+refinements. Authenticated CodeRabbit and CodeScene assessments completed
+against `0037581`. No remote publication or Lody writes are authorized.
 
 ## Purpose
 
@@ -33,9 +32,10 @@ access. The helper revision is `45994f51547ca1f46b57401fba2f1c5f88ed20e9`.
 Only observe and list Lody sessions; never chat, mark read, rename, or cancel.
 Bind the proof of concept to loopback. Keep private catalogue and observation
 captures out of Git. Use Bun 1.4.x, Effect v4, React, Tailwind v4, daisyUI v5,
-Radix, Falcon ASGI, async SQLAlchemy, SQLite WAL and a single collector writer.
-Keep all code files below 400 lines, respect the repository gates, and expose
-bounded projections rather than transcripts or raw credentials.
+native controls, Falcon ASGI, async SQLAlchemy, SQLite WAL and a single
+collector writer. Keep all code files below 400 lines, respect the repository
+gates, and expose bounded projections rather than transcripts or raw
+credentials.
 
 ## Tolerances (exception triggers)
 
@@ -80,6 +80,16 @@ gates, local CodeRabbit and local CodeScene, remediate consequential findings,
 and commit the result. User/developer guides must contain executable run steps
 and honest limitations. No PR or remote publication is part of this assignment.
 
+M5: incorporate the user's follow-up interface requirements. Provide Overview,
+Compact, Balanced, Roomy, and Comfortable mark sizes. Empty placeholders have
+no pointer feedback. Accepted session updates pulse once, with reduced-motion
+support and no pulse on initial render or duplicate replay. A failed latest
+turn uses solid oxide and a tonal border; Lody `waiting` activity uses the
+reference's oxide/amber candy cane. Replace the modal with an initially hidden
+right-hand dock, keeping the board interactive and horizontally scrollable. The
+first table column is `12rem` in every density. These cues preserve workflow
+stage and observed activity as separate facts.
+
 ## Verification plan
 
 Red-green tests must first expose missing projection, persistence, API or UI
@@ -117,8 +127,13 @@ proof of concept; tests must not claim upstream historical completeness.
   observations and PR stages from the authenticated workspace.
 - [x] M4 validation: authenticated live/browser checks, documentation and
   implementation commit `e022847`; all deterministic gates pass.
-- [ ] M4 review: CodeRabbit and CodeScene authentication must be repaired before
-  either assessment can complete; review convergence remains pending.
+- [x] M4 assessment: authenticated CodeRabbit reviewed all 78 changed files;
+  CodeScene completed the same commit delta.
+- [ ] M4 convergence: address five CodeRabbit findings and seven CodeScene
+  complexity alerts, validate, and reassess the resulting implementation.
+- [ ] M5: add intermediate mark sizes, inert empty cells, update pulses, and
+  evidence-based failed/blocked styling, a docked nonmodal inspector, and
+  `12rem` repository columns; validate keyboard and browser behaviour.
 
 ## Surprises & discoveries
 
@@ -217,3 +232,19 @@ journal remains available for a later run.
 
 Revision note: initial plan records the user-authorized design, new stage
 conventions, observed catalogue limitations, and end-to-end acceptance.
+
+## Authenticated review follow-up
+
+CodeRabbit 0.9.3 completed the `bbb1bee..0037581` committed review with 78
+reviewed files. Its findings concern cached active PR facts overriding newer
+terminal catalogue facts, lost partial GraphQL data after a nonzero CLI exit,
+failed batch isolation, exhausted browser retries, and repeated catalogue
+buffer parsing. Regression tests must demonstrate the functional failures
+before their corrections.
+
+CodeScene 1.0.36 completed the same delta. It identified complex protocol
+validators and journal dispatch, plus nested PR normalization and SSE polling.
+Separate validation responsibilities and flatten control flow where that makes
+the code clearer. Keep behaviour-preserving refactors in a separate commit from
+functional fixes. Existing and expanded boundary tests must pass before and
+after those refactors; do not change health thresholds or suppress alerts.

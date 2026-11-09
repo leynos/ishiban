@@ -1,40 +1,35 @@
-/** @file Render a filterable, accessible Ishiban session board. */
-import * as Dialog from '@radix-ui/react-dialog';
-import {useMemo, useRef, useState, type ReactElement, type RefObject} from 'react';
-import type {Session, Snapshot} from '../contracts';
-import {BoardControls} from './board-controls';
-import {BoardBanks, SessionList} from './board-table';
+/** @file Own local interaction state for the Ishiban session board. */
 import {
-  filterSessions,
-  groupByRepository,
-  type ActivityFilter,
-  type Density,
-  type Presentation,
-  WORKFLOW_STAGES
-} from './board-model';
-import {SessionInspector} from './session-inspector';
-import {WorkflowExceptions} from './workflow-exceptions';
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type ReactElement,
+  type RefObject
+} from 'react';
+import type {Session, Snapshot} from '../contracts';
+import {BoardLayout, type BoardViewState} from './board-layout';
+import {filterSessions, type ActivityFilter, type Density, type Presentation} from './board-model';
+import {useSessionUpdates} from './session-updates';
 
 interface BoardProps {
   readonly snapshot: Snapshot;
   readonly connection: string;
 }
 
-interface BoardViewState {
-  readonly query: string;
-  readonly activityFilter: ActivityFilter;
-  readonly includeArchived: boolean;
-  readonly density: Density;
-  readonly presentation: Presentation;
+interface BoardFocusRestorationProps {
+  readonly inspectorSession: Session | null;
+  readonly snapshotSessions: Snapshot['sessions'];
   readonly selectedSessionId: string | null;
-  readonly onQueryChange: (value: string) => void;
-  readonly onActivityChange: (value: ActivityFilter) => void;
-  readonly onArchivedChange: (value: boolean) => void;
-  readonly onDensityChange: () => void;
-  readonly onPresentationChange: (value: Presentation) => void;
-  readonly onReset: () => void;
-  readonly onSelect: (sessionId: string) => void;
+  readonly presentation: Presentation;
+  readonly visibleSessions: readonly Session[];
   readonly onClose: () => void;
+  readonly initiatingTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly boardFallbackRef: RefObject<HTMLElement | null>;
+  readonly markNodesRef: RefObject<Map<string, HTMLButtonElement>>;
+  readonly focusedSessionIdRef: RefObject<string | null>;
 }
 
 /** Keep filters, density, mode, and selection local to the board view. */
@@ -45,25 +40,7 @@ function useBoardViewState(): BoardViewState {
   const [density, setDensity] = useState<Density>('overview');
   const [presentation, setPresentation] = useState<Presentation>('panorama');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const clearSelection = (): void => setSelectedSessionId(null);
-  const onQueryChange = (value: string): void => {
-    setQuery(value);
-    clearSelection();
-  };
-  const onActivityChange = (value: ActivityFilter): void => {
-    setActivityFilter(value);
-    clearSelection();
-  };
-  const onArchivedChange = (value: boolean): void => {
-    setIncludeArchived(value);
-    clearSelection();
-  };
-  const onReset = (): void => {
-    setQuery('');
-    setActivityFilter('all');
-    setIncludeArchived(false);
-    clearSelection();
-  };
+  const onClose = useCallback((): void => setSelectedSessionId(null), []);
   return {
     query,
     activityFilter,
@@ -71,250 +48,156 @@ function useBoardViewState(): BoardViewState {
     density,
     presentation,
     selectedSessionId,
-    onQueryChange,
-    onActivityChange,
-    onArchivedChange,
-    onDensityChange: () => setDensity((current) => (current === 'overview' ? 'comfortable' : 'overview')),
+    onQueryChange: setQuery,
+    onActivityChange: setActivityFilter,
+    onArchivedChange: setIncludeArchived,
+    onDensityChange: setDensity,
     onPresentationChange: setPresentation,
-    onReset,
+    onReset: () => {
+      setQuery('');
+      setActivityFilter('all');
+      setIncludeArchived(false);
+    },
     onSelect: setSelectedSessionId,
-    onClose: clearSelection
+    onClose
   };
 }
 
-/** Present collector and transport health as separate, visible facts. */
-function SourceHealth({
-  snapshot,
-  connection
-}: {
-  readonly snapshot: Snapshot;
-  readonly connection: string;
-}): ReactElement {
-  const receivedAt = snapshot.collector.lastReceivedAt ?? 'No event received';
-  return (
-    <section aria-label="Source health" className="source-health" role="status">
-      <span>
-        <b>Connection</b> {connection.trim() || 'unknown'}
-      </span>
-      <span>
-        <b>Source health</b> {snapshot.collector.state}
-      </span>
-      <span>
-        <b>Generation</b> {snapshot.collector.generation}
-      </span>
-      <span>
-        <b>Last received</b> {receivedAt}
-      </span>
-      {snapshot.collector.lastError === null ? null : (
-        <span className="source-health__error">
-          <b>Latest source error</b> {snapshot.collector.lastError}
-        </span>
-      )}
-    </section>
-  );
+/** Restore session focus after moves and focus the board when a selected session vanishes. */
+function useBoardFocusRestoration(props: BoardFocusRestorationProps): void {
+  const {
+    inspectorSession,
+    snapshotSessions,
+    selectedSessionId,
+    presentation,
+    visibleSessions,
+    onClose,
+    initiatingTriggerRef,
+    boardFallbackRef,
+    markNodesRef,
+    focusedSessionIdRef
+  } = props;
+  useEffect(() => {
+    if (selectedSessionId !== null && inspectorSession === null) {
+      initiatingTriggerRef.current = null;
+      focusedSessionIdRef.current = null;
+      onClose();
+      boardFallbackRef.current?.focus();
+      return;
+    }
+    const focusedSessionId = focusedSessionIdRef.current;
+    if (focusedSessionId === null || document.activeElement !== document.body) {
+      return;
+    }
+    const movedMark = markNodesRef.current.get(focusedSessionId);
+    if (movedMark?.isConnected === true) {
+      movedMark.focus();
+      return;
+    }
+    focusedSessionIdRef.current = null;
+  }, [
+    boardFallbackRef,
+    focusedSessionIdRef,
+    initiatingTriggerRef,
+    inspectorSession,
+    markNodesRef,
+    onClose,
+    presentation,
+    selectedSessionId,
+    snapshotSessions,
+    visibleSessions
+  ]);
 }
 
-/** Render the board controls, panorama, health, and currently selected inspector. */
-function BoardContent({
-  snapshot,
-  connection,
-  viewState,
-  visibleSessions,
-  inspectorSession,
-  onSelect,
-  onRestoreFocus,
-  boardFallbackRef
-}: {
-  readonly snapshot: Snapshot;
-  readonly connection: string;
-  readonly viewState: BoardViewState;
-  readonly visibleSessions: readonly Session[];
-  readonly inspectorSession: Session | null;
-  readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
-  readonly onRestoreFocus: () => void;
-  readonly boardFallbackRef: RefObject<HTMLElement | null>;
-}): ReactElement {
-  const repositories = useMemo(() => groupByRepository(visibleSessions), [visibleSessions]);
-  const isDemo = snapshot.collector.state === 'demo';
-  return (
-    <div className="ishiban-board" data-density={viewState.density} data-presentation={viewState.presentation}>
-      <a className="skip-link" href="#programme-board">
-        Skip to the programme board
-      </a>
-      <header className="board-topbar">
-        <a aria-label="Ishiban programme board" className="board-brand" href="#programme-board">
-          Ishiban <small>Engineering observatory</small>
-        </a>
-        <p className="board-workspace">Workspace / {snapshot.workspaceId}</p>
-      </header>
-      <main className="board-main" id="programme-board" ref={boardFallbackRef} tabIndex={-1}>
-        <header className="board-heading">
-          <div>
-            <p className="eyebrow">Programme / session observation</p>
-            <h1>The programme, at a glance.</h1>
-            <p>{snapshot.sessions.length} sessions · workflow stages are supplied by the collector.</p>
-          </div>
-          {isDemo ? <span className="demo-label">Demo data · synthetic records</span> : null}
-        </header>
-        <SourceHealth connection={connection} snapshot={snapshot} />
-        <BoardControls
-          activityFilter={viewState.activityFilter}
-          density={viewState.density}
-          includeArchived={viewState.includeArchived}
-          onActivityChange={viewState.onActivityChange}
-          onArchivedChange={viewState.onArchivedChange}
-          onDensityChange={viewState.onDensityChange}
-          onPresentationChange={viewState.onPresentationChange}
-          onQueryChange={viewState.onQueryChange}
-          onReset={viewState.onReset}
-          presentation={viewState.presentation}
-          query={viewState.query}
-        />
-        <div aria-live="polite" className="board-summary">
-          <span>
-            <b>{visibleSessions.length}</b> visible sessions
-          </span>
-          <span>
-            <b>{repositories.length}</b> repositories
-          </span>
-          <span>Each stage has five marks across; rows expand with the work.</span>
-          <span>Activity: ↗ running · ! waiting · ◷ pending · · idle · ? unknown</span>
-          <span>Evidence: M metadata only · ↶ carried forward · ● durable · ○ none recorded</span>
-        </div>
-        <section aria-label="Session panorama" className="board-scroll">
-          <BoardDisplay
-            currentGeneration={snapshot.collector.generation}
-            onSelect={onSelect}
-            presentation={viewState.presentation}
-            selectedSessionId={viewState.selectedSessionId}
-            visibleSessions={visibleSessions}
-          />
-        </section>
-        <footer className="board-footer">
-          <span>
-            {isDemo ? 'Demo data' : 'Read-only observation'} · {visibleSessions.length} / {snapshot.sessions.length}{' '}
-            sessions
-          </span>
-          <span>Select a mark to inspect its source evidence.</span>
-        </footer>
-      </main>
-      {inspectorSession === null ? null : (
-        <SessionInspector
-          currentGeneration={snapshot.collector.generation}
-          onRestoreFocus={onRestoreFocus}
-          session={inspectorSession}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Render the selected table, list, or empty state. */
-function BoardDisplay({
-  currentGeneration,
-  onSelect,
-  presentation,
-  selectedSessionId,
-  visibleSessions
-}: {
-  readonly currentGeneration: number;
-  readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
-  readonly presentation: Presentation;
-  readonly selectedSessionId: string | null;
-  readonly visibleSessions: readonly Session[];
-}): ReactElement {
-  if (visibleSessions.length === 0) {
-    return <p className="empty-result">No sessions match these filters.</p>;
+/** Read the focused session identity without treating controls as marks. */
+function focusedSessionId(target: EventTarget): string | null {
+  if (!(target instanceof HTMLButtonElement)) {
+    return null;
   }
-  if (presentation === 'list') {
-    return (
-      <SessionList
-        currentGeneration={currentGeneration}
-        onSelect={onSelect}
-        selectedSessionId={selectedSessionId}
-        sessions={visibleSessions}
-      />
-    );
-  }
-  const workflowSessions = visibleSessions.filter((session) => WORKFLOW_STAGES.includes(session.stage));
-  const workflowRepositories = groupByRepository(workflowSessions);
-  return (
-    <>
-      {workflowSessions.length === 0 ? (
-        <p className="empty-result">No sessions have a classified workflow stage.</p>
-      ) : (
-        <BoardBanks
-          currentGeneration={currentGeneration}
-          onSelect={onSelect}
-          presentation={presentation}
-          repositories={workflowRepositories}
-          selectedSessionId={selectedSessionId}
-          visibleSessions={workflowSessions}
-        />
-      )}
-      <WorkflowExceptions
-        currentGeneration={currentGeneration}
-        onSelect={onSelect}
-        selectedSessionId={selectedSessionId}
-        sessions={visibleSessions}
-      />
-    </>
-  );
+  return target.getAttribute('data-session-id');
 }
 
 /**
  * Render the filtered live or demonstration session board.
  * @param props Validated snapshot and client connection state.
- * @returns An accessible repository panorama and its session inspector.
+ * @returns An accessible repository panorama and its nonmodal session inspector.
  * @example
  * <Board snapshot={createDemoSnapshot()} connection="demo" />
  */
 export function Board(props: BoardProps): ReactElement {
   const {snapshot, connection} = props;
   const viewState = useBoardViewState();
-  const initiatingTriggerRef = useRef<HTMLElement | null>(null);
+  const pulseRevisions = useSessionUpdates(snapshot);
+  const initiatingTriggerRef = useRef<HTMLButtonElement | null>(null);
   const boardFallbackRef = useRef<HTMLElement | null>(null);
-  const lastSelectedSessionRef = useRef<Session | null>(null);
+  const markNodesRef = useRef(new Map<string, HTMLButtonElement>());
+  const focusedSessionIdRef = useRef<string | null>(null);
   const visibleSessions = useMemo(
     () => filterSessions(snapshot.sessions, viewState.query, viewState.activityFilter, viewState.includeArchived),
     [snapshot.sessions, viewState.query, viewState.activityFilter, viewState.includeArchived]
   );
-  const selectedSession = visibleSessions.find((session) => session.sessionId === viewState.selectedSessionId) ?? null;
-  const inspectorSession = selectedSession ?? lastSelectedSessionRef.current;
+  const inspectorSession =
+    snapshot.sessions.find((session) => session.sessionId === viewState.selectedSessionId) ?? null;
+
   const onSelect = (sessionId: string, trigger?: HTMLButtonElement): void => {
-    if (trigger instanceof HTMLElement) {
+    if (trigger instanceof HTMLButtonElement) {
       initiatingTriggerRef.current = trigger;
     }
-    lastSelectedSessionRef.current = visibleSessions.find((session) => session.sessionId === sessionId) ?? null;
     viewState.onSelect(sessionId);
   };
-  const onRestoreFocus = (): void => {
+  const onClose = (): void => {
+    viewState.onClose();
     const initiatingTrigger = initiatingTriggerRef.current;
-    if (initiatingTrigger instanceof HTMLElement && initiatingTrigger.isConnected) {
+    const currentSessionMark =
+      viewState.selectedSessionId === null ? undefined : markNodesRef.current.get(viewState.selectedSessionId);
+    initiatingTriggerRef.current = null;
+    if (initiatingTrigger?.isConnected === true) {
       initiatingTrigger.focus();
+      return;
+    }
+    if (currentSessionMark?.isConnected === true) {
+      currentSessionMark.focus();
       return;
     }
     boardFallbackRef.current?.focus();
   };
+  const onMarkNode = useCallback((sessionId: string, node: HTMLButtonElement | null): void => {
+    if (node === null) {
+      markNodesRef.current.delete(sessionId);
+      return;
+    }
+    markNodesRef.current.set(sessionId, node);
+  }, []);
+  const onFocusCapture = useCallback((event: FocusEvent<HTMLDivElement>): void => {
+    focusedSessionIdRef.current = focusedSessionId(event.target);
+  }, []);
+
+  useBoardFocusRestoration({
+    boardFallbackRef,
+    focusedSessionIdRef,
+    initiatingTriggerRef,
+    inspectorSession,
+    markNodesRef,
+    onClose: viewState.onClose,
+    presentation: viewState.presentation,
+    selectedSessionId: viewState.selectedSessionId,
+    snapshotSessions: snapshot.sessions,
+    visibleSessions
+  });
+
   return (
-    <Dialog.Root
-      open={selectedSession !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          viewState.onClose();
-        }
-      }}
-    >
-      <BoardContent
-        connection={connection}
-        boardFallbackRef={boardFallbackRef}
-        onRestoreFocus={onRestoreFocus}
-        onSelect={onSelect}
-        inspectorSession={inspectorSession}
-        snapshot={snapshot}
-        viewState={viewState}
-        visibleSessions={visibleSessions}
-      />
-    </Dialog.Root>
+    <BoardLayout
+      boardFallbackRef={boardFallbackRef}
+      connection={connection}
+      inspectorSession={inspectorSession}
+      onClose={onClose}
+      onFocusCapture={onFocusCapture}
+      onMarkNode={onMarkNode}
+      onSelect={onSelect}
+      pulseRevisions={pulseRevisions}
+      snapshot={snapshot}
+      viewState={viewState}
+      visibleSessions={visibleSessions}
+    />
   );
 }

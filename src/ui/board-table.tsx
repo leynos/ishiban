@@ -29,20 +29,55 @@ const COMPACT_STAGE_LABELS: Record<WorkflowStage, string> = {
 export interface SessionSelectionProps {
   readonly currentGeneration: number;
   readonly selectedSessionId: string | null;
+  readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
+  readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
 }
 
 interface RepositoryTableProps extends SessionSelectionProps {
   readonly repositories: readonly RepositorySessions[];
-  readonly visibleSessions: readonly Session[];
 }
 
-interface SessionListProps extends SessionSelectionProps {
-  readonly sessions: readonly Session[];
-}
+type SessionListProps = SessionSelectionProps & {readonly sessions: readonly Session[]};
+type SessionListItemProps = SessionSelectionProps & {readonly session: Session};
 
 interface BoardBanksProps extends RepositoryTableProps {
   readonly presentation: Presentation;
+}
+
+interface SessionCondition {
+  readonly isBlocked: boolean;
+  readonly hasLastTurnFailure: boolean;
+  readonly label: string;
+  readonly glyph: string | null;
+}
+
+/** Describe only explicit waiting activity and a supplied failed turn. */
+function conditionOf(session: Session): SessionCondition {
+  const isBlocked = session.state === 'waiting';
+  const hasLastTurnFailure = session.latestTurn?.state === 'failed';
+  const labels: string[] = [];
+  if (isBlocked) {
+    labels.push('blocked');
+  }
+  if (hasLastTurnFailure) {
+    labels.push('last known turn failed');
+  }
+  let glyph: string | null = null;
+  if (hasLastTurnFailure) {
+    glyph = '!';
+  } else if (isBlocked) {
+    glyph = '⌛';
+  }
+  return {isBlocked, hasLastTurnFailure, label: labels.join('; '), glyph};
+}
+
+/** Compose the session's concise accessible name without inferring activity. */
+function sessionLabel(repository: string, session: Session, currentGeneration: number): string {
+  const condition = conditionOf(session);
+  const activity = activityOf(session.state);
+  const provenance = evidenceLabel(session, currentGeneration);
+  return `${repository}: ${session.title}; ${STAGE_LABELS[session.stage]}; ${activity}${condition.label.length === 0 ? '' : `; ${condition.label}`}; ${provenance}`;
 }
 
 /** Render the title and filtered count for one explicit workflow stage. */
@@ -62,37 +97,66 @@ function StageHeading({stage, count}: {readonly stage: WorkflowStage; readonly c
   );
 }
 
+/** Render one keyed, aria-hidden pulse overlay only for a recent event. */
+function UpdatePulse({revision}: {readonly revision: number | undefined}): ReactElement | null {
+  return revision === undefined ? null : (
+    <span
+      aria-hidden="true"
+      className="session-update-pulse"
+      data-session-update-pulse={revision}
+      key={revision}
+      role="presentation"
+    />
+  );
+}
+
 /** Render a keyboard-operable session mark with stage and evidence context. */
 function SessionMark({
   session,
   repository,
   currentGeneration,
   selected,
-  onSelect
+  pulseRevision,
+  onSelect,
+  onMarkNode
 }: {
   readonly session: Session;
   readonly repository: string;
   readonly currentGeneration: number;
   readonly selected: boolean;
+  readonly pulseRevision: number | undefined;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
+  readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
 }): ReactElement {
   const activity = activityOf(session.state);
   const provenance = evidenceLabel(session, currentGeneration);
-  const label = `${repository}: ${session.title}; ${STAGE_LABELS[session.stage]}; ${activity}; ${provenance}`;
+  const condition = conditionOf(session);
+  const label = sessionLabel(repository, session, currentGeneration);
   return (
     <button
+      aria-controls={selected ? 'session-inspector' : undefined}
       aria-expanded={selected}
-      aria-haspopup="dialog"
       aria-label={label}
       aria-pressed={selected}
       className={`session-mark activity-${activity}`}
+      data-blocked={condition.isBlocked || undefined}
+      data-last-turn-failed={condition.hasLastTurnFailure || undefined}
+      data-session-id={session.sessionId}
       data-stage={session.stage}
+      data-update-revision={pulseRevision}
       onClick={(event) => onSelect(session.sessionId, event.currentTarget)}
+      ref={(node) => onMarkNode(session.sessionId, node)}
       title={label}
       type="button"
     >
       <span aria-hidden="true">{activitySymbol(activity)}</span>
+      {condition.glyph === null ? null : (
+        <span aria-hidden="true" className="session-mark__condition">
+          {condition.glyph}
+        </span>
+      )}
       <small aria-hidden="true">{evidenceSymbol(provenance)}</small>
+      <UpdatePulse revision={pulseRevision} />
     </button>
   );
 }
@@ -132,19 +196,23 @@ function evidenceSymbol(provenance: string): string {
   return '○';
 }
 
-/** Render one stage cell, padding mark slots to complete five-wide rows. */
+/** Render one stage cell and inert placeholders completing five-wide rows. */
 function StageCell({
   repository,
   stage,
   currentGeneration,
   selectedSessionId,
-  onSelect
+  pulseRevisions,
+  onSelect,
+  onMarkNode
 }: {
   readonly repository: RepositorySessions;
   readonly stage: WorkflowStage;
   readonly currentGeneration: number;
   readonly selectedSessionId: string | null;
+  readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
+  readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
 }): ReactElement {
   const matchingSessions = repository.sessions.filter((session) => session.stage === stage);
   const rowSlots = Math.max(5, Math.ceil(matchingSessions.length / 5) * 5);
@@ -159,7 +227,9 @@ function StageCell({
           <SessionMark
             currentGeneration={currentGeneration}
             key={session.sessionId}
+            onMarkNode={onMarkNode}
             onSelect={onSelect}
+            pulseRevision={pulseRevisions.get(session.sessionId)}
             repository={repository.name}
             selected={selectedSessionId === session.sessionId}
             session={session}
@@ -176,7 +246,9 @@ function RepositoryTable({
   repositories,
   currentGeneration,
   selectedSessionId,
-  onSelect
+  pulseRevisions,
+  onSelect,
+  onMarkNode
 }: RepositoryTableProps): ReactElement {
   const bankSessions = repositories.flatMap((repository) => repository.sessions);
   return (
@@ -207,7 +279,9 @@ function RepositoryTable({
               <StageCell
                 currentGeneration={currentGeneration}
                 key={stage}
+                onMarkNode={onMarkNode}
                 onSelect={onSelect}
+                pulseRevisions={pulseRevisions}
                 repository={repository}
                 selectedSessionId={selectedSessionId}
                 stage={stage}
@@ -226,22 +300,75 @@ function RepositoryTable({
  * @returns A semantic repository and workflow stage table.
  */
 export function BoardBanks(props: BoardBanksProps): ReactElement {
-  const {repositories, visibleSessions, currentGeneration, selectedSessionId, presentation, onSelect} = props;
+  const {repositories, currentGeneration, selectedSessionId, presentation, pulseRevisions, onSelect, onMarkNode} =
+    props;
   const banks = createBanks(repositories, presentation);
   return (
-    <div className="board-banks">
+    <div className="board-banks" data-bank-count={banks.length}>
       {banks.map((bank, index) => (
         <div className="board-bank" data-bank={index + 1} key={`bank-${index + 1}`}>
           <RepositoryTable
             currentGeneration={currentGeneration}
+            onMarkNode={onMarkNode}
             onSelect={onSelect}
+            pulseRevisions={pulseRevisions}
             repositories={bank}
             selectedSessionId={selectedSessionId}
-            visibleSessions={visibleSessions}
           />
         </div>
       ))}
     </div>
+  );
+}
+
+/** Render one session in the larger list presentation. */
+function SessionListItem({
+  session,
+  currentGeneration,
+  selectedSessionId,
+  pulseRevisions,
+  onSelect,
+  onMarkNode
+}: SessionListItemProps): ReactElement {
+  const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
+  const activity = activityOf(session.state);
+  const evidence = evidenceLabel(session, currentGeneration);
+  const condition = conditionOf(session);
+  const label = sessionLabel(repository, session, currentGeneration);
+  const pulseRevision = pulseRevisions.get(session.sessionId);
+  const classes = [
+    'session-list-item',
+    condition.hasLastTurnFailure ? 'session-list-item--failed' : null,
+    condition.isBlocked ? 'session-list-item--blocked' : null
+  ].filter((value) => value !== null);
+  return (
+    <li>
+      <button
+        aria-controls={selectedSessionId === session.sessionId ? 'session-inspector' : undefined}
+        aria-expanded={selectedSessionId === session.sessionId}
+        aria-label={label}
+        aria-pressed={selectedSessionId === session.sessionId}
+        className={classes.join(' ')}
+        data-blocked={condition.isBlocked || undefined}
+        data-last-turn-failed={condition.hasLastTurnFailure || undefined}
+        data-session-id={session.sessionId}
+        data-stage={session.stage}
+        data-update-revision={pulseRevision}
+        onClick={(event) => onSelect(session.sessionId, event.currentTarget)}
+        ref={(node) => onMarkNode(session.sessionId, node)}
+        type="button"
+      >
+        <span className="session-list-item__title">{session.title}</span>
+        <span>
+          {repository} · {STAGE_LABELS[session.stage]}
+        </span>
+        <small>
+          {activity}
+          {condition.label.length === 0 ? '' : ` · ${condition.label}`} · {evidence}
+        </small>
+        <UpdatePulse revision={pulseRevision} />
+      </button>
+    </li>
   );
 }
 
@@ -251,36 +378,20 @@ export function BoardBanks(props: BoardBanksProps): ReactElement {
  * @returns A list of keyboard-operable session inspector triggers.
  */
 export function SessionList(props: SessionListProps): ReactElement {
-  const {sessions, currentGeneration, selectedSessionId, onSelect} = props;
+  const {sessions, currentGeneration, selectedSessionId, pulseRevisions, onSelect, onMarkNode} = props;
   return (
     <ul className="session-list">
-      {sessions.map((session) => {
-        const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
-        const activity = activityOf(session.state);
-        const evidence = evidenceLabel(session, currentGeneration);
-        const label = `${repository}: ${session.title}; ${STAGE_LABELS[session.stage]}; ${activity}; ${evidence}`;
-        return (
-          <li key={session.sessionId}>
-            <button
-              aria-expanded={selectedSessionId === session.sessionId}
-              aria-haspopup="dialog"
-              aria-label={label}
-              aria-pressed={selectedSessionId === session.sessionId}
-              className="session-list-item"
-              onClick={(event) => onSelect(session.sessionId, event.currentTarget)}
-              type="button"
-            >
-              <span className="session-list-item__title">{session.title}</span>
-              <span>
-                {repository} · {STAGE_LABELS[session.stage]}
-              </span>
-              <small>
-                {activity} · {evidence}
-              </small>
-            </button>
-          </li>
-        );
-      })}
+      {sessions.map((session) => (
+        <SessionListItem
+          currentGeneration={currentGeneration}
+          key={session.sessionId}
+          onMarkNode={onMarkNode}
+          onSelect={onSelect}
+          pulseRevisions={pulseRevisions}
+          selectedSessionId={selectedSessionId}
+          session={session}
+        />
+      ))}
     </ul>
   );
 }

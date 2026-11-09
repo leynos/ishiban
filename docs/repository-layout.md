@@ -6,6 +6,8 @@ This page locates the proof of concept's runtime components and verification.
 - `ishiban/protocol.py` validates the read-only CLI boundary.
 - `ishiban/workflow.py` classifies explicit PR facts.
 - `ishiban/lody.py` owns bounded Lody and GitHub subprocess lifetimes.
+- `ishiban/catalogue_framing.py` locates complete catalogue objects
+  incrementally, leaving validation to the protocol decoder.
 - `ishiban/collector.py` supervises observation and catalogue reconciliation.
 - `ishiban/storage/` contains SQLAlchemy models, transactional journal writing,
   snapshot reads, and projection reconciliation.
@@ -15,6 +17,7 @@ This page locates the proof of concept's runtime components and verification.
 - `src/contracts.ts` and `src/client.ts` validate and apply browser projections.
 - `src/ui/` renders the board and accessible inspector; `src/styles.css` owns
   semantic Tailwind and daisyUI styling.
+- `src/ui/session-updates.ts` owns transient board update cues.
 - `src/demo.ts` supplies isolated synthetic presentation data.
 - `tests/` contains pytest, pytest-bdd, Hypothesis, and Bun verification.
 - `reference/ishiban-mockup.html` is the original visual reference.

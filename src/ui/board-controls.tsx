@@ -1,6 +1,15 @@
 /** @file Render local search, activity, density, and presentation controls. */
 import type {ReactElement} from 'react';
-import {activityFilterOf, ACTIVITIES, type ActivityFilter, type Density, type Presentation} from './board-model';
+import {
+  activityFilterOf,
+  ACTIVITIES,
+  densityOf,
+  DENSITIES,
+  DENSITY_LABELS,
+  type ActivityFilter,
+  type Density,
+  type Presentation
+} from './board-model';
 
 interface BoardControlsProps {
   readonly query: string;
@@ -11,7 +20,7 @@ interface BoardControlsProps {
   readonly onQueryChange: (query: string) => void;
   readonly onActivityChange: (activity: ActivityFilter) => void;
   readonly onArchivedChange: (includeArchived: boolean) => void;
-  readonly onDensityChange: () => void;
+  readonly onDensityChange: (density: Density) => void;
   readonly onPresentationChange: (presentation: Presentation) => void;
   readonly onReset: () => void;
 }
@@ -88,17 +97,21 @@ export function BoardControls(props: BoardControlsProps): ReactElement {
         />
         <span>Include archived and removed</span>
       </label>
-      <fieldset className="density-control">
-        <legend>Mark density</legend>
-        <button
-          aria-pressed={density === 'comfortable'}
-          className="btn btn-outline"
-          onClick={onDensityChange}
-          type="button"
+      <label className="density-control">
+        <span>Mark density</span>
+        <select
+          aria-label="Mark density"
+          className="select select-bordered"
+          onChange={(event) => onDensityChange(densityOf(event.currentTarget.value))}
+          value={density}
         >
-          {density === 'comfortable' ? 'Comfortable marks' : 'Overview marks'}
-        </button>
-      </fieldset>
+          {DENSITIES.map((option) => (
+            <option key={option} value={option}>
+              {DENSITY_LABELS[option]}
+            </option>
+          ))}
+        </select>
+      </label>
       <fieldset className="presentation-control">
         <legend>Board presentation</legend>
         {(['panorama', 'matrix', 'list'] as const).map((option) => (

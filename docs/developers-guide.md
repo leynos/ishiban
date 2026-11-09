@@ -266,3 +266,42 @@ cover later fragments in those files. Do not add new copies or extend these
 exceptions to unrelated files without another review. Frozen migrations must
 remain independent of evolving model metadata, and source protocol records must
 remain independent of journal-write records.
+
+The client exposes its connection lifetime as `liveConnection`, an Effect
+consumed by the cancellable `startLive` browser adapter. Scheduled retries
+continue until the owner cancels the connection; transient failures update
+visible transport health. Tests supply Effect's virtual clock to verify retry
+and cancellation behaviour without changing production delays.
+
+Protocol validators remain private to the Lody boundary. Compatibility,
+process-local sequencing, session evidence vocabulary, and turn payloads have
+separate checks; no generic application-wide validation framework is implied.
+Journal ingestion validates identity and generation before routing to the
+existing event-specific projection writers.
+
+GitHub enrichment returns a private `_PullRequestLookup` with `records` and
+`is_partial`. Its only production consumer is collector reconciliation. Each
+bounded batch retains usable typed GraphQL fields, including after a nonzero
+CLI exit, and a failed batch leaves other batches intact. Error objects retain
+only failure markers; their messages are ignored. Partial enrichment keeps a
+visible source warning. Fresh terminal catalogue statuses override older cached
+active statuses while preserving a known PR title.
+
+`CatalogueFramer` is private to the catalogue subprocess adapter. It scans
+incoming bytes once to locate an object boundary; the protocol decoder then
+validates the entire buffered document exactly once. This preserves completion
+before transport EOF without repeatedly copying and parsing partial buffers.
+Framing alone never establishes JSON validity. Generated chunk-boundary tests
+cover quoted delimiters, escapes, UTF-8, and root completion.
+
+Transient update cues belong to the board's private session-update hook. They
+compare accepted projection revisions, expire through an owned cleanup timer,
+and reset when the workspace changes. Density, filters, and panel selection do
+not become observation events. Pulse overlays leave task-button identity and
+keyboard focus intact; a repository or stage move may replace a button, so
+focus restoration follows the session identity instead of an obsolete node.
+
+The inspector is a native complementary region with explicit close and focus
+restoration behaviour. Its desktop grid reserves a right-hand column; narrow
+viewports stack the panel. The board owns its scroll viewport, including while
+the inspector is open. The former modal-only Radix Dialog dependency is removed.

@@ -1,9 +1,43 @@
-.inspector-overlay {
-  @apply fixed inset-0 z-40 bg-base-content/60;
+.ishiban-board {
+  align-content: start;
+  display: grid;
+  grid-template-areas:
+    "header"
+    "main";
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.board-topbar {
+  grid-area: header;
+}
+
+.board-main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.board-scroll {
+  max-height: min(72vh, 48rem);
+  overflow: auto;
+}
+
+.ishiban-board[data-inspector-open="true"] {
+  gap: 0 1rem;
+  grid-template-areas:
+    "header header"
+    "main inspector";
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
 }
 
 .session-inspector {
-  @apply fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-base-content bg-base-200 p-6 text-base-content shadow-2xl;
+  @apply border border-base-content bg-base-100 p-5 text-base-content shadow-lg;
+  align-self: start;
+  grid-area: inspector;
+  max-height: calc(100vh - 2rem);
+  min-width: 0;
+  overflow-y: auto;
+  position: sticky;
+  top: 1rem;
 }
 
 .session-inspector__header {
@@ -20,10 +54,12 @@
     italic 1.8rem / 1.15 Georgia,
     "Times New Roman",
     serif;
+  overflow-wrap: anywhere;
 }
 
 .session-inspector__description {
   @apply border-l-2 border-accent pl-3 text-sm text-neutral;
+  overflow-wrap: anywhere;
 }
 
 .inspector-facts {
@@ -59,6 +95,61 @@
   @apply ml-2 text-neutral;
 }
 
-.inspector-dismiss {
-  @apply mt-5;
+@media (max-width: 900px) {
+  .ishiban-board[data-inspector-open="true"] {
+    grid-template-areas:
+      "header"
+      "inspector"
+      "main";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-inspector {
+    max-height: min(42vh, 22rem);
+    position: relative;
+    top: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .session-inspector {
+    @apply p-4;
+  }
+
+  .inspector-facts {
+    grid-template-columns: minmax(5.5rem, 0.4fr) minmax(0, 1fr);
+  }
+
+  .board-scroll {
+    max-height: 70vh;
+  }
+}
+
+/* Keep the desktop board's horizontal scrollbar inside the working area. */
+@media (min-width: 901px) {
+  .ishiban-board {
+    grid-template-rows: auto minmax(0, 1fr);
+    height: calc(100dvh - 2.75rem);
+    min-height: 0;
+  }
+
+  .board-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .board-main > :not(.board-scroll) {
+    flex-shrink: 0;
+  }
+
+  .board-scroll {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 10rem;
+  }
+
+  .session-inspector {
+    max-height: 100%;
+  }
 }

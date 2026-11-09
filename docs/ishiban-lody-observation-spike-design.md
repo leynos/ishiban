@@ -1,7 +1,8 @@
 # Ishiban: single-workspace Lody observation spike
 
 **Status:** Accepted design; proof of concept implemented and validated
-locally. External review completion is pending authentication.
+locally. Authenticated review feedback and interface refinements are being
+addressed.
 
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
@@ -15,7 +16,7 @@ process feeds an append-only SQLite event journal and materialized session/turn
 projections. A Falcon ASGI API exposes an atomic snapshot and a
 cursor-resumable Server-Sent Events (SSE) feed. A React + TypeScript
 application uses Effect v4 for typed decoding and connection lifecycle, with
-Tailwind CSS v4, daisyUI v5 and Radix Primitives for presentation.
+Tailwind CSS v4 and daisyUI v5 for semantic presentation.
 
 **Hypothesis:** Lody's existing versioned observation protocol can drive a
 responsive, restart-tolerant, read-only fleet view across a single workspace
@@ -380,8 +381,21 @@ inspection. The mockup establishes **five workflow columns**: `Planning`,
 `Ready`, `Building`, `Refine` and `Merged`, using the user conventions in ADR
 002. Each column is five marks wide and wraps to as many rows as necessary. At
 overview density, target a 120-repository panorama of four banks of roughly 30
-rows; support a comfortable-density mode. Preserve the 6/10/13-item wrapping
-behaviour and avoid truncation.
+rows. Provide Overview, Compact, Balanced, Roomy, and Comfortable mark sizes.
+Keep the repository column `12rem` wide at every density, allowing horizontal
+scrolling when bank widths exceed the viewport. Preserve the 6/10/13-item
+wrapping behaviour and avoid truncation.
+
+The inspector is an initially hidden, nonmodal right-hand dock. Selecting a
+task opens it while the board remains interactive. Its reserved space must
+leave a horizontal scroll viewport through which every table column can be
+reached. Close and Escape return focus appropriately; opening the panel does
+not trap keyboard focus or lock document scrolling.
+
+Use solid oxide with a tonal border for a failed latest turn, and the
+reference's oxide/amber candy cane for waiting (blocked) activity. Preserve
+non-colour labels and glyphs. A brief, reduced-motion-aware pulse marks newly
+received session updates; empty placeholders have no pointer feedback.
 
 **Live workflow evidence:** A successful catalogue with no PR association is
 Planning. A uniquely associated active PR with a `Plan:` title is Ready; a
@@ -403,12 +417,13 @@ Distinguish visually and semantically:
   facts. Never equate `waiting` with a dependency or `turn.finished` with
   Merged.
 
-Use daisyUI 5 for application-level controls and semantic tokens, Tailwind 4
-for layout and responsive density, and Radix Primitives for accessible Dialog,
-Popover, Tooltip and ToggleGroup controls. Build the mark grid with compact
-native buttons rather than hundreds of nested Radix roots. Keyboard selection
-and screen-reader labels must identify session title, repository when known,
-runtime state and evidence freshness; support reduced motion.
+Use daisyUI 5 for application-level controls and semantic tokens, and Tailwind
+4 for layout and responsive density. Use native buttons for the mark grid and a
+labelled complementary region for the docked inspector. Add Radix Primitives
+only when an interaction needs them; this inspector has no modal lifecycle.
+Keyboard selection and screen-reader labels must identify session title,
+repository when known, runtime state, and evidence freshness; support reduced
+motion.
 
 CSS bootstrap:
 
@@ -449,7 +464,7 @@ CSS bootstrap:
   consumption (validate Lody observer behaviour separately), and a synthetic
   workload of 120 repository rows with uneven mark counts.
 - Visual regression for 5, 6, 10, 11 and 13 marks per stage in demo mode;
-  keyboard focus, Radix inspector and responsive panorama.
+  keyboard focus, the docked inspector, and responsive panorama.
 - Confirm *no* endpoint, CLI invocation or UI control mutates Lody.
   Source-health failures remain visible while the API itself stays healthy.
 

@@ -61,8 +61,10 @@ ______________________________________________________________________
 
 ## Features
 
-- A dense repository panorama, five-wide wrapping marks, and an accessible
-  Radix task inspector with search, filters, and comfortable density.
+- A dense repository panorama, five-wide wrapping marks, five mark sizes, and
+  a docked task inspector with search, filters, and keyboard access.
+- Oxide failure marks, striped waiting marks, and brief update pulses with
+  reduced-motion support.
 - Explicit Planning, Ready, Building, Refine, and Merged stages from PR facts,
   with separate Closed and Unclassified groups.
 - Independent agent activity, evidence freshness, and collector health.

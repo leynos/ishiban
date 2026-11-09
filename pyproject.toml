@@ -407,7 +407,7 @@ members = ["ishiban/storage/projections.py::apply_observation", "ishiban/storage
 reason = "Keep independent persisted-observation and catalogue merge policies; only seed-or-copy scaffolding overlaps. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["src/ui/board.tsx::span", "reference/ishiban-mockup.html::span"]
+members = ["src/ui/board-layout.tsx::span", "reference/ishiban-mockup.html::span"]
 reason = "Keep labelled health and summary markup independent of the supplied static visual reference; wrapper tags contain different facts. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]

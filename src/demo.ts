@@ -86,6 +86,14 @@ function demoSession(repositoryOrdinal: number, taskOrdinal: number, stage: Sess
   };
 }
 
+/** Attach one illustrative failed last-turn record without changing demo counts. */
+function markFirstSessionFailed(sessions: Session[]): void {
+  const firstSession = sessions[0];
+  if (firstSession !== undefined) {
+    sessions[0] = {...firstSession, latestTurn: {userTurnId: 'demo-turn-001', state: 'failed'}};
+  }
+}
+
 /**
  * Create a labelled 120-repository snapshot with 6, 10, and 13 mark samples.
  * @returns A deterministic synthetic snapshot with no fabricated durable turns.
@@ -102,6 +110,7 @@ export function createDemoSnapshot(): Snapshot {
       sessions.push(demoSession(repositoryOrdinal, taskOrdinal, stage));
     }
   }
+  markFirstSessionFailed(sessions);
   return {
     version: 1,
     workspaceId: 'leynos',

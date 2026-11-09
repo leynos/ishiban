@@ -4,7 +4,7 @@ import type {Session} from '../contracts';
 export type WorkflowStage = Session['stage'];
 export type Activity = 'idle' | 'pending' | 'running' | 'waiting' | 'unknown';
 export type ActivityFilter = 'all' | Activity;
-export type Density = 'overview' | 'comfortable';
+export type Density = 'overview' | 'compact' | 'balanced' | 'roomy' | 'comfortable';
 export type Presentation = 'panorama' | 'matrix' | 'list';
 
 export interface RepositorySessions {
@@ -45,6 +45,14 @@ export const STAGE_GUIDANCE: Record<WorkflowStage, string> = {
 };
 
 export const ACTIVITIES: readonly Activity[] = ['running', 'waiting', 'pending', 'idle', 'unknown'];
+export const DENSITIES: readonly Density[] = ['overview', 'compact', 'balanced', 'roomy', 'comfortable'];
+export const DENSITY_LABELS: Record<Density, string> = {
+  overview: 'Overview',
+  compact: 'Compact',
+  balanced: 'Balanced',
+  roomy: 'Roomy',
+  comfortable: 'Comfortable'
+};
 export const REPOSITORY_UNAVAILABLE = 'Repository not supplied';
 
 /**
@@ -82,6 +90,15 @@ export function activityFilterOf(value: string): ActivityFilter {
     return 'all';
   }
   return ACTIVITIES.find((activity) => activity === value) ?? 'all';
+}
+
+/**
+ * Accept only a named mark density from the native select control.
+ * @param value Native select value.
+ * @returns One exact density option, or Overview for unknown values.
+ */
+export function densityOf(value: string): Density {
+  return DENSITIES.find((density) => density === value) ?? 'overview';
 }
 
 /**
