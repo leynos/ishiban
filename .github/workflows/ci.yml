@@ -75,6 +75,9 @@ jobs:
         with:
           version: '0.6.1'
 
+      - name: Build browser interface
+        run: make build-web
+
       - name: Check formatting
         run: make check-fmt
 

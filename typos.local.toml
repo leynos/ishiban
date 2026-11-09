@@ -20,8 +20,13 @@ ignore = [
   '\bCARGO_TERM_COLOR\b',
   # CSS properties and values retain the spelling required by browsers.
   '\b(?:border-)?color\s*:',
-  '\b(?:align-items|justify-content|text-align|place-items)\s*:\s*center\b',
+  '\b(?:align-items|justify-content|justify-items|text-align|place-items)\s*:\s*center\b',
   '\bscroll-behavior\s*:',
+  '\boverscroll-behavior-inline\s*:',
+  '\b(?:items|text)-center\b',
+  '\bcolor-scheme\b',
+  # Lody's external v1 outcome enum uses the published American spelling.
+  '"canceled"',
 ]
 
 [files]

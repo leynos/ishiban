@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "workspaceId": "workspace",
+  "sessions": [{ "id": "session", "machineId": "machine", "title": "Fixture", "repoFullName": "leynos/fixture" }]
+}

@@ -1,10 +1,11 @@
 # Ishiban: single-workspace Lody observation spike
 
-**Status:** Draft design, for implementation and falsification  
+**Status:** Accepted design; proof-of-concept validation in progress.
+
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
-**Reference interface:** `ishiban-mockup(1).html` (supplied Ishiban panorama
-mockup)
+**Reference interface:**
+[Ishiban panorama mockup](../reference/ishiban-mockup.html)
 
 ## 1. Decision and hypothesis
 
@@ -20,9 +21,11 @@ responsive, restart-tolerant, read-only fleet view across a single workspace
 without subscribing to raw Loro documents or introducing a second orchestration
 control plane.
 
-**Non-hypothesis:** The feed alone can populate the five df12 workflow stages,
-identify all repositories, determine PR/review/CI state, or prove task success.
-Those require separate evidence and are outside this spike.
+**Boundary:** The observer feed alone cannot establish workflow stage or task
+success. The accepted PR conventions now use explicit catalogue associations
+and read-only GitHub title/status enrichment. CI conclusions, issue progress,
+and task-success inference remain outside this spike. See
+[ADR 002](adr-002-workflow-evidence.md).
 
 ### Questions the spike must settle
 
@@ -65,8 +68,9 @@ Those require separate evidence and are outside this spike.
   permissions or dispatching tasks.
 - Direct Loro/Flock replication or modification of Lody's daemon or its
   internal schema.
-- GitHub/Ghillie and Linear ingestion; PR checks, reviews, issue progress,
-  dependency resolution or task workflow transitions.
+- General GitHub/Ghillie and Linear ingestion; PR checks, review outcomes,
+  issue progress, dependency resolution or task orchestration. Read-only
+  associated PR title/status lookup is the sole GitHub exception.
 - Inferring a work item's workflow stage from an agent's running/idle state.
 - Multi-workspace aggregation, multi-user access, general-purpose event
   brokerage or horizontal API scaling.
@@ -91,7 +95,7 @@ The Lody OSS implementation defines `SessionObserveEnvelope` with `version: 1`,
 | `turn.finished`   | Durable outcome of `completed`, `failed` or `canceled`; not proof that code or tests succeeded.      |
 | `session.removed` | Metadata confirms deletion, unlike archive.                                                          |
 
-A session projection contains `sessionId`, `machineId`, optional `title`,
+A session projection contains `sessionId`, optional `machineId` and `title`,
 `archived`, `state`, `freshness`, `source`, optional `latestTurn`, and
 `activeTurns`. Session state is `idle | pending | running | waiting | unknown`.
 A turn's state can also be `completed | failed | canceled`.
@@ -156,27 +160,15 @@ single-worker Granian/Falcon ASGI service. The collector exclusively owns the
 This isolates collector restarts from active browser connections and avoids the
 complexity of Falcon lifespan task ownership or an extra broker.
 
-For a handful of browser clients, the API can tail SQLite every 500-1,000 ms
-per open SSE connection. The database is the synchronization boundary. Do not
-introduce Redis, Valkey, NATS, a broker or in-process cross-worker pub/sub yet.
-Run **one** API worker for the spike and reject a second collector using a
-local process lock. If eventual fan-out becomes material, revisit it using
-measurements.
+For a handful of browser clients, the API can tail SQLite every 250 ms in
+bounded batches per open SSE connection. The database is the synchronization
+boundary. Do not introduce Redis, Valkey, NATS, a broker or in-process
+cross-worker pub/sub yet. Run **one** API worker for the spike and reject a
+second collector using a local process lock. If eventual fan-out becomes
+material, revisit it using measurements.
 
-Suggested package layout:
-
-```text
-ishiban/
-  collector/{main,process,parser,projector,catalogue}.py
-  persistence/{models,engine,repository}.py
-  api/{app,resources,sse}.py
-  contracts/{observations,snapshot}.py
-web/
-  src/{app,features/board,features/activity,services,components}/
-  src/styles.css
-migrations/
-tests/{unit,integration,contract}/
-```
+Implementation layout is recorded in [Repository layout](repository-layout.md).
+Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
 
 ## 5. Collector protocol and lifecycle
 
@@ -384,20 +376,21 @@ Preserve the supplied mockup's understated, high-density styling: warm paper
 background, pine/oxide accents, compact status glyphs, grouped repositories,
 inspector, search, matrix/list/panorama modes and accessible larger-target
 inspection. The mockup establishes **five workflow columns**: `Planning`,
-`Planned`, `Pending review` (building), `Refining` (PR babysitting) and
-`Merged`. Each column is five marks wide and wraps to as many rows as
-necessary. At overview density, target a 120-repository panorama of four banks
-of roughly 30 rows; support a comfortable-density mode. Preserve the
-6/10/13-item wrapping behaviour and avoid truncation.
+`Ready`, `Building`, `Refine` and `Merged`, using the user conventions in ADR
+002. Each column is five marks wide and wraps to as many rows as necessary. At
+overview density, target a 120-repository panorama of four banks of roughly 30
+rows; support a comfortable-density mode. Preserve the 6/10/13-item wrapping
+behaviour and avoid truncation.
 
-**Honest live-mode compromise:** Lody observation does not provide workflow
-stages or even reliable repository context. Show real sessions in a separate
-**Unclassified sessions** gutter/group (grouped by repo only when enriched
-metadata supplies one). Do not place them in a fabricated workflow stage. Keep
-the five stage columns available but empty in genuine live mode until a
-separate work-item association source exists. Label the original mockup's
-synthetic task dataset explicitly as **Demo data**, selectable only in an
-isolated presentation mode.
+**Live workflow evidence:** A successful catalogue with no PR association is
+Planning. A uniquely associated active PR with a `Plan:` title is Ready; a
+non-plan draft is Building, and a non-plan ready-for-review PR is Refine.
+Merged and closed-unmerged PRs are terminal groups. Multiple active PRs,
+missing titles, or conflicting lifecycle facts remain Unclassified. Historical
+terminal PRs do not override one active association. The installed Lody CLI
+omits PR titles, so a bounded read-only GitHub lookup supplies them. Source
+outages and cached metadata remain visible. The original mockup's synthetic
+workload is explicitly labelled **Demo data** in an isolated mode.
 
 Distinguish visually and semantically:
 
@@ -405,8 +398,9 @@ Distinguish visually and semantically:
 - Evidence quality: metadata-only, persisted/synced, persisted/unavailable, or
   carried forward from an earlier collector generation.
 - Collector health: following, reconnecting, unavailable.
-- Workflow stage: **not known yet**. Do not equate `waiting` with a project
-  dependency or `turn.finished` with `Merged`.
+- Workflow stage: justified only by explicit PR association and lifecycle
+  facts. Never equate `waiting` with a dependency or `turn.finished` with
+  Merged.
 
 Use daisyUI 5 for application-level controls and semantic tokens, Tailwind 4
 for layout and responsive density, and Radix Primitives for accessible Dialog,
@@ -506,7 +500,7 @@ worth proposing. No production hardening without evidence from the spike.
 | Lody CLI observation cannot attach to local-only OSS deployment | Declare Cloud authentication prerequisite; track local daemon adapter as a future upstream request.                                       |
 | Observer misses history-only changes of unopened idle rooms     | Preserve its documented limits; use targeted single-session observation later if needed.                                                  |
 | Source has no durable replay cursor                             | Store Ishiban-local append-only log; reconcile new Lody snapshots after every restart. Historical unseen transitions are not recoverable. |
-| Repository/task/stage associations absent                       | Optional `session list` metadata bridge, explicit Unclassified group, no workflow inference.                                              |
+| Repository/task/stage associations absent                       | Catalogue and associated GitHub PR metadata bridge, explicit Unclassified group, no activity-based stage inference.                       |
 | SQLite lock contention or SSE polling overhead                  | One writer, short reads, WAL, one API worker and measured fan-out; use a broker only when justified.                                      |
 | Native EventSource reconnect masks a lost source                | Persist explicit collector-health events; surface observation generation and staleness.                                                   |
 | Lody auth expiry or provider failures                           | Distinguish auth errors from transient outages; bound retries; never put credentials in logs or frontend.                                 |
@@ -527,7 +521,7 @@ identifiers and provenance. That is a follow-on design, not part of this spike.
 - [Effect v4 documentation](https://effect.website/docs/v4/onboarding)
 - [daisyUI React/Tailwind installation](https://daisyui.com/docs/install/react/)
 - [Radix Primitives](https://www.radix-ui.com/primitives)
-- Supplied `ishiban-mockup(1).html`, specifically its five-stage schema,
+- Supplied `reference/ishiban-mockup.html`, specifically its five-stage schema,
   120-repository panorama, density toggle, inspector and wrapping logic.
 
 **Source-derived claims** above concern the current Lody implementation and

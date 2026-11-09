@@ -1,0 +1,64 @@
+.inspector-overlay {
+  @apply fixed inset-0 z-40 bg-base-content/60;
+}
+
+.session-inspector {
+  @apply fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-base-content bg-base-200 p-6 text-base-content shadow-2xl;
+}
+
+.session-inspector__header {
+  @apply flex items-center justify-between gap-4;
+}
+
+.session-inspector__header .eyebrow {
+  @apply m-0 text-xs uppercase tracking-widest text-accent;
+}
+
+.session-inspector__title {
+  @apply mb-2 mt-4;
+  font:
+    italic 1.8rem / 1.15 Georgia,
+    "Times New Roman",
+    serif;
+}
+
+.session-inspector__description {
+  @apply border-l-2 border-accent pl-3 text-sm text-neutral;
+}
+
+.inspector-facts {
+  display: grid;
+  font-size: 0.72rem;
+  gap: 0.55rem 1rem;
+  grid-template-columns: minmax(7rem, 0.45fr) minmax(0, 1fr);
+  margin: 1.4rem 0;
+}
+
+.inspector-facts dt {
+  @apply text-neutral;
+}
+
+.inspector-facts dd {
+  @apply m-0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-section {
+  @apply border-t border-base-300 pt-3;
+}
+
+.inspector-section h3 {
+  @apply font-mono text-xs uppercase tracking-wide;
+}
+
+.inspector-section ul {
+  @apply grid gap-2 pl-5;
+}
+
+.inspector-section small {
+  @apply ml-2 text-neutral;
+}
+
+.inspector-dismiss {
+  @apply mt-5;
+}

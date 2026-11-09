@@ -1,0 +1,394 @@
+.data-mode {
+  @apply flex flex-wrap items-center justify-between gap-3 bg-primary px-5 py-2 text-primary-content;
+  font-family: "Courier New", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.data-mode-actions {
+  @apply inline-flex flex-wrap items-center gap-1;
+}
+
+.data-mode .btn {
+  @apply min-h-7;
+}
+
+.ishiban-board {
+  @apply min-h-screen bg-base-200 text-base-content;
+  color: var(--color-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.45;
+}
+
+.skip-link {
+  @apply sr-only;
+}
+
+.skip-link:focus-visible {
+  @apply not-sr-only fixed left-3 top-3 z-50 rounded-field bg-base-100 px-4 py-3 text-base-content shadow-lg;
+}
+
+.board-topbar {
+  @apply flex items-center justify-between gap-6 bg-primary px-5 py-2 text-primary-content;
+  min-height: 2.75rem;
+}
+
+.board-brand {
+  @apply flex items-baseline gap-4 no-underline;
+  font:
+    italic 1.85rem / 1 Georgia,
+    "Times New Roman",
+    serif;
+  letter-spacing: -0.06em;
+}
+
+.board-brand small,
+.board-workspace,
+.eyebrow,
+.source-health,
+.stage-heading,
+.repository-name small,
+.board-footer,
+.demo-label,
+.session-mark-grid,
+.inspector-facts,
+.inspector-section small {
+  font-family: "Courier New", monospace;
+}
+
+.board-brand small {
+  color: #d5ded0;
+  font-size: 0.65rem;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.board-workspace {
+  @apply m-0 text-xs uppercase tracking-widest;
+}
+
+.board-main {
+  @apply mx-auto grid max-w-[180rem] gap-0;
+  min-width: 0;
+}
+
+.board-heading {
+  @apply flex items-end justify-between gap-6 border-b border-base-content px-6 py-4;
+}
+
+.board-heading .eyebrow {
+  @apply mb-2 mt-0 text-xs uppercase tracking-[0.18em] text-accent;
+}
+
+.board-heading h1 {
+  @apply mb-2 mt-0 text-4xl;
+  font:
+    italic clamp(1.5rem, 2.2vw, 1.8rem) / 1.1 Georgia,
+    "Times New Roman",
+    serif;
+  letter-spacing: -0.04em;
+}
+
+.board-heading > div > p:last-child {
+  @apply mb-0 mt-0 text-xs text-neutral;
+}
+
+.demo-label {
+  @apply rounded-field border border-warning-content bg-warning px-3 py-2 text-xs font-bold text-warning-content;
+  white-space: nowrap;
+}
+
+.source-health {
+  @apply flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-base-300 bg-base-100 px-6 py-2 text-[0.65rem];
+}
+
+.source-health b {
+  @apply mr-1 font-bold uppercase tracking-wide text-neutral;
+}
+
+.source-health__error {
+  @apply text-error;
+}
+
+.board-controls {
+  @apply flex flex-wrap items-end gap-2 border-b border-base-300 px-5 py-2;
+}
+
+.search-control,
+.activity-control {
+  @apply grid gap-1 text-xs text-neutral;
+}
+
+.search-control {
+  flex: 1 1 18rem;
+  max-width: 30rem;
+}
+
+.activity-control {
+  min-width: 9rem;
+}
+
+.search-control .input,
+.activity-control .select {
+  @apply w-full bg-base-100 text-base-content;
+}
+
+.archived-control {
+  @apply flex min-h-8 items-center gap-2 px-1 text-xs;
+}
+
+.density-control,
+.presentation-control {
+  @apply flex flex-wrap items-center gap-1;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.density-control legend,
+.presentation-control legend {
+  @apply mr-1 text-xs text-neutral;
+}
+
+.board-controls .btn {
+  @apply min-h-7 text-xs;
+}
+
+.reset-control {
+  @apply ml-auto;
+}
+
+.board-summary {
+  @apply flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-base-300 bg-base-100 px-5 py-2 text-[0.65rem] text-neutral;
+}
+
+.board-summary b {
+  @apply text-base-content;
+}
+
+.board-scroll {
+  @apply w-full min-w-0 bg-base-100;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--color-line) var(--color-paper);
+}
+
+.board-banks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.4rem;
+  width: 100%;
+}
+
+.board-bank {
+  min-width: 0;
+}
+
+[data-density="comfortable"] .board-banks,
+[data-density="comfortable"] .board-bank {
+  min-width: 64rem;
+}
+
+[data-density="comfortable"] .board-banks {
+  grid-template-columns: minmax(64rem, 1fr);
+}
+
+.repository-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.repository-table th,
+.repository-table td {
+  border-bottom: 1px solid var(--color-line);
+  border-right: 1px solid var(--color-line);
+  padding: 0.55rem 0.35rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.repository-table th:first-child {
+  width: 4.25rem;
+}
+
+.repository-heading {
+  @apply bg-base-300 text-xs font-normal uppercase tracking-wide;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.stage-heading {
+  @apply bg-base-300 text-[0.58rem] font-bold;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  position: relative;
+}
+
+.stage-heading small {
+  @apply sr-only;
+}
+
+.stage-heading b {
+  @apply absolute right-2 top-2 text-neutral;
+  font-size: 0.65rem;
+}
+
+.repository-name {
+  @apply bg-base-100 text-[0.55rem] font-bold;
+  overflow-wrap: anywhere;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.repository-name small {
+  @apply mt-1 block text-[0.6rem] font-normal text-neutral;
+}
+
+.stage-cell {
+  min-width: 0;
+}
+
+[data-density="comfortable"] .stage-cell {
+  min-width: 10rem;
+}
+
+.session-mark-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.session-mark {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--color-sage);
+  border: 1px solid #71816f;
+  color: var(--color-pine);
+  cursor: pointer;
+  display: grid;
+  font:
+    bold 0.38rem / 1 "Courier New",
+    monospace;
+  justify-items: center;
+  min-height: 0.5rem;
+  min-width: 0;
+  padding: 0;
+  position: relative;
+  transition:
+    filter 120ms ease,
+    transform 120ms ease;
+  width: 100%;
+}
+
+.session-mark small {
+  bottom: 1px;
+  font-size: 0.4rem;
+  line-height: 1;
+  position: absolute;
+  right: 2px;
+}
+
+.session-mark:hover {
+  filter: brightness(0.93);
+  transform: translateY(-1px);
+}
+
+.session-mark:focus-visible,
+.session-list-item:focus-visible,
+.board-controls :focus-visible,
+.board-brand:focus-visible,
+.inspector-close:focus-visible,
+.inspector-dismiss:focus-visible {
+  outline: 2px solid var(--color-oxide);
+  outline-offset: 3px;
+  z-index: 2;
+}
+
+.session-mark[aria-pressed="true"] {
+  outline: 2px solid var(--color-oxide);
+  outline-offset: 1px;
+  z-index: 2;
+}
+
+.session-mark--empty {
+  background: repeating-linear-gradient(135deg, transparent 0 3px, #e5e7df 3px 4px);
+  border-color: #d2d7cb;
+  cursor: default;
+}
+
+.activity-running {
+  background: var(--color-pine);
+  border-color: var(--color-pine);
+  color: #fff;
+}
+
+.activity-waiting {
+  background: var(--color-amber);
+  border-color: #9b742c;
+  color: #694614;
+}
+
+.activity-pending {
+  background: var(--color-blue);
+  border-color: #748a96;
+  color: #304c5b;
+}
+
+.activity-unknown {
+  background: #e6e6df;
+  border-color: #92968c;
+  color: #444b45;
+}
+
+[data-density="comfortable"] .session-mark {
+  min-height: 1.75rem;
+  font-size: 0.9rem;
+}
+
+[data-density="comfortable"] .session-mark-grid {
+  gap: 0.2rem;
+  grid-template-columns: repeat(5, minmax(1.75rem, 1fr));
+  min-width: 9.5rem;
+}
+
+.session-list {
+  @apply m-0 grid list-none gap-2 p-4;
+}
+
+.session-list-item {
+  @apply grid w-full gap-1 border border-base-300 bg-base-100 p-4 text-left text-sm;
+  cursor: pointer;
+  min-height: 5rem;
+}
+
+.session-list-item:hover {
+  @apply bg-base-200;
+}
+
+.session-list-item__title {
+  @apply font-bold text-base-content;
+}
+
+.session-list-item small {
+  @apply font-mono text-xs text-neutral;
+}
+
+.empty-result {
+  @apply m-0 px-6 py-16 text-center text-sm text-neutral;
+}
+
+.board-footer {
+  @apply flex flex-wrap justify-between gap-3 border-t border-base-content bg-base-300 px-5 py-3 text-[0.65rem] text-neutral;
+}

@@ -5,6 +5,11 @@ reference material.
 
 ## Design and reference
 
+- [Observation proof-of-concept plan](execplans/initial-spike.md) records the
+  implementation milestones, validation evidence, and remaining limits.
+- [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
+  PR-based stages and independent activity/freshness semantics.
+
 - [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
   imported linting, formatting, compiler policy, and Bun runtime pins.
 - [Lody observation spike design](ishiban-lody-observation-spike-design.md)
@@ -15,6 +20,9 @@ reference material.
   controls, filters, and a task inspector.
 
 ## Project guides
+
+- [Repository layout](repository-layout.md) locates runtime, frontend, schema,
+  test, and local state files.
 
 - [User guide](users-guide.md) explains how to use the generated project and
   its public build and test commands.

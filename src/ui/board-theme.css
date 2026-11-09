@@ -1,0 +1,52 @@
+@plugin "daisyui" {
+  themes: false;
+  exclude: join;
+}
+
+@plugin "daisyui/theme" {
+  name: "ishiban-paper";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #faf9f4;
+  --color-base-200: #f1eee5;
+  --color-base-300: #e5e6dc;
+  --color-base-content: #17201c;
+  --color-primary: #173f35;
+  --color-primary-content: #faf9f4;
+  --color-secondary: #dce5da;
+  --color-secondary-content: #173f35;
+  --color-accent: #8a302f;
+  --color-accent-content: #faf9f4;
+  --color-neutral: #59635b;
+  --color-neutral-content: #faf9f4;
+  --color-info: #d9e3e7;
+  --color-info-content: #304c5b;
+  --color-success: #dce5da;
+  --color-success-content: #173f35;
+  --color-warning: #f0dfbb;
+  --color-warning-content: #694614;
+  --color-error: #8a302f;
+  --color-error-content: #faf9f4;
+  --radius-selector: 0.2rem;
+  --radius-field: 0.2rem;
+  --radius-box: 0.2rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-mono: "Courier New", monospace;
+  --color-paper: #f1eee5;
+  --color-ink: #17201c;
+  --color-pine: #173f35;
+  --color-oxide: #8a302f;
+  --color-line: #b3b7aa;
+  --color-muted: #59635b;
+  --color-sage: #dce5da;
+  --color-amber: #f0dfbb;
+  --color-blue: #d9e3e7;
+}

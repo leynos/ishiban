@@ -1,4 +1,122 @@
-# ishiban Users' Guide
+# Ishiban users' guide
+
+Ishiban is a local read-only proof of concept for observing one Lody Cloud
+workspace. The interface combines observed session activity with independently
+classified PR workflow stages. It never sends prompts, acknowledges messages,
+answers permissions, cancels sessions, or modifies GitHub PRs.
+
+## Run the observatory
+
+Install Python 3.14+, uv, Bun 1.4.x, and Node.js 24 or 26. Authenticate the
+installed `lody` CLI against the target workspace, and authenticate `gh` for
+read-only associated PR metadata. GitHub access is optional: unavailable PR
+titles produce Unclassified sessions rather than guessed workflow stages.
+
+From the repository root, install and build the interface:
+
+```bash
+uv sync --group dev
+bun install --frozen-lockfile
+bun run build
+```
+
+Start the collector in one terminal:
+
+```bash
+uv run ishiban collect --workspace leynos
+```
+
+After its workspace identity is saved, start Falcon in another terminal:
+
+```bash
+uv run ishiban serve
+```
+
+Open <http://127.0.0.1:8765/>. The collector and API share the ignored
+`.ishiban/` directory; keep both commands in the same repository root or pass
+the same `--state-directory` to each. Only one collector may own that
+directory. The API uses one worker and binds to loopback. Press Ctrl+C in each
+terminal to stop its process. Falcon bounds shutdown of open event streams to
+three seconds. A later collector run reconciles fresh snapshots with the
+existing journal instead of erasing previous observations.
+
+`uv run ishiban collect --no-github` disables GitHub lookups. Catalogue
+associations remain visible, but active PRs without known titles cannot be
+classified as Ready, Building, or Refine.
+
+## Read the board
+
+The live board opens on the `leynos` workspace. Search repository names,
+session titles, and branches, filter activity, switch between panorama, matrix,
+and list views, and change density. Task marks wrap five across with no
+per-stage truncation. Archived and removed sessions are hidden by default; the
+archive control includes them for historical inspection.
+
+Select a mark or a session in List view to open the inspector. It exposes PR
+facts, workflow reasoning, agent activity, and evidence freshness. Keyboard
+focus and larger inspection targets support selection when the overview marks
+are small. The 120-repository **Demo data** mode is explicitly synthetic and
+stops the live browser subscription while selected.
+
+| PR association evidence                                   | Workflow stage |
+| --------------------------------------------------------- | -------------- |
+| Successful catalogue reports no associated PR             | Planning       |
+| One active PR has a title starting with `Plan:`           | Ready          |
+| One non-plan PR is a draft                                | Building       |
+| One non-plan PR is ready for review                       | Refine         |
+| All associated PRs are merged                             | Merged         |
+| All associated PRs are closed without merge               | Closed         |
+| Multiple active PRs, missing titles, or conflicting facts | Unclassified   |
+
+Table 1: workflow labels. Terminal historical PRs do not override one active PR.
+
+Agent activity and workflow are separate. A running session need not be
+Building, and a completed turn does not prove task success or a merged PR.
+Metadata-only sessions have unknown execution activity, even when their
+catalogue freshness is synced. Collector following means the observer is
+attached; it does not prove every session history or machine is live.
+
+On disconnect, last-known observations remain visible. Evidence from an earlier
+collector generation is carried forward until fresh persisted observations
+arrive. Metadata refreshes cannot erase durable turn outcomes or make them look
+newly verified. GitHub enrichment failures are shown as source-health warnings;
+previous PR facts may be cached and stale.
+
+## Inspect the read API
+
+- `GET /api/v1/snapshot` returns session projections, collector health, and one
+  transactionally consistent replay cursor.
+- `GET /api/v1/sessions/{session_id}` returns the current session, known turns,
+  and bounded recent provenance.
+- `GET /api/v1/events?after=N` replays committed projections after cursor `N`
+  and then follows new commits. Browser reconnect uses `Last-Event-ID` in
+  preference to the original URL cursor.
+- `GET /health` checks API process liveness. `GET /ready` checks the local
+  database. Neither endpoint claims the Lody source is connected.
+
+A replacement database can invalidate a cursor. The stream then sends
+`reset_required`, and the browser takes a new snapshot. Malformed or foreign
+workspace observations stop the affected collector generation; they are not
+silently dropped.
+
+## Understand the proof of concept's limits
+
+Lody provides current materialized evidence, not a replay of every historical
+transition. Transitions missed while the collector was offline cannot be
+recovered from an Ishiban-local cursor. The session catalogue is not a complete
+repository or work-item inventory. GitHub enrichment is periodic, and the
+application does not evaluate CI, review approval, issues, or dependencies.
+
+During validation of the `leynos` workspace, the upstream Lody observer used
+approximately 4.4 GiB of resident memory after hydration; the collector and API
+used roughly 90 MiB each. These are single-run observations, rather than
+capacity guarantees. Stop the collector when observation is no longer needed.
+
+The local journal is append-only with no retention policy. It contains private
+session titles, repository associations, PR metadata, and observation evidence;
+keep `.ishiban/` private and out of Git. No authentication tokens or transcript
+bodies are written to the browser or journal. Access beyond loopback needs an
+explicit authentication and transport-security design before deployment.
 
 ## Quality Gates
 

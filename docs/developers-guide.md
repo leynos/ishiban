@@ -1,6 +1,53 @@
 # Developer guide
 
-This guide explains the contributor workflow for the generated project.
+This guide explains the contributor workflow for the Ishiban proof of concept.
+
+## Observation runtime
+
+The [repository layout](repository-layout.md) locates the Python runtime,
+frontend, and tests. Run the collector and Falcon API as separate processes
+sharing one ignored state directory. The collector is the only writer, with a
+local process lock and serialized SQLAlchemy transactions. Falcon serves the
+Bun-built `dist/` directory and reads short SQLite transactions.
+
+Use `msgspec` at the CLI boundary, Effect Schema at the browser boundary, and
+keep workflow classification in `ishiban/workflow.py`. The browser applies
+immutable post-event projections by cursor; it does not repeat the Python
+classifier. The client scopes fetch and EventSource lifetime with Effect,
+closes subscriptions on mode changes, and coalesces React notifications through
+animation frames. PR-stage evidence and its limitations are recorded in
+[ADR 002](adr-002-workflow-evidence.md).
+
+Observer and catalogue subprocesses use fixed argument vectors without a shell.
+Their protocol lifecycle requires asyncio pipe streaming; the collector owns
+bounded stdout, a draining stderr task, cancellation, termination, and reap.
+Raw stderr is never persisted. GitHub lookups admit only validated GitHub PR
+URLs and issue bounded read-only GraphQL queries. No generic command-execution
+helper or public adapter is introduced by these private runtime modules.
+
+SQLite WAL, foreign keys, busy timeout, and explicit transaction isolation are
+configured by `ishiban/storage/`. Alembic applies the initial schema on
+startup. Do not delete a journal to resolve a transient source error. Source
+stream/sequence identity deduplicates replay; the independent local journal ID
+is the public SSE cursor. Metadata and durable-evidence generations remain
+separate during reconciliation.
+
+The storage serialization module owns decoded JSON string-field access and UTC
+journal timestamps. These helpers are private to persistence; reuse them for
+storage readers and writers, rather than introducing a general application
+utility layer. Session lookup uses the same transaction-bound projection loader
+in detail reads and writes. Snapshot and incremental-turn projections share one
+private turn-field encoder, including optional-key omission. Frontend table,
+list, and exception marks share `SessionSelectionProps` so keyboard trigger
+identity travels through the same callback contract.
+
+Run `bun run build` after frontend changes; the resulting bundle is what Falcon
+serves and what browser validation must inspect. `make test` includes Python
+unit/integration tests, pytest-bdd provenance scenarios, Hypothesis journal
+properties, Bun renderer tests, and generated browser projection replay. Use
+agent-browser for keyboard/inspector/filter/reconnect checks and accessibility
+audits; use css-view to verify computed semantic tokens and five-column mark
+grids rather than assuming CSS source declarations took effect.
 
 ## Local workflow
 
@@ -181,10 +228,41 @@ upload.
 Run `make spelling` to enforce en-GB-oxendict spelling. The shared
 `typos-config-builder` gate regenerates `typos.toml` from the live estate
 dictionary in `leynos/agent-helper-scripts` and the `typos.local.toml` overlay
-on every run, then checks tracked Markdown. A word added to the shared
+on every run, then checks all repository content. A word added to the shared
 dictionary therefore needs no change here, and `typos.toml` must never be drift
 checked in continuous integration. `typos.toml` is generated output, but it is
 tracked: commit the regenerated file after a `make spelling` run changes it.
 The local cache that keeps the gate usable when the authority is temporarily
 unreachable is ignored by Git. Add only narrow project-specific terms and
 exclusions to `typos.local.toml`; never edit generated `typos.toml` by hand.
+
+## Proof-of-concept boundary conventions
+
+The API marks responses `Cache-Control: no-store`. Browser assets currently
+have stable filenames, so a local rebuild must not leave old interaction
+handlers in a browser's heuristic cache. Fingerprinted production assets are
+outside this spike.
+
+Storage assertion shapes live in `tests/storage_contracts.pyi`. These static
+contracts describe camel-case public JSON fields without constructing unused
+runtime classes. The test helpers import them only for type checking.
+`pytest-bdd` step decorators and Falcon lifecycle callbacks are documented
+runtime entry points in the quality configuration; their implementations remain
+subject to linting and behavioural tests.
+
+## Duplication review
+
+The spike consolidates decoded string access, UTC timestamps, session lookup,
+turn-field encoding, and board selection contracts. The remaining reviewed Nose
+families are immutable migration declarations, explicit module imports,
+independent test boundary reads, typed contract casts, Falcon injection
+constructors, and short presentation or transport-state branches.
+
+Each exception in `pyproject.toml` records its participating units or exact
+files and its reason. Nose reports anonymous fragments without enclosing unit
+names; those exceptions require file paths rather than function names. Review
+these records whenever their files change, since native file matching can also
+cover later fragments in those files. Do not add new copies or extend these
+exceptions to unrelated files without another review. Frozen migrations must
+remain independent of evolving model metadata, and source protocol records must
+remain independent of journal-write records.

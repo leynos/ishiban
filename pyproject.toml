@@ -5,7 +5,18 @@ description = "ishiban package"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "ISC" }
-dependencies = []
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.20.1",
+    "cyclopts>=4.25.2",
+    "falcon>=4,<5",
+    "msgspec>=0.22.0",
+    "sqlalchemy[asyncio]>=2,<3",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+ishiban = "ishiban.cli:app"
 
 [dependency-groups]
 dev = [
@@ -20,6 +31,10 @@ dev = [
     "ty==0.0.56",
     "pytest-timeout",
     "pytest-xdist",
+    "pytest-asyncio>=1.4.1.post1",
+    "pytest-bdd>=9.0.1",
+    "hypothesis>=6.170.15",
+    "syrupy>=6.1.1",
 ]
 
 [tool.ruff]
@@ -308,6 +323,12 @@ exclude = [".venv", ".uv-cache", ".uv-tools", ".tools", ".git"]
 [tool.skylos.gate]
 strict = true
 
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = ["ishiban.api.Lifecycle.process_startup", "ishiban.api.Lifecycle.process_shutdown", "ishiban.api.Lifecycle.process_response"]
+reason = "Falcon invokes registered middleware methods dynamically at ASGI startup, shutdown, and response completion."
+
+
 
 
 [tool.nose]
@@ -324,6 +345,8 @@ exclude = [".venv/**", ".uv-cache/**", ".uv-tools/**", ".tools/**", ".git/**"]
 # their function bodies and all other definitions remain checked.
 [tool.vulture]
 ignore_names = ["test_*", "pytestmark"]
+# pytest-bdd discovers step implementations through their decorators.
+ignore_decorators = ["@given", "@when", "@then"]
 min_confidence = 60
 
 [tool.mutmut]
@@ -336,6 +359,7 @@ also_copy = ["scripts/", ".github/", "Makefile", "pyproject.toml"]
 pytest_add_cli_args_test_selection = ["tests/"]
 
 [tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 # Tests automatically killed after seconds elapsed
 timeout = 30
 testpaths = ["tests"]
@@ -375,3 +399,65 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["ishiban"]
 
+
+# Reviewed spike families: see docs/developers-guide.md#duplication-review.
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/storage/projections.py::apply_observation", "ishiban/storage/projections.py::apply_catalogue"]
+reason = "Keep independent persisted-observation and catalogue merge policies; only seed-or-copy scaffolding overlaps. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/ui/board.tsx::span", "reference/ishiban-mockup.html::span"]
+reason = "Keep labelled health and summary markup independent of the supplied static visual reference; wrapper tags contain different facts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_storage_journal.py", "tests/test_storage_projection.py"]
+reason = "Keep explicit module imports and independent snapshot/replay boundary assertions visible in their tests; these fragments contain no shared calculation. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/storage_support.py::as_snapshot", "tests/storage_support.py::as_events", "tests/storage_support.py::as_detail"]
+reason = "Preserve distinct static API contract casts; a generic cast wrapper would obscure the asserted snapshot, replay, or detail shape. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "ishiban/api.py::__init__"
+reason = "Keep independent Falcon resource constructors explicit; inheritance solely for injected store assignment adds unrelated resource coupling. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/storage_support.py", "tests/test_observation_behaviour.py"]
+reason = "Keep module dependency imports explicit; BDD runtime ownership and storage fixture implementations remain separate. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/storage/models.py", "migrations/versions/0001_initial_journal.py"]
+reason = "Keep the initial schema and reverse-order drop declarations frozen independently of current storage models; migrations must not import evolving metadata. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/storage/session_events.py", "ishiban/storage/writer.py"]
+reason = "Keep explicit module imports and calls to the shared finish_event primitive at distinct transaction boundaries; shared timestamp and field logic has been extracted. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_observation_behaviour.py"
+reason = "Keep the two explicit protocol envelopes in the restart scenario: persisted completion and next-generation metadata have different evidence contracts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/domain.py::Envelope", "ishiban/storage/journal_writer.py::JournalEvent"]
+reason = "Keep inbound protocol and normalized journal event contracts independent; their field requirements and version boundaries differ. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/ui/board-table.tsx::span", "reference/ishiban-mockup.html::span"]
+reason = "Keep accessible session-list markup separate from supplied static reference markup; similar wrapper tags do not share interaction logic. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/ui/board-model.ts", "src/ui/board-table.tsx"]
+reason = "Keep short activity/provenance guards and label/glyph mappings explicit; equal branch shapes return different meanings. Shared selection props have been extracted. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_storage_catalogue.py", "tests/test_storage_projection.py"]
+reason = "Keep direct snapshot and replay assertions at their independent catalogue and generation boundaries; repeated reads verify observable contracts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "migrations/env.py"
+reason = "Keep Alembic offline and online configuration independent, including the transaction calls required by each connection mode. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/client.ts::opened", "src/client.ts::failed"]
+reason = "Keep distinct EventSource open and error callbacks transitioning to Connected and Reconnecting respectively. See docs/developers-guide.md#duplication-review."

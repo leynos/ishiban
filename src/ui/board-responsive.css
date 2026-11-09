@@ -1,0 +1,164 @@
+/* Keep absolutely positioned accessible labels inside the panorama scrollport. */
+.board-scroll {
+  position: relative;
+}
+
+@media (min-width: 1200px) {
+  .board-banks {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1199px) {
+  .board-banks {
+    grid-template-columns: repeat(2, minmax(20rem, 1fr));
+    min-width: 40rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .board-topbar,
+  .board-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .board-topbar {
+    gap: 0.4rem;
+  }
+
+  .board-heading {
+    @apply px-4 py-5;
+  }
+
+  .board-heading h1 {
+    font-size: 2rem;
+  }
+
+  .board-heading .demo-label {
+    white-space: normal;
+  }
+
+  .source-health {
+    @apply px-4;
+  }
+  .board-controls {
+    @apply items-stretch px-4;
+  }
+
+  .search-control {
+    max-width: none;
+    width: 100%;
+  }
+
+  .archived-control {
+    flex: 1 1 100%;
+  }
+
+  .reset-control {
+    margin-left: 0;
+  }
+
+  .board-summary,
+  .board-footer {
+    @apply px-4;
+  }
+
+  .board-bank {
+    min-width: 58rem;
+  }
+
+  .board-banks {
+    grid-template-columns: minmax(58rem, 1fr);
+    min-width: 58rem;
+  }
+
+  .session-inspector {
+    @apply p-4;
+  }
+
+  .inspector-facts {
+    grid-template-columns: minmax(5.5rem, 0.4fr) minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-mark {
+    transition: none;
+  }
+}
+
+.stage-label-compact {
+  display: none;
+}
+
+.board-controls :is(.input, .select, .btn) {
+  height: 1.75rem;
+  min-height: 1.75rem;
+  font-size: 0.7rem;
+}
+
+[data-density="overview"] .repository-table :is(th, td) {
+  padding: 0.2rem;
+}
+
+[data-density="overview"] .repository-table th:first-child {
+  width: 6rem;
+}
+[data-density="overview"] .repository-heading {
+  font-size: 0.55rem;
+  letter-spacing: 0;
+}
+[data-density="overview"] .repository-label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+[data-density="overview"] .repository-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+}
+[data-density="overview"] .repository-name small {
+  display: inline;
+  margin: 0 0 0 auto;
+  white-space: nowrap;
+  font-size: 0.5rem;
+}
+[data-density="overview"] .session-mark-grid {
+  grid-template-columns: repeat(5, 7px);
+  width: max-content;
+}
+[data-density="overview"] .session-mark {
+  width: 7px;
+  height: 7px;
+  min-height: 7px;
+  aspect-ratio: auto;
+}
+[data-density="overview"] .session-mark :is(span, small) {
+  display: none;
+}
+[data-presentation="panorama"][data-density="overview"] .stage-label-wide {
+  @apply sr-only;
+}
+[data-presentation="panorama"][data-density="overview"] .stage-label-compact {
+  display: inline;
+  font-size: 0.5rem;
+  white-space: nowrap;
+}
+[data-presentation="panorama"][data-density="overview"] .stage-heading b {
+  display: block;
+  position: static;
+  font-size: 0.45rem;
+}
+.activity-pending {
+  border-radius: 50%;
+}
+.activity-waiting {
+  border-style: dashed;
+}
+.activity-unknown {
+  background: transparent;
+  border-style: dotted;
+}
