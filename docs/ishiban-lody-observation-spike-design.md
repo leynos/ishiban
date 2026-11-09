@@ -1,6 +1,7 @@
 # Ishiban: single-workspace Lody observation spike
 
-**Status:** Accepted design; proof-of-concept validation in progress.
+**Status:** Accepted design; proof of concept implemented and validated
+locally. External review completion is pending authentication.
 
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  

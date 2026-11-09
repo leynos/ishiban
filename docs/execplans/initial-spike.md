@@ -1,8 +1,9 @@
 # Ishiban initial observation proof of concept
 
-Status: executing. User authorized implementation of the existing design on
-9 November 2026, including the additional PR classification rules. No remote
-publication or Lody writes are authorized.
+Status: implemented and committed; deterministic and browser validation pass.
+Local review completion is blocked by authentication. The user authorized the
+existing design on 9 November 2026, including the additional PR classification
+rules. No remote publication or Lody writes are authorized.
 
 ## Purpose
 
@@ -114,7 +115,10 @@ proof of concept; tests must not claim upstream historical completeness.
 - [x] M3: reference-based board and isolated demo; four renderer tests plus two
   generated/immutable replay tests pass. The actual live view receives running
   observations and PR stages from the authenticated workspace.
-- [ ] M4: live/browser validation, review convergence, documentation and commit.
+- [x] M4 validation: authenticated live/browser checks, documentation and
+  implementation commit `e022847`; all deterministic gates pass.
+- [ ] M4 review: CodeRabbit and CodeScene authentication must be repaired before
+  either assessment can complete; review convergence remains pending.
 
 ## Surprises & discoveries
 
@@ -189,10 +193,27 @@ contained 20,914 rows and occupied approximately 36 MiB. Upstream observer
 memory dominates this proof of concept; longer-duration resource behaviour is
 unverified.
 
-Deterministic gates and local review convergence remain in progress. The
-installed CodeScene CLI currently refuses analysis because `CS_ACCESS_TOKEN` is
-unavailable; credential configuration has been requested without exposing
-secrets.
+Implementation commit `e022847` passes the full repository gates: browser
+build, formatting, Python and JavaScript linting, dead-code and duplication
+checks, action validation, type checking, 70 Python tests, 28 Bun tests,
+Markdown/spelling, Mermaid validation, dependency audits, and Makefile
+validation. Reasoned duplication exceptions preserve independently versioned
+contracts and explicit boundary assertions after shared implementations were
+extracted; their native matching limits are documented in the developer guide.
+
+CodeRabbit 0.7.6 attempted the committed implementation from `bbb1bee` through
+`e022847` with `--agent --committed --base-commit`. The service rejected its
+saved session or Git provider authentication, exiting before assessment.
+CodeScene 1.0.36 attempted the same delta and refused analysis because
+`CS_ACCESS_TOKEN` is unavailable. Neither tool produced review findings or a
+completed assessment. Credential configuration has been requested without
+exposing secrets; these reviews remain pending, rather than waived.
+
+The final live sample contained 2,764 sessions, including 571 active sessions
+across 65 repositories. Collector shutdown retained every session and persisted
+`stopped` health. The validation collector, upstream observer, API, temporary
+fixture server, and browser sessions were stopped after inspection; the private
+journal remains available for a later run.
 
 Revision note: initial plan records the user-authorized design, new stage
 conventions, observed catalogue limitations, and end-to-end acceptance.
