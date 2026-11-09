@@ -12,6 +12,7 @@ from itertools import starmap
 
 import msgspec
 
+from ishiban.catalogue_framing import CatalogueFramer
 from ishiban.domain import PullRequest
 from ishiban.protocol import Catalogue, ProtocolError, decode_catalogue
 
@@ -92,7 +93,7 @@ async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:
     Raises
     ------
     ProtocolError
-        If output exceeds its bound or ends incomplete.
+        If output exceeds its bound or ends without a workspace snapshot.
     """
     command = (
         executable,
@@ -108,15 +109,14 @@ async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:
             message = "Catalogue stdout is unavailable."
             raise ProtocolError(message)
         data = bytearray()
+        framer = CatalogueFramer()
         while chunk := await process.stdout.read(65_536):
             data.extend(chunk)
             if len(data) > MAX_CATALOGUE_BYTES:
                 message = "Catalogue exceeds the configured safety bound."
                 raise ProtocolError(message)
-            try:
+            if framer.feed(chunk):
                 return decode_catalogue(bytes(data))
-            except msgspec.DecodeError:
-                continue
     message = "Catalogue ended without a complete successful response."
     raise ProtocolError(message)
 
@@ -185,7 +185,7 @@ async def _read_pr_batch(urls: list[str]) -> _PullRequestLookup:
     Raises
     ------
     ProtocolError
-        If the CLI fails or the response exceeds its bound.
+        If required pipes are unavailable or the response exceeds its bound.
     """
     fields = list(starmap(_pr_field, enumerate(urls)))
     request = msgspec.json.encode({"query": "query {" + " ".join(fields) + "}"})
