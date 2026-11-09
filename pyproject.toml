@@ -459,5 +459,5 @@ unit = "migrations/env.py"
 reason = "Keep Alembic offline and online configuration independent, including the transaction calls required by each connection mode. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["src/client.ts::opened", "src/client.ts::failed"]
-reason = "Keep distinct EventSource open and error callbacks transitioning to Connected and Reconnecting respectively. See docs/developers-guide.md#duplication-review."
+members = ["ishiban/storage/store.py::snapshot", "ishiban/storage/store.py::current_cursor"]
+reason = "Keep distinct public snapshot and cursor-only read contracts explicit; their initialization and transaction wrappers match, while shared SQL is already extracted into read_cursor. See docs/developers-guide.md#duplication-review."

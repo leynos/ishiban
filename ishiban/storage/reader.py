@@ -22,11 +22,7 @@ async def read_snapshot(
     dict[str, object]
         The contract snapshot assembled from one read transaction.
     """
-    cursor = await connection.scalar(
-        sa.select(sa.func.coalesce(sa.func.max(source_events.c.id), 0)).where(
-            source_events.c.workspace_id == workspace_id
-        )
-    )
+    cursor = await read_cursor(connection, workspace_id)
     collector_row = (
         (
             await connection.execute(
@@ -50,10 +46,32 @@ async def read_snapshot(
     return {
         "version": 1,
         "workspaceId": workspace_id,
-        "cursor": int(cursor or 0),
+        "cursor": cursor,
         "collector": _collector_projection(collector_row),
         "sessions": projection_rows,
     }
+
+
+async def read_cursor(connection: AsyncConnection, workspace_id: str) -> int:
+    """Read only the maximum journal ID belonging to one workspace.
+
+    Example
+    -------
+    cursor = await read_cursor(connection, "workspace-1")
+    assert cursor >= 0  # An empty workspace has cursor zero.
+
+    Returns
+    -------
+    int
+        The workspace's latest local journal cursor, or zero before its first
+        event.
+    """
+    cursor = await connection.scalar(
+        sa.select(sa.func.coalesce(sa.func.max(source_events.c.id), 0)).where(
+            source_events.c.workspace_id == workspace_id
+        )
+    )
+    return int(cursor or 0)
 
 
 async def read_detail(

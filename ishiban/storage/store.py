@@ -7,7 +7,7 @@ import sqlalchemy as sa
 
 from ishiban.storage.database import create_engine, initialize_schema, verify_schema
 from ishiban.storage.journal_writer import ValidatedEnvelope
-from ishiban.storage.reader import read_detail, read_events, read_snapshot
+from ishiban.storage.reader import read_cursor, read_detail, read_events, read_snapshot
 from ishiban.storage.writer import JournalWriter
 
 if typ.TYPE_CHECKING:
@@ -180,6 +180,23 @@ class Store:
         self._require_initialized()
         async with self._engine.connect() as connection, connection.begin():
             return await read_snapshot(connection, self.workspace_id)
+
+    async def current_cursor(self) -> int:
+        """Read the workspace's latest journal cursor without loading projections.
+
+        Example
+        -------
+        cursor = await store.current_cursor()
+        assert cursor >= 0
+
+        Returns
+        -------
+        int
+            The maximum local journal ID for this workspace, or zero when empty.
+        """
+        self._require_initialized()
+        async with self._engine.connect() as connection, connection.begin():
+            return await read_cursor(connection, self.workspace_id)
 
     async def detail(self, session_id: str) -> dict[str, object] | None:
         """Return one projection, turn records and at most 30 recent events.

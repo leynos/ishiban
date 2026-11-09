@@ -29,8 +29,10 @@ SQLite WAL, foreign keys, busy timeout, and explicit transaction isolation are
 configured by `ishiban/storage/`. Alembic applies the initial schema on
 startup. Do not delete a journal to resolve a transient source error. Source
 stream/sequence identity deduplicates replay; the independent local journal ID
-is the public SSE cursor. Metadata and durable-evidence generations remain
-separate during reconciliation.
+is the public SSE cursor. The workspace-filtered `read_cursor` query is shared
+by snapshot reads and `Store.current_cursor`; use the latter when a caller only
+needs the replay boundary, such as SSE reset validation. Metadata and durable-
+evidence generations remain separate during reconciliation.
 
 The storage serialization module owns decoded JSON string-field access and UTC
 journal timestamps. These helpers are private to persistence; reuse them for
@@ -243,6 +245,13 @@ have stable filenames, so a local rebuild must not leave old interaction
 handlers in a browser's heuristic cache. Fingerprinted production assets are
 outside this spike.
 
+The collector applies migrations to its selected state directory through an
+injected SQLAlchemy connection. Standalone Alembic commands use the synchronous
+SQLite driver and target `.ishiban/observatory.sqlite3` relative to the
+checkout's `alembic.ini`, independently of the caller's working directory.
+Create that state directory first. A custom collector `--state-directory`
+continues to use its injected connection rather than the standalone URL.
+
 Storage assertion shapes live in `tests/storage_contracts.pyi`. These static
 contracts describe camel-case public JSON fields without constructing unused
 runtime classes. The test helpers import them only for type checking.
@@ -256,7 +265,11 @@ The spike consolidates decoded string access, UTC timestamps, session lookup,
 turn-field encoding, and board selection contracts. The remaining reviewed Nose
 families are immutable migration declarations, explicit module imports,
 independent test boundary reads, typed contract casts, Falcon injection
-constructors, and short presentation or transport-state branches.
+constructors, and short presentation or transport-state branches. The snapshot
+and cursor-only store accessors retain their own initialization and transaction
+wrappers; their shared cursor SQL is extracted. The transport tests share only
+fetch-spy and virtual-clock ownership, keeping each failure scenario's
+assertions independent.
 
 Each exception in `pyproject.toml` records its participating units or exact
 files and its reason. Nose reports anonymous fragments without enclosing unit
@@ -270,8 +283,12 @@ remain independent of journal-write records.
 The client exposes its connection lifetime as `liveConnection`, an Effect
 consumed by the cancellable `startLive` browser adapter. Scheduled retries
 continue until the owner cancels the connection; transient failures update
-visible transport health. Tests supply Effect's virtual clock to verify retry
-and cancellation behaviour without changing production delays.
+visible transport health. Browser-managed EventSource reconnection retains its
+stream, while a permanently closed source fails the scoped connection and
+causes a fresh snapshot and stream after the retry delay. Tests supply Effect's
+virtual clock to verify retry and cancellation behaviour without changing
+production delays. The controllable EventSource fixture is confined to this
+transport test and preserves the browser's connecting/open/closed states.
 
 Protocol validators remain private to the Lody boundary. Compatibility,
 process-local sequencing, session evidence vocabulary, and turn payloads have

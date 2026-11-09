@@ -76,6 +76,69 @@ async def test_snapshot_and_replay_share_the_same_committed_boundary(
 
 
 @pytest.mark.asyncio
+async def test_sse_open_does_not_materialize_a_snapshot(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opening SSE reads its cursor without decoding every session projection."""
+    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'stream.sqlite3'}", "workspace")
+    await store.initialize()
+    generation = await store.begin_generation()
+    baseline = await store.health("following", generation)
+
+    async def unexpected_snapshot() -> dict[str, object]:
+        """Reject full projection reads while preserving an async store boundary.
+
+        Raises
+        ------
+        AssertionError
+            If SSE initialization requests a full workspace snapshot.
+        """
+        await store.current_cursor()
+        raise AssertionError
+
+    monkeypatch.setattr(store, "snapshot", unexpected_snapshot)
+    stream = EventsResource(store).tail(baseline - 1)
+    try:
+        event = await anext(stream)
+        assert event.event_id == str(baseline), (
+            "SSE must replay the event after the requested cursor."
+        )
+    finally:
+        await stream.aclose()
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_current_cursor_is_read_from_sql_for_its_workspace(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The cursor query returns the bound workspace maximum from SQLite."""
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'cursors.sqlite3'}"
+    first = Store(database_url, "first-workspace")
+    second = Store(database_url, "second-workspace")
+    await first.initialize()
+    await second.initialize()
+    try:
+        await first.begin_generation()
+        first_cursor = await first.current_cursor()
+        await second.begin_generation()
+        second_cursor = await second.current_cursor()
+
+        assert second_cursor > first_cursor, (
+            "SQLite must assign increasing IDs across workspace journal rows."
+        )
+        assert await first.current_cursor() == first_cursor, (
+            "A workspace cursor must not include another workspace's event IDs."
+        )
+        assert await second.current_cursor() == second_cursor, (
+            "The SQL cursor must be scoped to the store's workspace."
+        )
+    finally:
+        await first.close()
+        await second.close()
+
+
+@pytest.mark.asyncio
 async def test_separate_api_reader_opens_existing_schema_without_journal_writes(
     tmp_path: pathlib.Path,
 ) -> None:

@@ -147,8 +147,8 @@ class EventsResource:
         asgi.SSEvent
             Committed replay items or heartbeat comments.
         """
-        snapshot = await self.store.snapshot()
-        if cursor > int(str(snapshot["cursor"])):
+        current_cursor = await self.store.current_cursor()
+        if cursor > current_cursor:
             yield asgi.SSEvent(
                 event="reset_required",
                 json={"reason": "cursor_ahead", "workspaceId": self.store.workspace_id},
