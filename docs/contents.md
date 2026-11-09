@@ -1,7 +1,16 @@
 # Documentation contents
 
-This page indexes the generated project's documentation. Browse the guides
-below.
+[Documentation contents](contents.md) indexes Ishiban's guides, design, and
+reference material.
+
+## Design and reference
+
+- [Lody observation spike design](ishiban-lody-observation-spike-design.md)
+  defines the proposed read-only workspace observer, persistence model, live
+  interface, verification plan, and implementation sequence.
+- [Reference interface](../reference/ishiban-mockup.html) provides an
+  interactive panorama of 120 repositories using synthetic data, with density
+  controls, filters, and a task inspector.
 
 ## Project guides
 
