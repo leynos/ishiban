@@ -71,3 +71,12 @@ Future work may replace polling with an independent GitHub feed, retain richer
 metadata provenance, or associate multiple work items with a session. None of
 those extensions changes the distinction between observed activity and workflow
 evidence.
+
+## PR refresh failure policy
+
+A current catalogue status of merged or closed takes precedence over cached
+open/draft metadata. A known cached title can still describe that terminal PR.
+GitHub enrichment preserves successful fields and batches when other lookups
+fail; a nonzero CLI exit can contain valid partial GraphQL data. Partial
+results keep an explicit source-health warning, and inaccessible associations
+remain unknown or visibly cached rather than acquiring invented facts.

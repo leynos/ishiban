@@ -25,6 +25,9 @@ ignore = [
   '\boverscroll-behavior-inline\s*:',
   '\b(?:items|text)-center\b',
   '\bcolor-scheme\b',
+  # Effect retains its published `Fiber` namespace spelling.
+  "(?m)^import \\{Effect, Fiber\\} from 'effect';$",
+  "(?m)^\\s*yield\\* Fiber\\.interrupt\\(connection\\);$",
   # Lody's external v1 outcome enum uses the published American spelling.
   '"canceled"',
 ]

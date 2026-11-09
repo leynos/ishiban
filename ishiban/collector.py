@@ -92,7 +92,14 @@ class Collector:
         """
         if PR_URL.fullmatch(url) is None:
             return PullRequest(url="", status="unknown")
-        return self.pr_cache.get(url, PullRequest(url=url, status=status))
+        cached = self.pr_cache.get(url)
+        if status in {"merged", "closed"}:
+            return PullRequest(
+                url=url,
+                status=status,
+                title=cached.title if cached is not None else None,
+            )
+        return cached or PullRequest(url=url, status=status)
 
     async def _enrich_prs(self, catalogue: Catalogue) -> None:
         """Refresh active PR titles with bounded cached GitHub queries."""
@@ -103,8 +110,13 @@ class Collector:
             if pr.status in {"draft", "open"} and PR_URL.fullmatch(pr.url)
         })
         try:
-            self.pr_cache.update(await read_pull_requests(urls))
-            self.enrichment_error = None
+            lookup = await read_pull_requests(urls)
+            self.pr_cache.update(lookup.records)
+            self.enrichment_error = (
+                "GitHub title enrichment unavailable; cached facts may be stale."
+                if lookup.is_partial
+                else None
+            )
         except OSError, TimeoutError, ProtocolError, msgspec.DecodeError:
             self.enrichment_error = (
                 "GitHub title enrichment unavailable; cached facts may be stale."

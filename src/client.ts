@@ -91,7 +91,18 @@ const fetchSnapshot = Effect.fn('ishiban.snapshot')(function* () {
  * @returns A cancellation function that closes the EventSource and fetch.
  */
 export function startLive(store: BoardStore): () => void {
-  const program = Effect.gen(function* () {
+  return Effect.runCallback(liveConnection(store));
+}
+
+/**
+ * Describe the scoped browser connection as an Effect owned by its caller.
+ * @param store Projection state and visible transport health.
+ * @returns A cancellable snapshot-and-event connection with scheduled recovery.
+ * @example
+ * Effect.runCallback(liveConnection(createBoardStore()));
+ */
+export function liveConnection(store: BoardStore) {
+  return Effect.gen(function* () {
     const snapshot = yield* fetchSnapshot();
     store.replace(snapshot);
     const source = yield* Effect.acquireRelease(
@@ -101,10 +112,9 @@ export function startLive(store: BoardStore): () => void {
     yield* listen(source, store);
   }).pipe(
     Effect.scoped,
-    Effect.retry({times: 3, schedule: Schedule.spaced('1 second')}),
-    Effect.catch(() => Effect.sync(() => store.status('Stream unavailable — reload to reconnect')))
+    Effect.tapError(() => Effect.sync(() => store.status('Reconnecting'))),
+    Effect.retry({schedule: Schedule.spaced('1 second')})
   );
-  return Effect.runCallback(program);
 }
 
 /** Register scoped listeners; for example, malformed data forces a fresh snapshot. */

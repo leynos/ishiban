@@ -133,34 +133,54 @@ class GitHubResult(msgspec.Struct):
     """GraphQL data with optional failures; errors are never logged verbatim."""
 
     data: dict[str, dict[str, GitHubPR | None] | None] | None = None
+    errors: list[GitHubError] | None = None
 
 
-async def read_pull_requests(urls: list[str]) -> dict[str, PullRequest]:
+class GitHubError(msgspec.Struct):
+    """Retain an error marker while ignoring its potentially private fields."""
+
+
+class _PullRequestLookup(msgspec.Struct):
+    """Carry available PR facts and an explicit partial-result marker."""
+
+    records: dict[str, PullRequest]
+    is_partial: bool
+
+
+async def read_pull_requests(urls: list[str]) -> _PullRequestLookup:
     """Read associated PR facts in batches of at most forty GraphQL fields.
 
     For example, inaccessible PRs are omitted so callers preserve an explicit
-    unknown classification rather than inventing a title or draft status.
+    unknown classification rather than inventing a title or draft status. A
+    partial result retains facts from successful fields and batches.
 
     Returns
     -------
-    dict[str, PullRequest]
-        Available facts keyed by validated GitHub PR URL.
+    _PullRequestLookup
+        Available facts and whether any requested fact could not be refreshed.
     """
     results: dict[str, PullRequest] = {}
+    is_partial = False
     for start in range(0, len(urls), 40):
         batch = [url for url in urls[start : start + 40] if PR_URL.fullmatch(url)]
         if batch:
-            results.update(await _read_pr_batch(batch))
-    return results
+            try:
+                lookup = await _read_pr_batch(batch)
+            except OSError, TimeoutError, ProtocolError, msgspec.DecodeError:
+                is_partial = True
+                continue
+            results.update(lookup.records)
+            is_partial |= lookup.is_partial
+    return _PullRequestLookup(records=results, is_partial=is_partial)
 
 
-async def _read_pr_batch(urls: list[str]) -> dict[str, PullRequest]:
+async def _read_pr_batch(urls: list[str]) -> _PullRequestLookup:
     """Query one bounded batch of validated GitHub PR URLs.
 
     Returns
     -------
-    dict[str, PullRequest]
-        Available facts for this bounded batch.
+    _PullRequestLookup
+        Available facts and any missing data in this bounded batch.
 
     Raises
     ------
@@ -186,15 +206,13 @@ async def _read_pr_batch(urls: list[str]) -> dict[str, PullRequest]:
                 message = "GitHub response exceeds its bound."
                 raise ProtocolError(message)
         output = bytes(chunks)
-        await process.wait()
-        if process.returncode != 0 or len(output) > MAX_GITHUB_BYTES:
-            message = "GitHub PR lookup failed or exceeded its response bound."
-            raise ProtocolError(message)
+        returncode = await process.wait()
     result = msgspec.json.decode(output, type=GitHubResult)
-    if result.data is None:
-        message = "GitHub PR lookup returned a partial response."
-        raise ProtocolError(message)
-    return _pr_results(urls, result)
+    lookup = _pr_results(urls, result)
+    return _PullRequestLookup(
+        records=lookup.records,
+        is_partial=lookup.is_partial or returncode != 0 or bool(result.errors),
+    )
 
 
 def _pr_field(index: int, url: str) -> str:
@@ -221,19 +239,22 @@ def _pr_field(index: int, url: str) -> str:
     )
 
 
-def _pr_results(urls: list[str], result: GitHubResult) -> dict[str, PullRequest]:
+def _pr_results(urls: list[str], result: GitHubResult) -> _PullRequestLookup:
     """Normalize GitHub lifecycle states without leaking response internals.
 
     Returns
     -------
-    dict[str, PullRequest]
-        Known PR lifecycle records, omitting inaccessible items.
+    _PullRequestLookup
+        Known records and a marker for inaccessible or absent items.
     """
     records: dict[str, PullRequest] = {}
+    is_partial = result.data is None
     for index, url in enumerate(urls):
         repository = (result.data or {}).get(f"p{index}")
         pr = repository.get("pullRequest") if repository is not None else None
         if pr is not None:
             status = "draft" if pr.is_draft else pr.state.lower()
             records[url] = PullRequest(url=url, status=status, title=pr.title)
-    return records
+        else:
+            is_partial = True
+    return _PullRequestLookup(records=records, is_partial=is_partial)
