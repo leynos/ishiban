@@ -32,6 +32,9 @@ After its workspace identity is saved, start Falcon in another terminal:
 uv run ishiban serve
 ```
 
+If the saved workspace identity or browser build is missing, the server reports
+the required collector or build command before opening a listener.
+
 Open <http://127.0.0.1:8765/>. The collector and API share the ignored
 `.ishiban/` directory; keep both commands in the same repository root or pass
 the same `--state-directory` to each. Only one collector may own that

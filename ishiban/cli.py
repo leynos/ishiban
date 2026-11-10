@@ -84,12 +84,16 @@ def serve(
     marker = state_directory / "workspace.json"
     if not marker.is_file():
         message = "Start 'ishiban collect --workspace leynos' before serving the board."
-        raise cyclopts.ValidationError(message)
+        raise cyclopts.ValidationError(
+            exception_message=message, command_chain=("serve",)
+        )
     config = msgspec.json.decode(marker.read_bytes(), type=WorkspaceConfig)
     assets = pathlib.Path("dist").resolve()
     if not (assets / "index.html").is_file():
         message = "Build the browser interface first with 'bun run build'."
-        raise cyclopts.ValidationError(message)
+        raise cyclopts.ValidationError(
+            exception_message=message, command_chain=("serve",)
+        )
     store = Store(database_url(state_directory), config.workspace_id)
     uvicorn.run(
         create_app(
