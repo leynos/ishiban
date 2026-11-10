@@ -589,3 +589,18 @@ operational storage failure is contained within its pending batch member;
 unrelated programming errors still propagate. Its regression fails before the
 handler change and passes afterwards. HTTP body accumulation is shared between
 preferences and activity batches while endpoint limits remain independent.
+
+The follow-up commits `898a060`, `0dbeae3` and `49f166d` pass the required
+runtime and documentation gates: 188 Python tests, 86 Bun tests, four opt-in
+Chromium regressions and 35 Markdown documents. All 123 source files, including
+stylesheets and HTML, remain within 400 lines. CmdMox 0.2.0 supplies ordinary
+command-response fixtures while preserving real shim subprocesses. The updated
+`AGENTS.md` records engineering practices and invariants from the two requested
+starting points, without a host CLI inventory.
+
+CodeRabbit 0.9.4 completes the 16-file `999f28c..49f166d` follow-up review with
+zero findings. CodeScene 1.0.36 completes that range and reports one new
+advisory: the mixed batch route test is 79 lines against a 70-line threshold.
+Its cached, fresh, unavailable and missing-member assertions remain together as
+one request contract; shared setup is already extracted. Production batch mean
+complexity improves from 4.75 to 4.43. No CodeScene rules are weakened.
