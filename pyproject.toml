@@ -486,8 +486,8 @@ members = ["ishiban/storage/store.py::snapshot", "ishiban/storage/store.py::curr
 reason = "Keep distinct public snapshot and cursor-only read contracts explicit; their initialization and transaction wrappers match, while shared SQL is already extracted into read_cursor. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["ishiban/storage/store.py::detail", "ishiban/storage/store.py::session_projection"]
-reason = "Keep transcript-bearing detail and projection-only read transactions explicit; they call existing distinct query helpers and must not add historical queries to lazy reads. See docs/developers-guide.md#duplication-review."
+members = ["ishiban/detail_pagination.py", "ishiban/storage/projections.py"]
+reason = "The detector cannot name the anonymous two-line null guards in parse_turn_cursor and _turn_projection. Keep API first-page and stored-turn absence checks independent rather than add a cross-boundary helper. Review this exact file pair if future duplication expands. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
 unit = "tests/test_activity_api.py"

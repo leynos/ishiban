@@ -59,4 +59,5 @@ class Detail(typ.TypedDict):
 
     session: Projection
     turns: list[TurnProjection]
+    nextTurnCursor: str | None
     recentEvents: list[RecentEvent]

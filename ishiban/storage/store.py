@@ -15,6 +15,7 @@ from ishiban.storage.writer import JournalWriter
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
+    from ishiban.detail_pagination import TurnPageCursor
     from ishiban.domain import CatalogueEntry, Envelope
 
 
@@ -281,8 +282,10 @@ class Store:
         restored = (await self.restore_activity([current]))[0]
         return restored if restored.get("activitySource") == "lazy" else None
 
-    async def detail(self, session_id: str) -> dict[str, object] | None:
-        """Return one projection, turn records and at most 30 recent events.
+    async def detail(
+        self, session_id: str, after: TurnPageCursor | None = None
+    ) -> dict[str, object] | None:
+        """Return one projection, at most 100 turns and 30 recent events.
 
         Example
         -------
@@ -292,11 +295,11 @@ class Store:
         Returns
         -------
         dict[str, object] or None
-            The session record, turns and recent events, if found.
+            The session record, turn page and recent events, if found.
         """
         self._require_initialized()
         async with self._engine.connect() as connection, connection.begin():
-            return await read_detail(connection, self.workspace_id, session_id)
+            return await read_detail(connection, self.workspace_id, session_id, after)
 
     async def events(self, after: int, limit: int = 100) -> list[dict[str, object]]:
         """Read a bounded batch of committed journal rows after ``after``.

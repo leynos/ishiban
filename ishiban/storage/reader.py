@@ -4,6 +4,7 @@ import typing as typ
 
 import sqlalchemy as sa
 
+from ishiban.detail_pagination import TURN_PAGE_SIZE, TurnPageCursor, encode_turn_cursor
 from ishiban.storage.models import collector_state, sessions, source_events, turns
 from ishiban.storage.projection_writer import load_session_projection
 from ishiban.storage.serialization import decode_object
@@ -75,9 +76,15 @@ async def read_cursor(connection: AsyncConnection, workspace_id: str) -> int:
 
 
 async def read_detail(
-    connection: AsyncConnection, workspace_id: str, session_id: str
+    connection: AsyncConnection,
+    workspace_id: str,
+    session_id: str,
+    after: TurnPageCursor | None = None,
 ) -> dict[str, object] | None:
-    """Read one projection, latest turns and bounded provenance.
+    """Read one projection, a bounded turn page and recent provenance.
+
+    For example, a continuation after ``u099`` starts with the next ordered
+    turn, even when both turns have the same last event ID.
 
     Returns
     -------
@@ -90,17 +97,9 @@ async def read_detail(
     if session_projection is None:
         return None
 
-    turn_rows = (
-        await connection.execute(
-            sa
-            .select(turns.c.projection_json, turns.c.last_event_id)
-            .where(
-                turns.c.workspace_id == workspace_id,
-                turns.c.session_id == session_id,
-            )
-            .order_by(turns.c.last_event_id, turns.c.user_turn_id)
-        )
-    ).all()
+    turn_page, next_cursor = await _read_turn_page(
+        connection, workspace_id, session_id, after
+    )
     recent_rows = (
         await connection.execute(
             sa
@@ -115,13 +114,8 @@ async def read_detail(
     ).mappings()
     return {
         "session": session_projection,
-        "turns": [
-            {
-                **decode_object(turn.projection_json),
-                "lastEventId": turn.last_event_id,
-            }
-            for turn in turn_rows
-        ],
+        "turns": turn_page,
+        "nextTurnCursor": next_cursor,
         "recentEvents": [
             {
                 "cursor": event.id,
@@ -132,6 +126,58 @@ async def read_detail(
             for event in recent_rows
         ],
     }
+
+
+async def _read_turn_page(
+    connection: AsyncConnection,
+    workspace_id: str,
+    session_id: str,
+    after: TurnPageCursor | None,
+) -> tuple[list[dict[str, object]], str | None]:
+    """Read one keyset page and its continuation, bounded by lookahead.
+
+    For example, 101 retained rows produce 100 turns and a continuation.
+
+    Returns
+    -------
+    tuple[list[dict[str, object]], str | None]
+        The decoded turn page and its optional next position.
+    """
+    turn_query = (
+        sa
+        .select(turns.c.projection_json, turns.c.last_event_id, turns.c.user_turn_id)
+        .where(
+            turns.c.workspace_id == workspace_id,
+            turns.c.session_id == session_id,
+        )
+        .order_by(turns.c.last_event_id, turns.c.user_turn_id)
+        .limit(TURN_PAGE_SIZE + 1)
+    )
+    if after is not None:
+        turn_query = turn_query.where(
+            sa.tuple_(turns.c.last_event_id, turns.c.user_turn_id)
+            > (after.last_event_id, after.user_turn_id)
+        )
+    turn_rows = (await connection.execute(turn_query)).all()
+    page = turn_rows[:TURN_PAGE_SIZE]
+    next_cursor = None
+    if len(turn_rows) > TURN_PAGE_SIZE:
+        last = page[-1]
+        next_cursor = encode_turn_cursor(
+            TurnPageCursor(
+                1, workspace_id, session_id, last.last_event_id, last.user_turn_id
+            )
+        )
+    return (
+        [
+            {
+                **decode_object(turn.projection_json),
+                "lastEventId": turn.last_event_id,
+            }
+            for turn in page
+        ],
+        next_cursor,
+    )
 
 
 async def read_events(

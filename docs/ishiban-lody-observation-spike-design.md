@@ -288,6 +288,16 @@ loopback needs authentication and transport security before it is shared.
 | `GET /health`                       | Process liveness.                                                                                                                              |
 | `GET /ready`                        | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
 
+Session detail returns at most 100 retained turns in ascending
+`(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`
+is a bounded URL-safe continuation bound to the workspace and session; it is
+`null` after the final page. Clients pass it as `turnCursor` on the next detail
+request. Malformed or foreign continuations return HTTP 400. Every request
+reads the current materialized projection in its own database transaction, so
+concurrent turn updates can change later pages; this cursor does not promise a
+frozen historical snapshot. The session projection and the 30 most recent
+provenance events remain available on each page.
+
 Example `GET /api/v1/snapshot` shape (illustrative data):
 
 ```json

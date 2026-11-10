@@ -105,8 +105,12 @@ previous PR facts may be cached and stale.
 
 - `GET /api/v1/snapshot` returns session projections, collector health, and one
   transactionally consistent replay cursor.
-- `GET /api/v1/sessions/{session_id}` returns the current session, known turns,
-  and bounded recent provenance.
+- `GET /api/v1/sessions/{session_id}` returns the current session, up to 100
+  known turns, and bounded recent provenance. When `nextTurnCursor` is
+  non-null, request
+  `GET /api/v1/sessions/{session_id}?turnCursor=<nextTurnCursor>` for the next
+  page. A `null` cursor ends the turn list. Invalid or foreign continuations
+  return HTTP 400; a missing session returns HTTP 404.
 - `GET /api/v1/events?after=N` replays committed projections after cursor `N`
   and then follows new commits. Browser reconnect uses `Last-Event-ID` in
   preference to the original URL cursor.

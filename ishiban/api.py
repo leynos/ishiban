@@ -15,6 +15,7 @@ from falcon import asgi
 
 from ishiban.activity_api import SessionActivityResource
 from ishiban.batch_activity_api import BatchSessionActivityResource
+from ishiban.detail_pagination import parse_turn_cursor
 from ishiban.inspector_api import AgentDetailsResource, PullRequestDetailsResource
 from ishiban.interface_state import InterfaceStateCookies, InterfaceStateResource
 from ishiban.lazy_activity import LazyActivity
@@ -121,23 +122,31 @@ class SnapshotResource:
 
 
 class SessionResource:
-    """Expose bounded provenance and latest-known turn records for inspection."""
+    """Expose bounded provenance and paged turn records for inspection."""
 
     def __init__(self, store: Store) -> None:
         """Retain a reader without opening a long-lived transaction."""
         self.store = store
 
     async def on_get(
-        self, _req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str
     ) -> None:
         """Read a session; for example, unknown identities return HTTP 404.
 
         Raises
         ------
         falcon.HTTPNotFound
-            If the requested identity or replay cursor is invalid.
+            If the requested session identity is unknown.
+        falcon.HTTPBadRequest
+            If the supplied turn continuation is invalid or foreign.
         """
-        detail = await self.store.detail(session_id)
+        try:
+            after = parse_turn_cursor(
+                req.get_param("turnCursor"), self.store.workspace_id, session_id
+            )
+        except ValueError as exc:
+            raise falcon.HTTPBadRequest(description="Invalid turn cursor.") from exc
+        detail = await self.store.detail(session_id, after)
         if detail is None:
             raise falcon.HTTPNotFound
         projection = msgspec.convert(detail["session"], type=dict[str, object])
