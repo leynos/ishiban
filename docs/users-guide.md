@@ -63,11 +63,13 @@ including while the inspector is open.
 
 Select a mark or a session in List view to open the right-hand inspector. The
 inspector is hidden initially, docks beside the board, and leaves the board
-interactive. Horizontal scrolling keeps every table column reachable while it
-is open. Close it with its Close control or Escape. It exposes PR facts,
-workflow reasoning, agent activity, and evidence freshness. List view offers
-larger selection targets. The 120-repository **Demo data** mode is explicitly
-synthetic and stops the live browser subscription while selected.
+interactive. On desktop, it fills the available board height and sits flush
+beside the table pane, which retains a small right-hand padding. Horizontal
+scrolling keeps every table column reachable while it is open. Close it with
+its Close control or Escape. It exposes PR facts, workflow reasoning, agent
+activity, and evidence freshness. List view offers larger selection targets.
+The 120-repository **Demo data** mode is explicitly synthetic and stops the
+live browser subscription while selected.
 
 A solid oxide square with a tonal border marks a failed latest turn. The
 oxide/amber candy cane marks blocked activity, corresponding to Lody's

@@ -20,10 +20,11 @@
 .board-scroll {
   max-height: min(72vh, 48rem);
   overflow: auto;
+  padding-right: 0.6rem;
 }
 
 .ishiban-board[data-inspector-open="true"] {
-  gap: 0 1rem;
+  gap: 0;
   grid-template-areas:
     "header header"
     "main inspector";
@@ -34,6 +35,7 @@
   @apply border border-base-content bg-base-100 p-5 text-base-content shadow-lg;
   align-self: start;
   grid-area: inspector;
+  height: 100%;
   max-height: calc(100vh - 2rem);
   min-width: 0;
   overflow-y: auto;
