@@ -13,7 +13,9 @@ This page locates the proof of concept's runtime components and verification.
   snapshot reads, and projection reconciliation.
 - `ishiban/interface_state.py` signs and validates browser preference cookies.
 - `ishiban/lazy_activity.py` bounds and caches per-session activity reads.
-- `ishiban/activity_api.py` exposes ephemeral activity without journal writes.
+- `ishiban/activity_api.py` collects cached activity without journal writes.
+- `ishiban/storage/activity_cache.py` persists runtime observations in a
+  separate SQLite sidecar and restores them onto current API views.
 - `ishiban/api.py` exposes Falcon snapshots, session detail, health, and SSE.
 - `ishiban/cli.py` supplies the `ishiban collect` and `ishiban serve` commands.
 - `migrations/` and `alembic.ini` define the local database schema history.
@@ -28,6 +30,7 @@ This page locates the proof of concept's runtime components and verification.
 - `reference/ishiban-mockup.html` is the original visual reference.
 - `docs/execplans/initial-spike.md` records delivery and acceptance evidence.
 - `.ishiban/` is ignored private local state, including the SQLite journal.
+  Its `observatory.sqlite3.activity.sqlite3` sidecar retains on-demand outcomes.
 - `dist/` is ignored output built by Bun and Tailwind for Falcon to serve.
 
 Run commands and operational limits are documented in the

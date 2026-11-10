@@ -503,3 +503,27 @@ reason = "Keep independent malformed-result caching, waiter cancellation and ser
 [[tool.duplication_gate.allow]]
 unit = "tests/test_session_agent.py"
 reason = "Keep missing or invalid configuration identities, failed configuration retries and unverified configuration envelopes separately asserted; identical partial labels have different cache and command-eligibility contracts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_activity_cache.py"
+reason = "Keep stale-write ordering and overlay eligibility scenarios independently arranged; they share cache lifecycle setup but prove different persistence contracts and assert different results. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/storage/activity_cache.py::_require_initialized", "ishiban/storage/store.py::_require_initialized"]
+reason = "Keep journal and sidecar lifecycle guards local to independently initialized engines; a common base solely for this guard would couple their ownership. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_activity_api.py", "tests/test_activity_revision.py"]
+reason = "Keep API eligibility and journal-watermark assertions at separate boundaries; explicit imports and observation setup overlap without a shared calculation. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_activity_revision.py"
+reason = "Keep initial absence, evidence advance and metadata/unknown preservation independently asserted; the common envelope and store fixtures are already shared. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/lazy-retention.test.ts"
+reason = "Keep reconnect, newer-execution and scope-reset assertions independent after consolidating metadata/persisted reconnect cases; they share small snapshot assembly but verify opposite retention outcomes. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/client.ts", "tools/oxlint-plugin-df12/jsdoc-helpers.js"]
+reason = "Keep a one-line null guard local to browser activity retention and independent AST analysis; the domains do not share an abstraction. See docs/developers-guide.md#duplication-review."

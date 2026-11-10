@@ -21,6 +21,7 @@ class Projection(typ.TypedDict, total=False):
     generation: int
     lastEventId: int
     title: str
+    lastActivityEventId: int
     repoFullName: str | None
     removed: bool
     stage: str

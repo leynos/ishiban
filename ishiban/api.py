@@ -112,7 +112,7 @@ class SnapshotResource:
 
     async def on_get(self, req: asgi.Request, resp: asgi.Response) -> None:
         """Serve the snapshot; for example, include explicit collector health."""
-        snapshot = await self.store.snapshot()
+        snapshot = await self.store.activity_snapshot()
         if self.workspace_slug is not None:
             snapshot["workspaceSlug"] = self.workspace_slug
         snapshot["interfaceState"] = msgspec.to_builtins(self.cookies.read(req))
@@ -139,6 +139,8 @@ class SessionResource:
         detail = await self.store.detail(session_id)
         if detail is None:
             raise falcon.HTTPNotFound
+        projection = msgspec.convert(detail["session"], type=dict[str, object])
+        detail["session"] = (await self.store.restore_activity([projection]))[0]
         resp.media = detail
 
 
@@ -176,6 +178,14 @@ class EventsResource:
         idle = 0
         while True:
             rows = await self.store.events(cursor, limit=100)
+            session_rows = [row for row in rows if "sessionId" in row]
+            projections = [
+                msgspec.convert(row["projection"], type=dict[str, object])
+                for row in session_rows
+            ]
+            views = await self.store.restore_activity(projections)
+            for row, view in zip(session_rows, views, strict=True):
+                row["projection"] = view
             for row in rows:
                 cursor = int(str(row["cursor"]))
                 category = "source" if row["source"] == "collector" else "observation"

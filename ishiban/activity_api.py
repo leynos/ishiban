@@ -1,4 +1,4 @@
-"""Expose ephemeral on-demand activity while leaving the durable journal untouched.
+"""Cache on-demand runtime evidence while leaving the durable journal untouched.
 
 For example, a visible metadata-only mark may resolve to idle without appending
 an observation event or changing the snapshot's replay cursor.
@@ -43,6 +43,10 @@ class SessionActivityResource:
             raise falcon.HTTPNotFound
         projection: dict[str, object] | None = None
         if previous.get("state") == "unknown":
+            cached = (await self.store.restore_activity([previous]))[0]
+            if cached.get("activitySource") == "lazy":
+                resp.media = {"workspaceId": self.store.workspace_id, "session": cached}
+                return
             revision = int(str(previous["lastEventId"]))
             observed = await self.activity.read(session_id, revision)
             if observed is not None:
@@ -58,4 +62,5 @@ class SessionActivityResource:
                 ):
                     projection[key] = previous.get(key)
                 projection["activitySource"] = "lazy"
+                projection = await self.store.remember_activity(projection)
         resp.media = {"workspaceId": self.store.workspace_id, "session": projection}

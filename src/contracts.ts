@@ -34,6 +34,7 @@ export const SessionSchema = Schema.Struct({
   pullRequests: Schema.Array(PullRequestSchema),
   latestTurn: Schema.NullOr(TurnSchema),
   activeTurns: Schema.Array(TurnSchema),
+  lastActivityEventId: Schema.optional(Schema.Number),
   lastEvidenceGeneration: Schema.NullOr(Schema.Number),
   lastMetadataGeneration: Schema.NullOr(Schema.Number),
   lastObservedAt: Schema.NullOr(Schema.Number),

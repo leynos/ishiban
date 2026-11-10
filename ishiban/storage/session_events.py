@@ -142,6 +142,8 @@ async def _commit_session_event(
         ),
     )
     projection["lastEventId"] = event_id
+    if _has_activity_evidence(incoming):
+        projection["lastActivityEventId"] = event_id
     await save_session_projection(connection, workspace_id, projection)
     await save_turn_projections(connection, workspace_id, projection, event_id)
     await finish_event(connection, event_id, projection)
@@ -152,3 +154,25 @@ async def _commit_session_event(
         .values(last_received_at=received_at, last_event_id=event_id)
     )
     return event_id
+
+
+def _has_activity_evidence(incoming: ValidatedEnvelope) -> bool:
+    """Identify observer events that prove execution state or turn activity.
+
+    For example, a persisted ``running`` session proves activity, while a
+    metadata refresh or persisted ``unknown`` observation does not.
+
+    Returns
+    -------
+    bool
+        Whether this event should advance the session execution watermark.
+    """
+    envelope = incoming.envelope
+    if envelope.type in {"turn.started", "turn.finished"}:
+        return envelope.session_id is not None and envelope.user_turn_id is not None
+    observed = envelope.session
+    return (
+        observed is not None
+        and observed.source == "persisted"
+        and observed.state != "unknown"
+    )

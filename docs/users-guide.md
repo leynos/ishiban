@@ -291,7 +291,16 @@ Real session marks with unknown activity are read lazily as they become
 visible. The frame updates without a pulse when the read succeeds. Evidence
 read this way is labelled “Read on demand; not journalled”. Existing event IDs
 are preserved, and newer journal events take precedence over late lookup
-responses. Unavailable or metadata-only reads remain unknown.
+responses. Unavailable or metadata-only reads remain unknown unless an earlier
+successful observation is cached.
+
+Collected activity, failed outcomes and supplied error details survive page
+refreshes and API or collector restarts. They are stored in a local SQLite
+sidecar, shared by windows viewing the same workspace. Newer execution evidence
+replaces them; metadata or unknown startup snapshots retain them. The displayed
+observation time describes when the runtime facts were read. Removing the
+sidecar clears these last-known observations. Previously lost browser-only
+results need to be collected again.
 
 The inspector prefers a known PR name as its linked heading, with the session
 title underneath. Missing PR names, including already merged PRs, are loaded on

@@ -1,6 +1,7 @@
 /** @file Verify lazy activity survives metadata refreshes but not new evidence or workspaces. */
 import {expect, it} from 'bun:test';
-import type {Session, Snapshot} from '../src/contracts';
+import {Schema} from 'effect';
+import {SessionSchema, SnapshotSchema, type Session, type Snapshot} from '../src/contracts';
 import {createBoardStore, type BoardStore} from '../src/client';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
 
@@ -22,6 +23,7 @@ function createLazyScenario(): LazyScenario {
     source: 'metadata',
     freshness: 'unavailable',
     lastEventId: 40,
+    lastActivityEventId: 12,
     latestTurn: null,
     activeTurns: [],
     lastObservedAt: null
@@ -37,11 +39,11 @@ function createLazyScenario(): LazyScenario {
   store.replace(snapshot);
   store.activity(snapshot.workspaceId, {
     ...metadataSession,
-    state: 'running',
+    state: 'idle',
     source: 'persisted',
     freshness: 'synced',
-    latestTurn: {userTurnId: 'lazy-turn', state: 'completed', error: 'retained failure'},
-    activeTurns: [{userTurnId: 'active-turn', state: 'running'}],
+    latestTurn: {userTurnId: 'lazy-turn', state: 'failed', error: 'retained failure'},
+    activeTurns: [],
     lastObservedAt: 1234
   });
   const enriched = store.getSnapshot().snapshot;
@@ -66,6 +68,8 @@ function metadataRefresh(session: Session, lastEventId: number): Session {
     stageReason: 'Metadata refresh classified an open draft pull request.',
     pullRequests: [{url: 'https://github.com/acme/repo/pull/42', title: 'Implement work', status: 'open'}],
     lastMetadataGeneration: 9,
+    lastActivityEventId: session.lastActivityEventId,
+    activitySource: undefined,
     lastEventId
   };
 }
@@ -106,9 +110,9 @@ it('carries lazy runtime fields across a newer metadata event and accepts its re
   );
 });
 
-it('retains lazy activity across a same-workspace reconnect snapshot', () => {
+it.each(['metadata', 'persisted'] as const)('retains lazy activity across a %s reconnect', (source) => {
   const scenario = createLazyScenario();
-  const incoming = metadataRefresh(scenario.session, scenario.session.lastEventId + 5);
+  const incoming: Session = {...metadataRefresh(scenario.session, scenario.session.lastEventId + 5), source};
   const reconnect: Snapshot = {
     ...scenario.snapshot,
     cursor: scenario.snapshot.cursor + 20,
@@ -124,6 +128,93 @@ it('retains lazy activity across a same-workspace reconnect snapshot', () => {
     incoming,
     scenario.session
   );
+});
+
+it('accepts a restored failed activity snapshot into a fresh browser store', () => {
+  const base = createBoardSnapshot();
+  const template = firstSession(base);
+  const failedSession: Session = {
+    ...template,
+    sessionId: 'restored-failure',
+    state: 'idle',
+    source: 'persisted',
+    freshness: 'synced',
+    latestTurn: {userTurnId: 'restored-turn', state: 'failed', error: 'restored failure'},
+    activeTurns: [],
+    lastActivityEventId: 18
+  };
+  const wireSnapshot = {
+    ...base,
+    sessions: [failedSession, ...base.sessions.slice(1)]
+  };
+  const restored = Schema.decodeUnknownSync(SnapshotSchema)(wireSnapshot);
+  const store = createBoardStore(() => {});
+
+  store.replace(restored);
+
+  const storedSession = store
+    .getSnapshot()
+    .snapshot?.sessions.find((session) => session.sessionId === failedSession.sessionId);
+  expect(Schema.decodeUnknownSync(SessionSchema)(storedSession)).toMatchObject({
+    latestTurn: {state: 'failed', error: 'restored failure'},
+    lastActivityEventId: 18
+  });
+});
+
+it('does not carry an older failure past a higher execution watermark', () => {
+  const scenario = createLazyScenario();
+  const incoming: Session = {
+    ...metadataRefresh(scenario.session, scenario.session.lastEventId + 1),
+    source: 'persisted',
+    lastActivityEventId: (scenario.session.lastActivityEventId ?? 0) + 1
+  };
+  const reconnect: Snapshot = {
+    ...scenario.snapshot,
+    cursor: scenario.snapshot.cursor + 20,
+    sessions: [incoming, ...scenario.snapshot.sessions.slice(1)]
+  };
+
+  scenario.store.replace(reconnect);
+
+  const current = scenario.store.getSnapshot().snapshot;
+  const session = current?.sessions.find((item) => item.sessionId === incoming.sessionId);
+  expect(current?.cursor).toBe(reconnect.cursor);
+  expect(session).toMatchObject({
+    state: 'unknown',
+    source: 'persisted',
+    latestTurn: null,
+    lastActivityEventId: incoming.lastActivityEventId
+  });
+  expect(session?.activitySource).toBeUndefined();
+});
+
+it('does not retain real activity inside an illustrative demo projection', () => {
+  const scenario = createLazyScenario();
+  const incoming: Session = {
+    ...metadataRefresh(scenario.session, scenario.session.lastEventId + 1),
+    source: 'demo',
+    freshness: 'illustrative'
+  };
+
+  scenario.store.session(scenario.snapshot.cursor + 1, incoming);
+
+  const session = scenario.store.getSnapshot().snapshot?.sessions.find((item) => item.sessionId === incoming.sessionId);
+  expect(session).toMatchObject({state: 'unknown', source: 'demo', latestTurn: null});
+  expect(session?.activitySource).toBeUndefined();
+});
+
+it('does not restore cached activity onto a removed session', () => {
+  const scenario = createLazyScenario();
+  const incoming: Session = {
+    ...metadataRefresh(scenario.session, scenario.session.lastEventId + 1),
+    removed: true
+  };
+
+  scenario.store.session(scenario.snapshot.cursor + 1, incoming);
+
+  const session = scenario.store.getSnapshot().snapshot?.sessions.find((item) => item.sessionId === incoming.sessionId);
+  expect(session).toMatchObject({state: 'unknown', removed: true, latestTurn: null});
+  expect(session?.activitySource).toBeUndefined();
 });
 
 it('lets a newer durable execution projection replace lazy activity', () => {

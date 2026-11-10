@@ -372,7 +372,7 @@ Older journals and missing error fields remain readable. The current CLI's
 observer and visible-history output omit the underlying provider diagnostic;
 there is no transcript scraping or additional history polling in the runtime.
 
-## Preference cookies and ephemeral activity
+## Preference cookies and cached activity
 
 [ADR 003](adr-003-interface-state-and-lazy-activity.md) defines the separation
 between the journal, browser preferences, and direct activity reads. The
@@ -410,11 +410,27 @@ Catalogue, activity and metadata readers supply their own limits and perform
 their own typed decoding. It closes stdin, detects a complete root object once,
 and reaps the child without waiting indefinitely for transport EOF.
 
-Browser-local lazy activity is retained across metadata-only unknown updates
-and same-workspace reconnect snapshots. Incoming metadata and event cursors
-still advance; actual execution evidence or a workspace change replaces that
-cache. This retention never manufactures journal events, and a direct lazy
-result still suppresses its own pulse.
+Lazy activity is retained through metadata and persisted-source unknown
+updates, reconnect snapshots and full reloads. Incoming metadata and event
+cursors still advance. [ADR 004](adr-004-persist-on-demand-activity.md) defines
+the persistent cache and execution-watermark precedence. Direct lazy results
+still suppress their own pulses.
+
+`storage.activity_cache.ActivityCache` owns only derived runtime observations
+in the journal's `.activity.sqlite3` sidecar. `Store.snapshot`, `Store.detail`
+and `Store.events` remain raw readers. `Store.activity_snapshot` and
+`Store.restore_activity` prepare API views; `Store.remember_activity` checks a
+lookup revision before caching and returns a freshly checked view. API replay
+decorates its own copies, preserving the stored event and its cursor. The
+sidecar uses SQLAlchemy and bounded upserts without a journal migration.
+Generated cache-ordering tests vary execution watermarks and Unicode metadata
+to check invalidation, metadata preservation and projection immutability.
+
+The cache and journal retain separate initialization guards because they own
+different engines. Their short guards, explicit envelope fixtures and
+independent cache-ordering/eligibility assertions are reviewed duplication
+exceptions. Browser reconnect tests share a parametrized metadata/persisted
+case while keeping newer-execution and workspace-reset assertions separate.
 
 Configuration reads may opt into the installed CLI's known Remote Streams
 transport chatter. The shared reader discards only that recognized prelude and

@@ -1,6 +1,8 @@
 # Separate interface preferences and lazy activity from the journal
 
 - Status: Accepted
+- Activity lifetime superseded by
+  [ADR 004](adr-004-persist-on-demand-activity.md).
 - Date: 10 November 2026
 
 ## Context
@@ -44,6 +46,7 @@ cookies or replacing the signing key restores defaults.
 
 Unknown, unavailable, metadata-only, malformed, or timed-out source reads do
 not become invented activity. Bounded caches and short failure caching avoid
-repeated process launches. Lazy evidence is not persisted across page reloads
-and does not imply machine liveness. Failed turns may still lack a provider
-diagnostic because the installed Lody observer omits it.
+repeated process launches. The original browser-only lifetime is superseded by
+the persistent sidecar in ADR 004. Lazy evidence does not imply machine
+liveness. Failed turns may still lack a provider diagnostic because the
+installed Lody observer omits it.

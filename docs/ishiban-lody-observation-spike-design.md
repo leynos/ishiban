@@ -589,3 +589,11 @@ title remains a subtitle, and PR links show muted numbers. Missing names for
 terminal PRs are resolved on inspector demand. Metadata-only unknown updates
 must not erase browser-local on-demand activity; fresh execution evidence and
 workspace changes retain precedence.
+
+[ADR 004](adr-004-persist-on-demand-activity.md) extends the original activity
+lifetime with a workspace/session cache in a separate SQLite sidecar. API
+snapshots, detail and SSE restore those runtime fields onto current metadata;
+the durable journal and raw replay readers remain unchanged. Collector
+execution watermarks invalidate older cached outcomes even across missed
+updates. Refreshes and process restarts retain failures and supplied
+diagnostics without creating events or collector evidence generations.

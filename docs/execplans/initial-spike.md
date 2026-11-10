@@ -1,9 +1,9 @@
 # Ishiban initial observation proof of concept
 
-Status: implementation and interface refinements are complete and validated
-locally through `be2bd5e`. Authenticated local reviews are complete, with the
-advisory dispositions recorded below. The full implementation review starts at
-`bbb1bee`. No remote publication or Lody writes are authorized.
+Status: the implementation is validated through `be2bd5e`; persistence fixes
+for collected on-demand outcomes are in progress. Earlier review dispositions
+are recorded below. The full implementation review starts at `bbb1bee`. No
+remote publication or Lody writes are authorized.
 
 ## Purpose
 
@@ -458,3 +458,37 @@ lifetime. Its module mean falls from 5.88 to 5.20 against threshold 4. The
 inspector mean is 4.22 against threshold 4 after naming its fallback values.
 These advisories are accepted for this proof of concept. CodeScene thresholds
 and suppressions are unchanged.
+
+## Persistent on-demand observations, 10 November 2026
+
+The latest run exposed a lifetime mismatch: on-demand failures existed only in
+the current browser store, so a full refresh erased them. Retention also
+excluded persisted-source unknown projections produced at collector startup.
+The user now requires collected outcomes to survive page refreshes and process
+restarts. [ADR 004](../adr-004-persist-on-demand-activity.md) supersedes the
+browser-only lifetime in ADR 003.
+
+M1: reproduce refresh loss through the actual Falcon API, then persist minimal
+runtime facts in a bounded workspace/session SQLite sidecar. Reopening an API
+store must restore failures and errors while raw journal snapshots, events and
+cursors remain unchanged. Store ownership and schema initialization belong to
+the sidecar module; no journal migration or Lody mutation is needed.
+
+M2: add an execution watermark to projections. Known persisted observations and
+turn transitions advance it; metadata, unknown observations and generation
+changes preserve it. Restore cached outcomes onto current metadata only while
+their base revision has not been superseded by actual execution. Check stale
+lookup completion and older concurrent cache writes as separate boundaries.
+Browser retention respects the same watermark and both kinds of unknown input.
+
+M3: apply cache overlays consistently to snapshot, detail and SSE views, then
+verify refreshes, API restarts and collector restarts in a real browser against
+an isolated journal. New execution must replace the failure, and another
+unknown projection must not resurrect it. Run the repository gates and local
+reviews, record advisory dispositions, commit completed work, and run the stop
+hook.
+
+Progress: regression tests reproduce snapshot loss; sidecar, watermark and
+browser-retention changes are being integrated. Existing public raw journal
+readers remain unchanged. The helper manifest and installed agent roles remain
+those recorded in the conformance basis above.

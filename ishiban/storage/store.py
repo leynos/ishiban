@@ -5,6 +5,7 @@ import typing as typ
 
 import sqlalchemy as sa
 
+from ishiban.storage.activity_cache import ActivityCache
 from ishiban.storage.database import create_engine, initialize_schema, verify_schema
 from ishiban.storage.journal_writer import ValidatedEnvelope
 from ishiban.storage.projection_writer import load_session_projection
@@ -32,6 +33,7 @@ class Store:
         """Create a workspace-bound store without opening a connection."""
         self.workspace_id = workspace_id
         self._engine: AsyncEngine = create_engine(database_url)
+        self._activity_cache = ActivityCache(database_url, workspace_id)
         self._writer = JournalWriter(workspace_id)
         self._write_lock = asyncio.Lock()
         self._initialized = False
@@ -65,6 +67,7 @@ class Store:
                 )
         else:
             await verify_schema(self._engine)
+        await self._activity_cache.initialize()
         self._initialized = True
 
     async def close(self) -> None:
@@ -74,6 +77,7 @@ class Store:
         -------
         await store.close()
         """
+        await self._activity_cache.close()
         await self._engine.dispose()
         self._initialized = False
 
@@ -214,6 +218,63 @@ class Store:
             return await load_session_projection(
                 connection, self.workspace_id, session_id
             )
+
+    async def activity_snapshot(self) -> dict[str, object]:
+        """Restore cached runtime facts on the current journal snapshot.
+
+        For example, a newly opened browser retains a lazily collected failure.
+
+        Returns
+        -------
+        dict[str, object]
+            Current metadata and cursor with explicitly labelled cached activity.
+        """
+        snapshot = await self.snapshot()
+        # read_snapshot constructs this list internally; the public dictionary
+        # annotation also accommodates its unrelated collector and cursor fields.
+        sessions = typ.cast("list[dict[str, object]]", snapshot["sessions"])
+        snapshot["sessions"] = await self.restore_activity(sessions)
+        return snapshot
+
+    async def restore_activity(
+        self, projections: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
+        """Overlay runtime cache entries without rewriting journal projections.
+
+        For example, SSE and snapshots restore the same failed latest turn.
+
+        Returns
+        -------
+        list[dict[str, object]]
+            Views preserving each projection's metadata and event revision.
+        """
+        self._require_initialized()
+        return await self._activity_cache.merge(projections)
+
+    async def remember_activity(
+        self, projection: dict[str, object]
+    ) -> dict[str, object] | None:
+        """Persist a matching lazy read in the sidecar and return its current view.
+
+        For example, a late read cannot overwrite a newer collector revision.
+
+        Returns
+        -------
+        dict[str, object] or None
+            Restored activity, or None when execution or identity has moved on.
+        """
+        session_id = str(projection["sessionId"])
+        previous = await self.session_projection(session_id)
+        if previous is None or previous.get("state") != "unknown":
+            return None
+        if previous.get("lastEventId") != projection.get("lastEventId"):
+            return None
+        await self._activity_cache.remember(projection)
+        current = await self.session_projection(session_id)
+        if current is None:
+            return None
+        restored = (await self.restore_activity([current]))[0]
+        return restored if restored.get("activitySource") == "lazy" else None
 
     async def detail(self, session_id: str) -> dict[str, object] | None:
         """Return one projection, turn records and at most 30 recent events.

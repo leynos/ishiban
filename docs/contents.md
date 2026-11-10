@@ -5,6 +5,8 @@ reference material.
 
 ## Design and reference
 
+- [Persistent on-demand activity decision](adr-004-persist-on-demand-activity.md)
+  preserves collected runtime outcomes across browser and process restarts.
 - [Interface state and lazy activity decision](adr-003-interface-state-and-lazy-activity.md)
   separates signed MessagePack preferences and ephemeral activity reads from
   the durable observation journal.

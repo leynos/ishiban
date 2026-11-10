@@ -82,11 +82,19 @@ function withActivity(snapshot: Snapshot | undefined, workspaceId: string, sessi
   return {...snapshot, sessions: replaceSession(snapshot.sessions, {...session, activitySource: 'lazy'})};
 }
 
-/** Preserve last-read activity through metadata-only unknowns; for example, keep a running mark on reconnect. */
+/** Decide whether an unknown real refresh may inherit local activity; e.g., reject a newer execution watermark. */
+function shouldCarryActivity(previous: Session | undefined, next: Session): previous is Session {
+  if (!previous) return false;
+  if (previous.activitySource !== 'lazy') return false;
+  if (next.state !== 'unknown') return false;
+  if (next.removed) return false;
+  if (next.source === 'demo') return false;
+  return (next.lastActivityEventId ?? 0) <= (previous.lastActivityEventId ?? 0);
+}
+
+/** Preserve last-read activity through real unknowns; for example, keep a failed mark on reconnect. */
 function carryActivity(previous: Session | undefined, next: Session): Session {
-  if (previous?.activitySource !== 'lazy') return next;
-  if (next.state !== 'unknown') return next;
-  if (next.source !== 'metadata') return next;
+  if (!shouldCarryActivity(previous, next)) return next;
   return {
     ...next,
     state: previous.state,
@@ -95,6 +103,7 @@ function carryActivity(previous: Session | undefined, next: Session): Session {
     lastObservedAt: previous.lastObservedAt,
     source: previous.source,
     freshness: previous.freshness,
+    lastActivityEventId: next.lastActivityEventId ?? previous.lastActivityEventId,
     activitySource: 'lazy'
   };
 }
