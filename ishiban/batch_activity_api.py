@@ -6,6 +6,7 @@ import typing as typ
 import falcon
 import msgspec
 from falcon import asgi
+from sqlalchemy.exc import OperationalError
 
 from ishiban.activity_api import resolve_activity, restore_cached_activities
 
@@ -122,7 +123,7 @@ class BatchSessionActivityResource:
     async def _resolve_one(
         self, session_id: str
     ) -> tuple[str, dict[str, object] | None]:
-        """Resolve one pending identity, containing only its not-found result.
+        """Contain missing identities and operational storage failures per member.
 
         Returns
         -------
@@ -133,7 +134,7 @@ class BatchSessionActivityResource:
             return session_id, await resolve_activity(
                 self.store, self.activity, session_id
             )
-        except falcon.HTTPNotFound:
+        except falcon.HTTPNotFound, OperationalError:
             return session_id, None
 
 

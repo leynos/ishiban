@@ -18,8 +18,10 @@ to eight entries and an 8,192-byte body. Deduplicate identities and stream one
 newline-delimited JSON frame per identity with `workspaceId`, `sessionId` and
 an optional `session`. Cached results precede pending reads; pending results
 arrive in completion order. Missing or unavailable sessions produce null
-members without preventing other results. Disconnecting cancels request
-waiters; the shared service retains ownership of subprocess work.
+members without preventing other results. Operational storage failures in a
+pending member also produce a null result; unrelated programming errors
+propagate. Disconnecting cancels request waiters; the shared service retains
+ownership of subprocess work.
 
 The browser coalesces visible marks into batches of four with at most two
 streams active. It validates each frame independently, bounds stream size and
@@ -54,3 +56,7 @@ remains bounded, with shared work across tabs. Cold reads retain CLI startup
 cost, and overload or unavailable observations can leave activity unknown. The
 durable journal retains restart observations and exact stream/sequence
 deduplication; pulse suppression belongs to the browser presentation.
+
+Batch verification includes a real ASGI-to-subprocess path using CmdMox's
+command shims. The dev-only dependency removes ordinary command-fixture setup;
+specialized transport-lifetime tests retain explicit process fixtures.

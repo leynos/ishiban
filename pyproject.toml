@@ -36,6 +36,7 @@ dev = [
     "pytest-bdd>=9.0.1",
     "hypothesis>=6.170.15",
     "syrupy>=6.1.1",
+    "cmd-mox==0.2.0",
 ]
 
 [tool.ruff]
@@ -364,7 +365,7 @@ exclude = [".venv/**", ".uv-cache/**", ".uv-tools/**", ".tools/**", ".git/**"]
 # dead-helper detection there. Names collected by pytest are entry points;
 # their function bodies and all other definitions remain checked.
 [tool.vulture]
-ignore_names = ["test_*", "pytestmark"]
+ignore_names = ["test_*", "pytestmark", "pytest_plugins"]
 # pytest-bdd discovers step implementations through their decorators.
 ignore_decorators = ["@given", "@when", "@then"]
 min_confidence = 60
