@@ -124,8 +124,11 @@ previous PR facts may be cached and stale.
   bytes. A valid result too large for one frame yields a `response_too_large`
   marker for that member; later members still arrive. The interface fetches the
   marked session through
-  `GET /api/v1/sessions/{session_id}/activity?includeKnown=true` under its
-  existing response bound. The opt-in also returns current known activity
+  `GET /api/v1/session-activity?sessionId=<encoded-id>&includeKnown=true` under
+  its existing response bound. This query route preserves IDs containing path
+  syntax. The existing
+  `GET /api/v1/sessions/{session_id}/activity?includeKnown=true` route remains
+  available for compatible IDs. The opt-in also returns current known activity
   without a new Lody read; the default route still resolves unknown activity
   only. An identity too large even for a marker returns HTTP 413 before any
   stream starts.
@@ -329,6 +332,24 @@ The inspector prefers a known PR name as its linked heading, with the session
 title underneath. Missing PR names, including already merged PRs, are loaded on
 demand. PR links also show a muted `#123`-style number. Inspector links are
 underlined on hover.
+
+The board groups sessions by `parentSessionId`, showing one entry for each
+family root. The root supplies the PR, branch, title, and workflow context; the
+selected tab supplies its own title, activity, error, agent details, and copied
+CLI ID. The inspector keeps the root session route and adds
+`?tab=session:<selected-session-id>` when a child tab is selected. Search
+matches member session IDs and titles. Board counts and PR-workflow filters
+count families. See [ADR 007](adr-007-session-tab-families.md) for recency and
+selection details.
+
+Archiving the root hides the logical task, including any child tabs Lody leaves
+unarchived. **Include archived and removed** reveals those families. A removed
+root catalogue record does not hide a child that is still present.
+
+After updating Ishiban to a build with family support, restart both the API and
+collector so the new routes and parent metadata are loaded. Existing stored
+session data remains compatible; the added parent and creation-time fields are
+optional and nullable.
 
 **Copy session ID** copies the Lody ID accepted by commands such as
 `lody session show <id>`. It does not copy the provider's ACP conversation ID.

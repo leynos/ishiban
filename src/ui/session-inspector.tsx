@@ -7,6 +7,7 @@ import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from '.
 
 interface SessionInspectorProps {
   readonly session: Session;
+  readonly activitySession?: Session;
   readonly currentGeneration: number;
   readonly onClose: () => void;
   readonly workspaceId: string;
@@ -16,14 +17,22 @@ interface SessionInspectorProps {
 const WEB_PROTOCOLS = new Set(['http:', 'https:']);
 
 /** Link real sessions only; for example, an unknown slug uses Lody's native URI. */
-function SessionLink({session, workspaceId, workspaceSlug}: SessionInspectorProps): ReactElement {
-  if (session.source === 'demo') return <p>Synthetic demo session</p>;
+function SessionLink({
+  session,
+  activitySession = session,
+  workspaceId,
+  workspaceSlug
+}: SessionInspectorProps): ReactElement {
+  if (activitySession.source === 'demo') return <p>Synthetic demo session</p>;
   const hasSlug = workspaceSlug !== undefined && workspaceSlug !== workspaceId;
   const hasWebRoute = hasSlug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(workspaceSlug);
-  const id = encodeURIComponent(session.sessionId);
+  const tabQuery =
+    activitySession.sessionId === session.sessionId
+      ? ''
+      : `?${new URLSearchParams({tab: `session:${activitySession.sessionId}`})}`;
   const href = hasWebRoute
-    ? `https://lody.ai/${encodeURIComponent(workspaceSlug)}/sessions/${id}`
-    : `lody://session/${id}?workspace=${encodeURIComponent(workspaceId)}`;
+    ? `https://lody.ai/${encodeURIComponent(workspaceSlug)}/sessions/${encodeURIComponent(session.sessionId)}${tabQuery}`
+    : `lody://session/${encodeURIComponent(activitySession.sessionId)}?workspace=${encodeURIComponent(workspaceId)}`;
   return (
     <p>
       <a className="link link-hover" href={href} target="_blank" rel="noreferrer">
@@ -162,21 +171,29 @@ function ActivityValue({session}: {readonly session: Session}): ReactElement {
 /** Render the selected session's current facts; for example, show unknown activity explicitly. */
 function SessionFacts({
   session,
+  activitySession,
   currentGeneration
 }: {
   readonly session: Session;
+  readonly activitySession: Session;
   readonly currentGeneration: number;
 }): ReactElement {
   const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
   const stage = STAGE_LABELS[session.stage];
   const activeTurnSummary =
-    session.activeTurns.length === 0
+    activitySession.activeTurns.length === 0
       ? 'None supplied'
-      : session.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
-  const activeTurnCount = session.activeTurnCount ?? session.activeTurns.length;
-  const isActiveTurnPreview = session.activeTurnsTruncated ?? false;
+      : activitySession.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
+  const activeTurnCount = activitySession.activeTurnCount ?? activitySession.activeTurns.length;
+  const isActiveTurnPreview = activitySession.activeTurnsTruncated ?? false;
   return (
     <dl className="inspector-facts">
+      {activitySession.sessionId === session.sessionId ? null : (
+        <>
+          <dt>Selected tab</dt>
+          <dd>{activitySession.title}</dd>
+        </>
+      )}
       <dt>Repository</dt>
       <dd>{repository}</dd>
       <dt>Branch</dt>
@@ -187,27 +204,27 @@ function SessionFacts({
       <dd>{session.stageReason}</dd>
       <dt>Activity</dt>
       <dd>
-        <ActivityValue session={session} />
+        <ActivityValue session={activitySession} />
       </dd>
       <dt>Evidence</dt>
-      <dd>{evidenceLabel(session, currentGeneration)}</dd>
+      <dd>{evidenceLabel(activitySession, currentGeneration)}</dd>
       <dt>Source</dt>
       <dd>
-        {session.source} · {session.freshness}
+        {activitySession.source} · {activitySession.freshness}
       </dd>
       <dt>Last known turn</dt>
-      <dd>{latestTurnLabel(session)}</dd>
+      <dd>{latestTurnLabel(activitySession)}</dd>
       <dt>Active turns</dt>
       <dd>
         {isActiveTurnPreview ? (
           <p>
-            Showing {session.activeTurns.length} of {activeTurnCount} active turns.
+            Showing {activitySession.activeTurns.length} of {activeTurnCount} active turns.
           </p>
         ) : null}
         {activeTurnSummary}
       </dd>
       <dt>Observed</dt>
-      <dd>{observedAtLabel(session.lastObservedAt)}</dd>
+      <dd>{observedAtLabel(activitySession.lastObservedAt)}</dd>
     </dl>
   );
 }
@@ -220,6 +237,7 @@ function SessionFacts({
 export function SessionInspector(props: SessionInspectorProps): ReactElement {
   const {currentGeneration, onClose} = props;
   const session = usePullRequestTitles(props.session, props.workspaceId);
+  const activitySession = props.activitySession ?? props.session;
   return (
     <aside aria-labelledby="session-inspector-heading" className="session-inspector" id="session-inspector">
       <header className="session-inspector__header">
@@ -240,14 +258,14 @@ export function SessionInspector(props: SessionInspectorProps): ReactElement {
       <p className="session-inspector__description" id="inspector-description">
         {session.stageReason}
       </p>
-      <SessionFacts session={session} currentGeneration={currentGeneration} />
+      <SessionFacts session={session} activitySession={activitySession} currentGeneration={currentGeneration} />
       <AgentDetails
-        key={session.sessionId}
+        key={activitySession.sessionId}
         workspaceId={props.workspaceId}
-        sessionId={session.sessionId}
-        isDemo={session.source === 'demo'}
+        sessionId={activitySession.sessionId}
+        isDemo={activitySession.source === 'demo'}
       />
-      <TurnError session={session} />
+      <TurnError session={activitySession} />
       <PullRequestDetails session={session} />
     </aside>
   );

@@ -344,13 +344,23 @@ reason = "InterfaceStateResource.on_post reads bounded bodies and maps validated
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
-full_name = ["ishiban.request_body.read_bounded_body", "ishiban.batch_activity_api._decode_session_ids", "ishiban.batch_activity_api._is_safe_session_id"]
-reason = "BatchSessionActivityResource.on_post invokes the bounded decoder and per-ID generator predicate; Skylos does not propagate this Falcon handler and generator reachability."
+full_name = ["ishiban.request_body.read_bounded_body", "ishiban.bounded_batch.prepare_batch", "ishiban.bounded_batch.decode_session_ids", "ishiban.session_identity.is_safe_session_id"]
+reason = "The activity and recency Falcon handlers invoke shared bounded request decoding and exact-ID validation; Skylos does not propagate these handler and generator paths."
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "class"
-full_name = ["ishiban.batch_activity_api._ActivityBatchRequest"]
-reason = "The Falcon batch handler passes this typed request shape to msgspec.json.decode; Skylos does not follow the handler's decoder reachability."
+full_name = ["ishiban.bounded_batch._BatchRequest"]
+reason = "Shared bounded request decoding passes this typed shape to msgspec.json.decode for both Falcon batch handlers; Skylos does not follow that decoder reachability."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = ["ishiban.inspector_api._existing_session", "ishiban.inspector_api._set_scoped_detail"]
+reason = "The registered agent and PR Falcon on_get handlers call these current-session lookup and scoped-response helpers; Skylos does not propagate dynamic resource dispatch."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = ["ishiban.session_recency_api.SessionRecencyResource._stream_results", "ishiban.session_recency_api.SessionRecencyResource._resolve_one"]
+reason = "Falcon consumes the recency response async generator, which registers its per-member resolver with bounded_batch.start_results; Skylos does not follow the response stream and callback ownership paths."
 
 [tool.nose]
 version = "0.20.0"
@@ -442,7 +452,7 @@ members = ["tests/storage_support.py::as_snapshot", "tests/storage_support.py::a
 reason = "Preserve distinct static API contract casts; a generic cast wrapper would obscure the asserted snapshot, replay, or detail shape. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["ishiban/api.py::__init__", "ishiban/activity_api.py::__init__", "ishiban/inspector_api.py::__init__", "ishiban/batch_activity_api.py::__init__"]
+members = ["ishiban/api.py::__init__", "ishiban/activity_api.py::__init__", "ishiban/inspector_api.py::__init__", "ishiban/batch_activity_api.py::__init__", "ishiban/session_recency_api.py::__init__"]
 reason = "Keep independent Falcon resource constructors explicit; inheritance solely for injected store assignment adds unrelated resource coupling. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
@@ -462,8 +472,8 @@ unit = "tests/test_observation_behaviour.py"
 reason = "Keep the two explicit protocol envelopes in the restart scenario: persisted completion and next-generation metadata have different evidence contracts. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["ishiban/domain.py::Envelope", "ishiban/storage/journal_writer.py::JournalEvent"]
-reason = "Keep inbound protocol and normalized journal event contracts independent; their field requirements and version boundaries differ. See docs/developers-guide.md#duplication-review."
+members = ["ishiban/domain.py::Envelope", "ishiban/domain.py::CatalogueEntry", "ishiban/storage/journal_writer.py::JournalEvent"]
+reason = "Keep inbound observation, catalogue enrichment and normalized journal event contracts independent; repeated typed fields do not share validation, requirements or version boundaries. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
 members = ["src/ui/board-table.tsx::span", "reference/ishiban-mockup.html::span"]
@@ -500,10 +510,6 @@ reason = "Keep clipboard success and rejection assertions independent; both own 
 [[tool.duplication_gate.allow]]
 members = ["src/ui/pull-request-titles.ts", "src/ui/agent-details.tsx"]
 reason = "Keep title-map and agent-label trust boundaries independently decoded and scoped; only short HTTP identity guards overlap and the result schemas differ. See docs/developers-guide.md#duplication-review."
-
-[[tool.duplication_gate.allow]]
-members = ["ishiban/lazy_activity.py", "ishiban/session_agent.py"]
-reason = "Keep activity-observation and inspector metadata adapters separate; their short command/decoding failure returns preserve different result types, with shared process ownership already in read_json_object. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
 members = ["tests/test_lazy_activity.py", "tests/test_session_agent.py"]
@@ -545,3 +551,59 @@ reason = "Keep a one-line null guard local to browser activity retention and ind
 [[tool.duplication_gate.allow]]
 members = ["src/ui/session-updates.ts::recordSessionCue", "src/ui/session-updates.ts::sameSessionMetadata", "src/ui/session-updates.ts::hasMeaningfulChange", "src/ui/session-updates.ts::sameRuntime"]
 reason = "Keep semantic comparison separate from cue mutation; these named functions have distinct runtime, metadata, and animation responsibilities. Shared identity fast paths have been removed. See docs/developers-guide.md."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/session-recency.test.tsx", "tests/board-families.test.tsx", "tests/session-recency-transport.test.tsx"]
+reason = "Keep hook scope/basis/viewport, rendered workflow/search/pulse and strict payload/transport cooldown assertions independent. Snapshot, browser-global setup and controlled fetch ownership are shared; the remaining shallow module match contains imports and test registration, not a shared scenario algorithm. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "ishiban/inspector_api.py"
+reason = "Keep the typed agent and PR resource adapters explicit after sharing current-session lookup and response scoping. The anonymous shallow class match contains Falcon injection/signatures; agent basis/configuration and PR URL/title resolution remain different capabilities. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_activity_api.py", "tests/test_agent_api.py"]
+reason = "Keep explicit imports at independent runtime-observation and inspector-label API boundaries; the reported import fragment performs no calculation. Shared store and command fixtures remain in existing helpers. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/lazy_activity.py::read", "ishiban/session_show.py::read"]
+reason = "Preserve typed observer and session-show entry points, their result contracts and revision/basis argument names. Each body delegates to CachedLodyReads; cache, cancellation, failure mapping and admission logic are already shared. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_activity_query_api.py", "tests/test_batch_activity_end_to_end.py"]
+reason = "Keep direct imports for exact-ID query and streamed-batch ASGI tests; this anonymous fragment is module dependency setup, while actual request/response fixtures are shared. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/lazy_activity.py::close", "ishiban/session_show.py::close"]
+reason = "Keep each adapter's documented shutdown entry point; both one-line bodies delegate to the shared CachedLodyReads cancellation/reaping owner. Replacing typed public methods with dynamic aliases obscures lifecycle contracts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/lazy-activity.ts::close", "src/session-recency.ts::close"]
+reason = "Keep independent unknown-activity and family-recency admission shutdown explicit. Each stops its own queue and aborts its own active requests; controller deadline registration and cleanup are already shared in request-lifetime.ts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/session-families.ts::hasValidTimestamp", "src/session-families.ts::hasValidCalendarDate"]
+reason = "Keep clock/offset range validation separate from Gregorian date validation. Short rejecting guards have the same shape but different units and constraints; existing TimestampParts and calendar operations already share the actual date value. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_session_show.py"
+reason = "Keep explicit three-line controlled-reader installation and task-start arrangements in waiter-cancellation and service-shutdown scenarios. Command envelopes, cache probes and reader setup are shared; hiding the per-test identity/basis and cancellation target in an assertion DSL weakens these ownership contracts. Anonymous fragments have no narrower named detector unit. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/inspector_api.py", "ishiban/session_recency_api.py"]
+reason = "Keep the two-line execution-watermark extraction visible before separate agent and recency reads. Response schemas and failure handling differ; keyed cached-read admission, current-session lookup and scoped response construction are already factored where their contracts coincide. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/activity_api.py", "ishiban/batch_activity_api.py"]
+reason = "Keep single-session GET/query response and progressive batch POST adapters explicit. Their shallow class match contains Falcon injection/signatures; actual activity resolution, cache restoration, batch limits and waiter ownership are already shared. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_public_projection.py", "tests/test_session_recency_api.py"]
+reason = "Keep explicit ASGI request/read arrangements at public-preview and tab-history boundaries. The connected fragment contains no shared calculation; each test asserts a different public contract, with store and request fixtures already shared. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_activity_query_api.py", "tests/test_recency_request_contract.py"]
+reason = "Keep explicit imports for exact-ID activity recovery and actual browser-to-Falcon request contract tests. The reported fragment is dependency setup; controlled commands, browser globals and store setup already use shared fixtures. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/recency-request-contract.test.tsx", "tests/session-recency-transport.test.tsx"]
+reason = "Keep explicit imports for the cross-runtime payload capture and isolated transport rejection tests; their shared browser-global/fetch setup is already extracted, and their assertions protect different boundaries. See docs/developers-guide.md#duplication-review."

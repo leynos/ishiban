@@ -5,7 +5,13 @@ from unittest import mock
 
 import pytest
 from falcon import testing
-from storage_support import EventOptions, envelope, observed_session, opened_store
+from storage_support import (
+    EventOptions,
+    as_snapshot,
+    envelope,
+    observed_session,
+    opened_store,
+)
 
 from ishiban.api import create_app
 from ishiban.domain import CatalogueEntry, PullRequest
@@ -28,7 +34,7 @@ async def test_agent_details_are_scoped_and_do_not_change_the_journal(
         await store.ingest(
             envelope(1, options=EventOptions(session=observed_session())), generation
         )
-        before = await store.snapshot()
+        before = as_snapshot(await store.snapshot())
         async with testing.ASGIConductor(create_app(store)) as conductor:
             response = await conductor.simulate_get("/api/v1/sessions/s1/agent")
             missing = await conductor.simulate_get("/api/v1/sessions/missing/agent")
@@ -55,7 +61,9 @@ async def test_agent_details_are_scoped_and_do_not_change_the_journal(
             assert missing.status_code == 404, (
                 "Missing sessions must not trigger a CLI lookup."
             )
-        reader.assert_awaited_once_with("s1")
+        reader.assert_awaited_once_with(
+            "s1", before["sessions"][0]["lastActivityEventId"]
+        )
 
 
 @pytest.mark.asyncio

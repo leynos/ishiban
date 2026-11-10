@@ -79,6 +79,8 @@ class Collector:
                 pull_requests=prs,
                 stage=decision.stage,
                 stage_reason=decision.reason,
+                parent_session_id=session.parent_session_id,
+                created_at=session.created_at,
             )
             await self.store.catalogue(entry, self.generation)
 

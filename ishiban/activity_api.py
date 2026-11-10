@@ -10,6 +10,7 @@ import typing as typ
 import falcon
 
 from ishiban.public_projection import public_session
+from ishiban.session_identity import is_safe_session_id
 from ishiban.storage.projections import apply_observation
 
 if typ.TYPE_CHECKING:
@@ -28,13 +29,27 @@ class SessionActivityResource:
         self.activity = activity
 
     async def on_get(
-        self, req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str | None = None
     ) -> None:
         """Resolve a known session without fabricating durable evidence.
 
         For example, a metadata-only CLI result leaves the session unresolved.
 
+        Raises
+        ------
+        falcon.HTTPBadRequest
+            If either route supplies no bounded raw session ID.
         """
+        is_query_request = session_id is None
+        if is_query_request:
+            session_id = req.get_param("sessionId")
+        if session_id is None or not is_safe_session_id(session_id):
+            message = (
+                "A bounded sessionId query parameter is required."
+                if is_query_request
+                else "A bounded session ID is required."
+            )
+            raise falcon.HTTPBadRequest(description=message)
         projection = await resolve_activity(
             self.store,
             self.activity,

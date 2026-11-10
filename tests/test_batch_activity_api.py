@@ -6,7 +6,11 @@ import typing as typ
 
 import msgspec
 import pytest
-from batch_activity_support import remember_idle_activity, seed_unknown_sessions
+from batch_activity_support import (
+    post_with_workspace_identity,
+    remember_idle_activity,
+    seed_unknown_sessions,
+)
 from falcon import testing
 from storage_support import opened_store
 
@@ -18,7 +22,6 @@ from ishiban.batch_activity_api import (
     _encode_frame,
 )
 from ishiban.public_projection import public_session
-from ishiban.storage import Store
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -210,17 +213,9 @@ async def test_batch_rejects_unrepresentable_identity_before_stream(
     tmp_path: pathlib.Path,
 ) -> None:
     """A workspace identity too large for its marker fails before streaming."""
-    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'ishiban.sqlite3'}", "界" * 400_000)
-    await store.initialize()
-    try:
-        async with testing.ASGIConductor(create_app(store)) as conductor:
-            response = await conductor.simulate_post(
-                "/api/v1/sessions/activity",
-                body=json.dumps({"sessionIds": ["s1"]}),
-                headers={"content-type": "application/json"},
-            )
-    finally:
-        await store.close()
+    response = await post_with_workspace_identity(
+        tmp_path, "界" * 400_000, "/api/v1/sessions/activity"
+    )
     assert response.status_code == 413, (
         "An unrepresentable common identity must fail before opening NDJSON."
     )

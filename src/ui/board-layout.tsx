@@ -1,6 +1,7 @@
 /** @file Compose the board's health, controls, panorama, and inspector. */
 import {useMemo, type FocusEvent, type ReactElement, type RefObject} from 'react';
-import type {Session, Snapshot} from '../contracts';
+import type {Snapshot} from '../contracts';
+import type {SessionFamily} from '../session-families';
 import {BoardControls} from './board-controls';
 import {BoardBanks, SessionList} from './board-table';
 import {groupByRepository, type ActivityFilter, type Density, type Presentation, WORKFLOW_STAGES} from './board-model';
@@ -74,7 +75,7 @@ function BoardDisplay({
   readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly presentation: Presentation;
   readonly selectedSessionId: string | null;
-  readonly visibleSessions: readonly Session[];
+  readonly visibleSessions: readonly SessionFamily[];
 }): ReactElement {
   if (visibleSessions.length === 0) {
     return <p className="empty-result">No sessions match these filters.</p>;
@@ -91,7 +92,7 @@ function BoardDisplay({
       />
     );
   }
-  const workflowSessions = visibleSessions.filter((session) => WORKFLOW_STAGES.includes(session.stage));
+  const workflowSessions = visibleSessions.filter((session) => WORKFLOW_STAGES.includes(session.context.stage));
   const workflowRepositories = groupByRepository(workflowSessions);
   return (
     <>
@@ -122,10 +123,11 @@ function BoardDisplay({
 
 interface BoardLayoutProps {
   readonly snapshot: Snapshot;
+  readonly totalFamilies: number;
   readonly connection: string;
   readonly viewState: BoardViewState;
-  readonly visibleSessions: readonly Session[];
-  readonly inspectorSession: Session | null;
+  readonly visibleSessions: readonly SessionFamily[];
+  readonly inspectorSession: SessionFamily | null;
   readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
   readonly onFocusCapture: (event: FocusEvent<HTMLDivElement>) => void;
@@ -185,7 +187,7 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
           <div>
             <p className="eyebrow">Programme / session observation</p>
             <h1>The programme, at a glance.</h1>
-            <p>{snapshot.sessions.length} sessions · workflow stages are supplied by the collector.</p>
+            <p>{props.totalFamilies} sessions · workflow stages are supplied by the collector.</p>
           </div>
           {isDemo ? <span className="demo-label">Demo data · synthetic records</span> : null}
         </header>
@@ -228,8 +230,7 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
         </section>
         <footer className="board-footer">
           <span>
-            {isDemo ? 'Demo data' : 'Read-only observation'} · {visibleSessions.length} / {snapshot.sessions.length}{' '}
-            sessions
+            {isDemo ? 'Demo data' : 'Read-only observation'} · {visibleSessions.length} / {props.totalFamilies} sessions
           </span>
           <span>Select a mark to inspect its source evidence.</span>
           <span>A cookie saves interface state: density and presentation.</span>
@@ -242,7 +243,8 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
           workspaceSlug={snapshot.workspaceSlug}
           currentGeneration={snapshot.collector.generation}
           onClose={onClose}
-          session={inspectorSession}
+          session={inspectorSession.context}
+          activitySession={inspectorSession.activity}
         />
       )}
     </div>

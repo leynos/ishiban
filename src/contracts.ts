@@ -19,6 +19,8 @@ export const PullRequestSchema = Schema.Struct({
 });
 export const SessionSchema = Schema.Struct({
   sessionId: Schema.String,
+  parentSessionId: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.NullOr(Schema.String)),
   machineId: Schema.String,
   title: Schema.String,
   archived: Schema.Boolean,

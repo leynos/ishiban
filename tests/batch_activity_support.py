@@ -3,11 +3,40 @@
 import typing as typ
 
 import pytest
+from falcon import testing
 
+from ishiban.api import create_app
 from ishiban.domain import Envelope, ObservedSession
+from ishiban.storage import Store
 
 if typ.TYPE_CHECKING:
-    from ishiban.storage import Store
+    from pathlib import Path
+
+
+async def post_with_workspace_identity(
+    tmp_path: Path, workspace_id: str, route: str
+) -> testing.Result:
+    """Exercise batch preflight through a real store and Falcon response.
+
+    For example, a huge identity must fail before either endpoint streams.
+
+    Returns
+    -------
+    testing.Result
+        The complete response after store and app shutdown.
+    """
+    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'ishiban.sqlite3'}", workspace_id)
+    await store.initialize()
+    try:
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            response = await conductor.simulate_post(
+                route,
+                body='{"sessionIds":["s1"]}',
+                headers={"content-type": "application/json"},
+            )
+    finally:
+        await store.close()
+    return response
 
 
 async def seed_unknown_sessions(store: Store, session_ids: list[str]) -> None:

@@ -82,6 +82,37 @@ def make_catalogue(urls: list[str], status: str = "open") -> Catalogue:
     )
 
 
+@pytest.mark.asyncio
+async def test_collector_forwards_family_link_without_inventing_parent_prs() -> None:
+    """The child link is read-only metadata; PR evidence stays on its source."""
+    store = RecordingStore()
+    collector = Collector(typ.cast("Store", store), "workspace", github=False)
+    await collector.reconcile(
+        Catalogue(
+            ok=True,
+            workspace_id="workspace",
+            sessions=[
+                RawSession(id="root", pull_requests=[RawPR(url=PR_URL)]),
+                RawSession(
+                    id="child",
+                    parent_session_id="root",
+                    created_at="2026-11-05T14:55:35.407Z",
+                ),
+            ],
+        )
+    )
+    child = next(entry for entry in store.entries if entry.session_id == "child")
+    assert child.parent_session_id == "root", (
+        "The collector must preserve the Lody catalogue's child link."
+    )
+    assert child.created_at == "2026-11-05T14:55:35.407Z", (
+        "Child creation time must not become a collector observation timestamp."
+    )
+    assert child.pull_requests == [], (
+        "The collector must not copy root PR evidence into the child record."
+    )
+
+
 def _collector_with_cached_pr(request: PullRequest) -> tuple[RecordingStore, Collector]:
     """Seed one cached PR; for example, test a later catalogue transition.
 

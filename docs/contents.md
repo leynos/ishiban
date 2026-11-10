@@ -5,6 +5,8 @@ reference material.
 
 ## Design and reference
 
+- [Logical session families](adr-007-session-tab-families.md) records the
+  approved board grouping, per-tab recency, and bounded metadata-read policy.
 - [Public turn previews and fixed-size cursors](adr-006-public-turn-previews-and-cursors.md)
   bounds public active-turn arrays and detail continuation size.
 - [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
@@ -17,7 +19,8 @@ reference material.
   the durable observation journal.
 
 - [Observation proof-of-concept plan](execplans/initial-spike.md) records the
-  implementation milestones, validation evidence, and remaining limits.
+  implementation milestones, validation evidence, and remaining limits,
+  including pending session-family acceptance checks.
 - [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
   PR-based stages and independent activity/freshness semantics.
 

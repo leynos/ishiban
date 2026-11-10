@@ -24,6 +24,9 @@ class Projection(typ.TypedDict, total=False):
     title: str
     lastActivityEventId: int
     repoFullName: str | None
+    parentSessionId: str | None
+    createdAt: str | None
+    sessionId: str
     removed: bool
     stage: str
     lastEvidenceGeneration: int | None

@@ -54,3 +54,23 @@ export class ControlledIntersectionObserver implements IntersectionObserver {
     );
   }
 }
+
+/**
+ * Replace browser visibility with the controllable observer for one test.
+ * @returns Cleanup restoring the exact prior global descriptor.
+ * @example
+ * const restore = installControlledIntersectionObserver(); restore();
+ */
+export function installControlledIntersectionObserver(): () => void {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver');
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    configurable: true,
+    value: ControlledIntersectionObserver
+  });
+  ControlledIntersectionObserver.instances = [];
+  return () => {
+    if (prior) Object.defineProperty(globalThis, 'IntersectionObserver', prior);
+    else Reflect.deleteProperty(globalThis, 'IntersectionObserver');
+    ControlledIntersectionObserver.instances = [];
+  };
+}

@@ -11,7 +11,12 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 
-def entry(*, title: str = "Compiler repair") -> CatalogueEntry:
+def entry(
+    *,
+    title: str = "Compiler repair",
+    parent_session_id: str | None = None,
+    created_at: str | None = None,
+) -> CatalogueEntry:
     """Create one explicit pull-request association for catalogue tests.
 
     Returns
@@ -33,6 +38,8 @@ def entry(*, title: str = "Compiler repair") -> CatalogueEntry:
         ],
         stage="building",
         stage_reason="The associated pull request is a draft without the Plan prefix.",
+        parent_session_id=parent_session_id,
+        created_at=created_at,
     )
 
 
@@ -69,6 +76,37 @@ async def test_catalogue_updates_emit_only_when_the_projection_changes(
     )
     assert history[-1]["source"] == "lody.catalogue", (
         "Repeated identical enrichment is a no-op and never changes evidence."
+    )
+
+
+@pytest.mark.asyncio
+async def test_catalogue_persists_family_link_without_collapsing_raw_sessions(
+    tmp_path: Path,
+) -> None:
+    """A child's parent and own creation time remain durable raw facts."""
+    async with opened_store(tmp_path) as store:
+        generation = await store.begin_generation()
+        first = await store.catalogue(
+            entry(parent_session_id="root", created_at="2026-11-05T14:55:35.407Z"),
+            generation,
+        )
+        duplicate = await store.catalogue(
+            entry(parent_session_id="root", created_at="2026-11-05T14:55:35.407Z"),
+            generation,
+        )
+        snapshot = as_snapshot(await store.snapshot())
+        history = as_events(await store.events(0))
+    session = snapshot["sessions"][0]
+    assert session["parentSessionId"] == "root", (
+        "The public raw projection must retain its authoritative family link."
+    )
+    assert session["createdAt"] == "2026-11-05T14:55:35.407Z", (
+        "The child's own creation time must survive storage."
+    )
+    assert first is not None, "A new family link must append one event."
+    assert duplicate is None, "An unchanged link must not append another event."
+    assert history[-1]["projection"]["sessionId"] == "s1", (
+        "The journal must still address the raw child identity."
     )
 
 

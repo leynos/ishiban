@@ -307,6 +307,26 @@ exceptions to unrelated files without another review. Frozen migrations must
 remain independent of evolving model metadata, and source protocol records must
 remain independent of journal-write records.
 
+The family milestone shares browser-global fixtures, bounded frame decoding,
+request deadlines, batch preflight and waiter cleanup. `CachedLodyReads` owns
+the common bounded cache and task lifecycle for observation and session-show
+reads; their adapters retain source validation and subprocess deadlines.
+`CachedReadPolicy` supplies cache size, pending-read capacity, and success and
+failure lifetimes. This helper is for read-only Lody lookups, not journal
+writes or projection reconciliation. It reuses the cache-entry and
+task-ownership primitives rather than implementing another registry.
+
+After these extractions, reviewed residual families cover typed forwarding
+methods, explicit imports, Falcon adapter declarations, independent clock/date
+guards, and short test arrangements. The hook/board test pair is a shallow
+module match with 15 shared lines, not a duplicate test algorithm; its scope,
+viewport and revision assertions differ from the rendered workflow and pulse
+assertions. Anonymous fragments require exact file keys because Nose supplies
+no enclosing unit name. Those records are the narrowest available tool scope;
+named forwarding and guard methods use exact function keys. Re-review them when
+either file changes. Do not replace distinct capabilities or ownership
+assertions with generic wrappers solely to change the detector's ranking.
+
 The detail-page tests share one seeded API fixture, collector lifecycle tests
 share one cached-PR setup, and coverage workflow tests share a local action
 loader. `storage.reader._read_turn_page` owns the bounded keyset query,
@@ -489,14 +509,75 @@ the browser's 1,048,576-byte UTF-8 limit. An oversized member becomes a typed
 `response_too_large` marker; a marker whose identity cannot fit causes a
 pre-stream HTTP 413. The browser keeps reading smaller siblings while one owned
 single-session GET recovers the marked member under the same batch deadline.
-That GET uses `includeKnown=true` so a session that became known between batch
-preparation and fallback returns its current projection without another Lody
-read. The GET's eight-MiB body bound, abort signal, and revision guard remain
-local to activity transport. The fixed activity diagnostic is quiet, survives
-metadata-only refresh while the execution watermark is unchanged, and never
-changes a turn's error or the journal. This boundary does not cap private
-projection decoding or cache memory; see
-[ADR 006](adr-006-public-turn-previews-and-cursors.md).
+The query route
+`GET /api/v1/session-activity?sessionId=<encoded-id>&includeKnown=true` handles
+IDs whose dots, slashes, or percent characters would be changed by path
+normalization. It returns a session that became known between batch preparation
+and fallback without another Lody read. Keep the path-based activity route
+compatible for IDs it can represent. The fallback's eight-MiB body bound, abort
+signal, and revision guard remain local to activity transport. The fixed
+activity diagnostic is quiet, survives metadata-only refresh while the
+execution watermark is unchanged, and never changes a turn's error or the
+journal. This boundary does not cap private projection decoding or cache
+memory; see [ADR 006](adr-006-public-turn-previews-and-cursors.md).
+
+## Session family projection
+
+[ADR 007](adr-007-session-tab-families.md) defines logical grouping by
+`parentSessionId`. `src/session-families.ts` derives `rootId`, stable root
+context, selected activity member, and the unmodified session members. It is a
+presentation model; do not rewrite API projections, journal identities, or
+activity-cache keys to use the family root. The board uses root context and
+selection while preserving each tab's actual session identity. Root journal
+updates map to the family pulse; recency-only selection changes remain quiet.
+Visible-family reads discard stale workspace facts and drop queued work for
+families that leave the viewport. A child whose root disappears remains
+available as a family rooted at the surviving present-record chain. The
+activity visibility observer also watches a visible mark's `data-session-id`
+attribute: a quiet tab selection can reuse the same button, so the new raw tab
+needs its own lazy lookup without a scroll event.
+
+`POST /api/v1/sessions/recency` reads latest history timestamps for up to eight
+session IDs in an 8,192-byte request. It returns independent NDJSON results,
+with successful empty history represented by `latestHistoryAt: null` and
+unavailable reads represented by a distinct outcome. Each result carries the
+workspace, actual session ID, and last activity event ID used as its execution
+watermark. Discard stale facts when any of those identities or the watermark
+changes.
+
+The request body contains only `sessionIds`; workspace identity belongs to the
+local request ownership and validated response, not an extra request field. The
+cross-runtime request contract test captures the real browser hook's wire body
+with Bun and submits those bytes to Falcon's strict decoder and CmdMox
+resolver. Transport failures also impose a separate 30-second owner-wide
+cooldown, independent of the bounded per-member fact cache, so an endpoint
+failure cannot cause an immediate retry loop across visible families.
+
+`ishiban.session_show.SessionShowReader` owns shared session-show subprocesses
+for inspector agent metadata and family recency. It verifies workspace and
+session identity, keys work by actual session ID and execution watermark,
+limits the service to two CLI children, caches successes for 300 seconds and
+failures for 30 seconds, and bounds the queue-inclusive operation to 45
+seconds. Shutdown cancels and reaps outstanding reads. Agent configuration
+display-name lookup remains inspector-triggered. This cache is process-local;
+durable activity facts continue to belong to the separate activity sidecar.
+
+`ishiban.bounded_batch` shares only the activity and recency endpoints' bounded
+request-body decoding, frame preflight, and independent waiter start and reap.
+Each endpoint still owns its response frame, member error semantics, and final
+size check. Session-show subprocess ownership remains with `SessionShowReader`.
+
+`src/bounded-frames.ts` is the shared transport-only owner for bounded NDJSON
+framing used by activity and recency reads. It handles UTF-8 chunk boundaries,
+frame and response byte limits, and isolation of invalid members. Endpoint
+callers retain their own schemas, identity checks, and execution-watermark
+validation; this helper is not a general HTTP or JSON abstraction.
+
+`src/request-lifetime.ts` owns the shared 50-second browser request deadline,
+abort-controller registration, and cleanup for lazy-activity and family-recency
+requests. Each caller supplies its own endpoint and member validation and keeps
+its domain outcomes separate. Reuse this helper only for those bounded browser
+requests; it does not own endpoint schemas or retry policy.
 
 The dead-code configuration records the batch handler's exact bounded decoders
 and msgspec request type as runtime entry points; Falcon dispatch is not

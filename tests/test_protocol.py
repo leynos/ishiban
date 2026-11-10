@@ -132,3 +132,30 @@ def test_catalogue_rejects_missing_and_duplicate_session_ids(
     })
     with pytest.raises(ProtocolError, match="missing or duplicate"):
         decode_catalogue(data)
+
+
+def test_catalogue_decodes_session_family_and_creation_facts() -> None:
+    """Retain the actual child link and its own creation time from Lody."""
+    data = msgspec.json.encode({
+        "ok": True,
+        "workspaceId": "workspace",
+        "sessions": [
+            {"id": "root", "createdAt": "2026-10-28T14:37:17.051Z"},
+            {
+                "id": "child",
+                "parentSessionId": "root",
+                "createdAt": "2026-11-05T14:55:35.407Z",
+                "lastMessageAt": 1794068844060,
+            },
+        ],
+    })
+    sessions = decode_catalogue(data).sessions
+    assert sessions[0].parent_session_id is None, (
+        "An omitted root parent must remain absent."
+    )
+    assert sessions[1].parent_session_id == "root", (
+        "The child relationship must survive catalogue decoding."
+    )
+    assert sessions[1].created_at == "2026-11-05T14:55:35.407Z", (
+        "Creation time must be retained independently of propagated message time."
+    )

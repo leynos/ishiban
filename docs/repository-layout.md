@@ -13,6 +13,10 @@ This page locates the proof of concept's runtime components and verification.
   snapshot reads, and projection reconciliation.
 - `ishiban/interface_state.py` signs and validates browser preference cookies.
 - `ishiban/lazy_activity.py` bounds and caches per-session activity reads.
+- `ishiban/session_show.py` shares bounded, identity-verified session-show
+  metadata reads for inspector and recency enrichment.
+- `ishiban/session_recency_api.py` exposes per-session history recency for
+  visible session families.
 - `ishiban/activity_api.py` collects cached activity without journal writes.
 - `ishiban/storage/activity_cache.py` persists runtime observations in a
   separate SQLite sidecar and owns its initialization, reads and writes.
@@ -26,6 +30,8 @@ This page locates the proof of concept's runtime components and verification.
   semantic Tailwind and daisyUI styling.
 - `src/ui/session-updates.ts` owns transient board update cues.
 - `src/lazy-activity.ts` resolves visible unknown marks without event pulses.
+- `src/session-families.ts` derives logical family context and activity from
+  unchanged session records and per-member recency facts.
 - `src/ui/interface-state.ts` restores preferences and serializes cookie saves.
 - `src/demo.ts` supplies isolated synthetic presentation data.
 - `tests/` contains pytest, pytest-bdd, Hypothesis, and Bun verification.

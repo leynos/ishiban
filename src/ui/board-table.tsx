@@ -1,6 +1,7 @@
 /** @file Render repository stage cells and the larger session-list mode. */
 import type {ReactElement} from 'react';
 import type {Session} from '../contracts';
+import type {SessionFamily} from '../session-families';
 import {
   activityOf,
   createBanks,
@@ -38,8 +39,8 @@ interface RepositoryTableProps extends SessionSelectionProps {
   readonly repositories: readonly RepositorySessions[];
 }
 
-type SessionListProps = SessionSelectionProps & {readonly sessions: readonly Session[]};
-type SessionListItemProps = SessionSelectionProps & {readonly session: Session};
+type SessionListProps = SessionSelectionProps & {readonly sessions: readonly SessionFamily[]};
+type SessionListItemProps = SessionSelectionProps & {readonly session: SessionFamily};
 
 interface BoardBanksProps extends RepositoryTableProps {
   readonly presentation: Presentation;
@@ -73,11 +74,11 @@ function conditionOf(session: Session): SessionCondition {
 }
 
 /** Compose the session's concise accessible name without inferring activity. */
-function sessionLabel(repository: string, session: Session, currentGeneration: number): string {
-  const condition = conditionOf(session);
-  const activity = activityOf(session.state);
-  const provenance = evidenceLabel(session, currentGeneration);
-  return `${repository}: ${session.title}; ${STAGE_LABELS[session.stage]}; ${activity}${condition.label.length === 0 ? '' : `; ${condition.label}`}; ${provenance}`;
+function sessionLabel(repository: string, family: SessionFamily, currentGeneration: number): string {
+  const condition = conditionOf(family.activity);
+  const activity = activityOf(family.activity.state);
+  const provenance = evidenceLabel(family.activity, currentGeneration);
+  return `${repository}: ${family.context.title}; ${STAGE_LABELS[family.context.stage]}; ${activity}${condition.label.length === 0 ? '' : `; ${condition.label}`}; ${provenance}`;
 }
 
 /** Render the title and filtered count for one explicit workflow stage. */
@@ -120,7 +121,7 @@ function SessionMark({
   onSelect,
   onMarkNode
 }: {
-  readonly session: Session;
+  readonly session: SessionFamily;
   readonly repository: string;
   readonly currentGeneration: number;
   readonly selected: boolean;
@@ -128,9 +129,9 @@ function SessionMark({
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
 }): ReactElement {
-  const activity = activityOf(session.state);
-  const provenance = evidenceLabel(session, currentGeneration);
-  const condition = conditionOf(session);
+  const activity = activityOf(session.activity.state);
+  const provenance = evidenceLabel(session.activity, currentGeneration);
+  const condition = conditionOf(session.activity);
   const label = sessionLabel(repository, session, currentGeneration);
   return (
     <button
@@ -141,11 +142,12 @@ function SessionMark({
       className={`session-mark activity-${activity}`}
       data-blocked={condition.isBlocked || undefined}
       data-last-turn-failed={condition.hasLastTurnFailure || undefined}
-      data-session-id={session.sessionId}
-      data-stage={session.stage}
+      data-family-id={session.rootId}
+      data-session-id={session.activity.sessionId}
+      data-stage={session.context.stage}
       data-update-revision={pulseRevision}
-      onClick={(event) => onSelect(session.sessionId, event.currentTarget)}
-      ref={(node) => onMarkNode(session.sessionId, node)}
+      onClick={(event) => onSelect(session.rootId, event.currentTarget)}
+      ref={(node) => onMarkNode(session.rootId, node)}
       title={label}
       type="button"
     >
@@ -214,7 +216,7 @@ function StageCell({
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
 }): ReactElement {
-  const matchingSessions = repository.sessions.filter((session) => session.stage === stage);
+  const matchingSessions = repository.sessions.filter((session) => session.context.stage === stage);
   const rowSlots = Math.max(5, Math.ceil(matchingSessions.length / 5) * 5);
   const emptySlots = Array.from({length: rowSlots - matchingSessions.length}, (_, index) => (
     <span aria-hidden="true" className="session-mark session-mark--empty" key={`empty-${stage}-${index}`} />
@@ -226,12 +228,12 @@ function StageCell({
         {matchingSessions.map((session) => (
           <SessionMark
             currentGeneration={currentGeneration}
-            key={session.sessionId}
+            key={session.rootId}
             onMarkNode={onMarkNode}
             onSelect={onSelect}
-            pulseRevision={pulseRevisions.get(session.sessionId)}
+            pulseRevision={pulseRevisions.get(session.rootId)}
             repository={repository.name}
-            selected={selectedSessionId === session.sessionId}
+            selected={selectedSessionId === session.rootId}
             session={session}
           />
         ))}
@@ -330,12 +332,12 @@ function SessionListItem({
   onSelect,
   onMarkNode
 }: SessionListItemProps): ReactElement {
-  const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
-  const activity = activityOf(session.state);
-  const evidence = evidenceLabel(session, currentGeneration);
-  const condition = conditionOf(session);
+  const repository = session.context.repoFullName ?? REPOSITORY_UNAVAILABLE;
+  const activity = activityOf(session.activity.state);
+  const evidence = evidenceLabel(session.activity, currentGeneration);
+  const condition = conditionOf(session.activity);
   const label = sessionLabel(repository, session, currentGeneration);
-  const pulseRevision = pulseRevisions.get(session.sessionId);
+  const pulseRevision = pulseRevisions.get(session.rootId);
   const classes = [
     'session-list-item',
     condition.hasLastTurnFailure ? 'session-list-item--failed' : null,
@@ -344,23 +346,24 @@ function SessionListItem({
   return (
     <li>
       <button
-        aria-controls={selectedSessionId === session.sessionId ? 'session-inspector' : undefined}
-        aria-expanded={selectedSessionId === session.sessionId}
+        aria-controls={selectedSessionId === session.rootId ? 'session-inspector' : undefined}
+        aria-expanded={selectedSessionId === session.rootId}
         aria-label={label}
-        aria-pressed={selectedSessionId === session.sessionId}
+        aria-pressed={selectedSessionId === session.rootId}
         className={classes.join(' ')}
         data-blocked={condition.isBlocked || undefined}
         data-last-turn-failed={condition.hasLastTurnFailure || undefined}
-        data-session-id={session.sessionId}
-        data-stage={session.stage}
+        data-family-id={session.rootId}
+        data-session-id={session.activity.sessionId}
+        data-stage={session.context.stage}
         data-update-revision={pulseRevision}
-        onClick={(event) => onSelect(session.sessionId, event.currentTarget)}
-        ref={(node) => onMarkNode(session.sessionId, node)}
+        onClick={(event) => onSelect(session.rootId, event.currentTarget)}
+        ref={(node) => onMarkNode(session.rootId, node)}
         type="button"
       >
-        <span className="session-list-item__title">{session.title}</span>
+        <span className="session-list-item__title">{session.context.title}</span>
         <span>
-          {repository} · {STAGE_LABELS[session.stage]}
+          {repository} · {STAGE_LABELS[session.context.stage]}
         </span>
         <small>
           {activity}
@@ -384,7 +387,7 @@ export function SessionList(props: SessionListProps): ReactElement {
       {sessions.map((session) => (
         <SessionListItem
           currentGeneration={currentGeneration}
-          key={session.sessionId}
+          key={session.rootId}
           onMarkNode={onMarkNode}
           onSelect={onSelect}
           pulseRevisions={pulseRevisions}

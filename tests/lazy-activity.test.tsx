@@ -11,7 +11,10 @@ import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
 import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
 import type {Deferred} from './deferred';
-import {ControlledIntersectionObserver} from './controlled-intersection-observer';
+import {
+  ControlledIntersectionObserver,
+  installControlledIntersectionObserver
+} from './controlled-intersection-observer';
 type ActivitySessionSpec = readonly [number, string, string, Session['source'], Session['state'], number];
 interface ActivityMergeScenario {
   readonly cursor: number;
@@ -98,17 +101,12 @@ function StoreBackedBoard({store}: {readonly store: BoardStore}): ReactElement |
   return <Board connection={current.connection} snapshot={current.snapshot} />;
 }
 
-let previousObserver: PropertyDescriptor | null = null;
+let restoreObserver: (() => void) | null = null;
 let restoreFetch: (() => void) | null = null;
 let stopLazyActivity: (() => void) | null = null;
 /** Replace viewport observation with explicitly controlled entry delivery. */
 function installIntersectionObserver(): void {
-  previousObserver = Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver') ?? null;
-  Object.defineProperty(globalThis, 'IntersectionObserver', {
-    configurable: true,
-    value: ControlledIntersectionObserver
-  });
-  ControlledIntersectionObserver.instances = [];
+  restoreObserver = installControlledIntersectionObserver();
 }
 /** Return the observer installed by the live activity scanner. */
 function currentObserver(): ControlledIntersectionObserver {
@@ -212,13 +210,21 @@ afterEach(() => {
   cleanup();
   restoreFetch?.();
   restoreFetch = null;
-  if (previousObserver === null) {
-    Reflect.deleteProperty(globalThis, 'IntersectionObserver');
-  } else {
-    Object.defineProperty(globalThis, 'IntersectionObserver', previousObserver);
-  }
-  previousObserver = null;
-  ControlledIntersectionObserver.instances = [];
+  restoreObserver?.();
+  restoreObserver = null;
+});
+
+it('looks up the new tab when a visible family mark changes its raw session ID', async () => {
+  const {requests, started, observer} = activityBoard([UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
+  const mark = markFor(UNKNOWN_REAL_ONE.title);
+  act(() => observer.setVisibility(mark, true));
+  await waitForRequest(started, 0);
+  expectBatchPost(requestAt(requests, 0), [UNKNOWN_REAL_ONE.sessionId]);
+
+  // React may preserve this exact button while recency selects another tab.
+  act(() => mark.setAttribute('data-session-id', UNKNOWN_REAL_TWO.sessionId));
+  await waitFor(() => expect(requests.length).toBe(2));
+  expectBatchPost(requestAt(requests, 1), [UNKNOWN_REAL_TWO.sessionId]);
 });
 
 it('batches visible unknown activity and allows immediate rediscovery after dropping offscreen work', async () => {

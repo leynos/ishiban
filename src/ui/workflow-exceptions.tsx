@@ -1,11 +1,11 @@
 /** @file Keep unclassified and closed sessions separate from the five workflow stages. */
 import type {ReactElement} from 'react';
-import type {Session} from '../contracts';
+import type {SessionFamily} from '../session-families';
 import {groupByRepository, STAGE_LABELS, type WorkflowStage} from './board-model';
 import {SessionList, type SessionSelectionProps} from './board-table';
 
 interface WorkflowExceptionsProps extends SessionSelectionProps {
-  readonly sessions: readonly Session[];
+  readonly sessions: readonly SessionFamily[];
 }
 
 /** Render the sessions assigned to one separate non-workflow group. */
@@ -18,7 +18,7 @@ function ExceptionGroup({
   onMarkNode,
   onSelect
 }: WorkflowExceptionsProps & {readonly stage: Extract<WorkflowStage, 'unclassified' | 'closed'>}): ReactElement {
-  const stageSessions = sessions.filter((session) => session.stage === stage);
+  const stageSessions = sessions.filter((session) => session.context.stage === stage);
   const groupedSessions = groupByRepository(stageSessions);
   const count = stageSessions.length;
   return (

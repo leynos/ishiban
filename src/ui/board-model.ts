@@ -1,5 +1,6 @@
 /** @file Hold pure filters and labels for the Ishiban board projection. */
 import type {Session} from '../contracts';
+import type {SessionFamily} from '../session-families';
 
 export type WorkflowStage = Session['stage'];
 export type Activity = 'idle' | 'pending' | 'running' | 'waiting' | 'unknown';
@@ -9,7 +10,7 @@ export type Presentation = 'panorama' | 'matrix' | 'list';
 
 export interface RepositorySessions {
   readonly name: string;
-  readonly sessions: readonly Session[];
+  readonly sessions: readonly SessionFamily[];
 }
 
 export const STAGES: readonly WorkflowStage[] = [
@@ -128,11 +129,15 @@ export function evidenceLabel(session: Session, currentGeneration: number): stri
 }
 
 /** Search only the session's supplied repository, title, and branch values. */
-function matchesSearch(session: Session, searchTerm: string): boolean {
+function matchesSearch(family: SessionFamily, searchTerm: string): boolean {
   if (searchTerm.length === 0) {
     return true;
   }
-  const searchableText = [session.repoFullName, session.title, session.branchName]
+  const searchableText = [
+    family.context.repoFullName,
+    family.context.branchName,
+    ...family.members.flatMap((member) => [member.sessionId, member.title])
+  ]
     .filter((value): value is string => value !== null)
     .join(' ')
     .toLocaleLowerCase('en-GB');
@@ -141,21 +146,22 @@ function matchesSearch(session: Session, searchTerm: string): boolean {
 
 /** Check one session against search, activity, and archive controls. */
 function sessionMatchesFilters(
-  session: Session,
+  family: SessionFamily,
   searchTerm: string,
   activityFilter: ActivityFilter,
   includeArchived: boolean
 ): boolean {
-  if (!includeArchived && session.archived) {
+  // Archiving the root is a task-level choice even if a child's catalogue flag lags.
+  if (!includeArchived && family.context.archived) {
     return false;
   }
-  if (!includeArchived && session.removed) {
+  if (!includeArchived && family.members.every((member) => member.removed)) {
     return false;
   }
-  if (activityFilter !== 'all' && activityOf(session.state) !== activityFilter) {
+  if (activityFilter !== 'all' && activityOf(family.activity.state) !== activityFilter) {
     return false;
   }
-  return matchesSearch(session, searchTerm);
+  return matchesSearch(family, searchTerm);
 }
 
 /**
@@ -167,13 +173,13 @@ function sessionMatchesFilters(
  * @returns A new array of sessions matching all selected controls.
  */
 export function filterSessions(
-  sessions: readonly Session[],
+  sessions: readonly SessionFamily[],
   query: string,
   activityFilter: ActivityFilter,
   includeArchived: boolean
-): Session[] {
+): SessionFamily[] {
   const searchTerm = query.trim().toLocaleLowerCase('en-GB');
-  return sessions.filter((session) => sessionMatchesFilters(session, searchTerm, activityFilter, includeArchived));
+  return sessions.filter((family) => sessionMatchesFilters(family, searchTerm, activityFilter, includeArchived));
 }
 
 /**
@@ -181,10 +187,10 @@ export function filterSessions(
  * @param sessions Visible session projections.
  * @returns Sorted repository groups, including a group for missing associations.
  */
-export function groupByRepository(sessions: readonly Session[]): RepositorySessions[] {
-  const groups = new Map<string, Session[]>();
+export function groupByRepository(sessions: readonly SessionFamily[]): RepositorySessions[] {
+  const groups = new Map<string, SessionFamily[]>();
   for (const session of sessions) {
-    const name = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
+    const name = session.context.repoFullName ?? REPOSITORY_UNAVAILABLE;
     const current = groups.get(name);
     if (current === undefined) {
       groups.set(name, [session]);
@@ -223,6 +229,6 @@ export function createBanks(
  * @param stage Explicit workflow stage.
  * @returns Number of sessions assigned to that stage.
  */
-export function countStage(sessions: readonly Session[], stage: WorkflowStage): number {
-  return sessions.filter((session) => session.stage === stage).length;
+export function countStage(sessions: readonly SessionFamily[], stage: WorkflowStage): number {
+  return sessions.filter((session) => session.context.stage === stage).length;
 }

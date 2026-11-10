@@ -1,11 +1,13 @@
 # Ishiban initial observation proof of concept
 
-Status: implementation and its local acceptance are complete. Draft PR #9 is
-published, and hosted CI, full-PR CodeScene cleanup and review convergence are
-in progress under the user's subsequent `pr-babysitting` assignment. The
-original implementation's publication restriction is superseded by the user's
-PR creation and babysitting requests. Lody writes remain forbidden; no merge
-has been authorized.
+Status: the original implementation and its local acceptance are complete.
+Draft PR #9 is published, and hosted CI, full-PR CodeScene cleanup and review
+convergence are in progress under the user's subsequent `pr-babysitting`
+assignment. Session-family backend, resource, and board integration is
+implemented in the current worktree. Its full quality gates and browser
+acceptance remain pending. The original implementation's publication
+restriction is superseded by the user's PR creation and babysitting requests.
+Lody writes remain forbidden; no merge has been authorized.
 
 ## Purpose
 
@@ -727,3 +729,76 @@ small sibling, the single-session fallback retains the full result, and the
 journal and cache remain intact. Focused Python activity tests pass; integrated
 frontend, lint, type, documentation, browser, and review gates remain pending
 for this repair.
+
+### Logical session families and recency, 10 November 2026
+
+**Decision.** Group board entries by authoritative `parentSessionId` roots,
+retaining root PR, branch, title, and workflow context while each actual tab
+keeps its runtime activity, errors, agent details, and CLI identity. Derive
+family selection from per-member `latestHistoryAt`; do not copy recency onto
+the root projection or use message, read, or heartbeat timestamps. Keep
+presentation families separate from journal, API, and cache identities.
+[ADR 007](../adr-007-session-tab-families.md) records the approved behaviour,
+shared metadata-reader bounds, query fallback, and restart policy.
+
+**Progress.** The nullable parent and creation-time fields, bounded per-member
+recency endpoint, shared session-show reader, query-based activity fallback,
+and board/resource integration are implemented in the current worktree. Focused
+checks report Python 48 passed, board/fallback 32 passed, recency ownership 2
+passed, and pure family model 10 passed. Twenty focused inspector component and
+agent tests pass after an earlier run of 13 passed and 3 failed exposed an
+inspector regression. Bun format, lint, and type checks are green for the
+focused scope. Targeted complexity checks for both changed TypeScript modules
+report 10.00; the shared timestamp helpers reuse the existing calendar helper.
+
+**Focused acceptance evidence.** Tests cover one root-context board entry,
+selected-child activity and identity, raw root pulses, quiet settling of
+visible family recency, rejection of late facts from a prior workspace,
+dropping queued off-screen reads, retaining a child when its root is removed,
+and exact-ID query fallback. A missing-parent child becomes the root of its own
+present-record chain; siblings are grouped only when a present parent connects
+them. These focused checks accompany the passing component, agent, API, and
+model counts above.
+
+**Integrated acceptance.** The hotfix validation run passed 245 Python tests,
+134 Bun tests with seven opt-in skips, and all four Chromium regressions.
+Build, formatting, types, audit, documentation, diagrams, and Makefile checks
+passed. Shared bounded caches, batch framing, request lifetimes, and test
+fixtures replaced genuine duplication; the remaining detector matches have
+reviewed exact-scope reasons in the developers' guide. Full lint passed after
+the corresponding configuration updates. Source checks cover 158 code files,
+all within 400 lines, and new code and test files have direct CodeScene scores
+of 10.00 with no diagnostics.
+
+The live 400 response exposed a browser/server request-shape mismatch. Both a
+strict-body regression and a transport retry regression failed before the fix.
+The real browser hook now emits only `sessionIds`; a Python integration test
+executes that hook with Bun, then submits its actual bytes through Falcon and
+the CmdMox resolver. Transport failures have a separate 30-second owner-wide
+cooldown, preventing a retry storm across visible families.
+
+**Interactive evidence.** An isolated Falcon/SQLAlchemy state used controlled
+root PR/runtime facts with native `leynos` session identities and read-only
+metadata. Agent-browser showed one Refine mark, the selected child CLI ID,
+agent configuration, root PR heading, and correct Lody tab link. The copy
+button reported success; browser clipboard readback was permission-restricted.
+A controlled private-journal turn delivered over SSE pulsed the stable family
+mark while keeping the inspector open. There were no browser page errors.
+CSS-view confirmed a sticky 384-pixel inspector and an 880-pixel board pane
+scrolling through 1,024 pixels of content. All five densities retain the
+192-pixel repository column and zero horizontal bank padding. The sticky
+heading stayed at x=0 after scrolling, and the selected mark remained behind
+the repository column. Screenshots and computed-style captures are retained
+under `/tmp/ishiban-family-browser-u8qcj7jy`; the owned browser and API exited
+cleanly. User API and collector processes were not signalled or restarted.
+
+**Local assessment.** A fresh local CodeRabbit pass inspected 62 files and
+reported two minor findings. Activity path IDs now receive the same exact
+validation as query IDs, with failing-then-passing invalid-path regressions.
+Root archival remains intentional logical-task policy; the guide, ADR, and
+hidden-then-revealed board regression make it explicit. The follow-ups pass
+five affected Python tests and five grouped-board tests, with formatting,
+types, lint, and direct CodeScene checks clear for their scope. Hosted checks
+and assessments belong to the exact published candidate; the PR records their
+current status. Do not treat the previous baseline's hosted checks as evidence
+for this new scope.

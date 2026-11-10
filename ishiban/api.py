@@ -22,6 +22,8 @@ from ishiban.lazy_activity import LazyActivity
 from ishiban.public_projection import public_session
 from ishiban.pull_request_details import PullRequestTitles
 from ishiban.session_agent import SessionAgentDetails
+from ishiban.session_recency_api import SessionRecencyResource
+from ishiban.session_show import SessionShowReader
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -66,10 +68,13 @@ def parse_cursor(header: str | None, query: str | None) -> int:
 class Lifecycle:
     """Keep the database connection lifetime inside Falcon's event loop."""
 
-    def __init__(self, store: Store, activity: LazyActivity) -> None:
+    def __init__(
+        self, store: Store, activity: LazyActivity, show_reader: SessionShowReader
+    ) -> None:
         """Retain the store; for example, dispose it at ASGI shutdown."""
         self.store = store
         self.activity = activity
+        self.show_reader = show_reader
 
     async def process_startup(
         self, scope: cabc.Mapping[str, object], event: cabc.Mapping[str, object]
@@ -84,6 +89,7 @@ class Lifecycle:
         """Release SQLAlchemy connections when the server exits."""
         _ = scope, event
         await self.activity.close()
+        await self.show_reader.close()
         await self.store.close()
 
     async def process_response(  # ruff: ignore[no-self-use] - Falcon callback; see developer guide.
@@ -259,20 +265,29 @@ def create_app(
         Application with read-only API routes and optional static assets.
     """
     activity = LazyActivity(store.workspace_id, workspace_slug or store.workspace_id)
-    agent_reader = SessionAgentDetails(
+    show_reader = SessionShowReader(
         store.workspace_id, workspace_slug or store.workspace_id
+    )
+    agent_reader = SessionAgentDetails(
+        store.workspace_id,
+        workspace_slug or store.workspace_id,
+        show_reader=show_reader,
     )
     title_reader = PullRequestTitles()
     cookies = InterfaceStateCookies(cookie_secret or secrets.token_bytes(32))
-    app: asgi.App = asgi.App(middleware=[Lifecycle(store, activity)])
+    app: asgi.App = asgi.App(middleware=[Lifecycle(store, activity, show_reader)])
     app.add_route("/api/v1/snapshot", SnapshotResource(store, workspace_slug, cookies))
     app.add_route("/api/v1/sessions/{session_id}", SessionResource(store))
     app.add_route(
         "/api/v1/sessions/{session_id}/activity",
         SessionActivityResource(store, activity),
     )
+    app.add_route("/api/v1/session-activity", SessionActivityResource(store, activity))
     app.add_route(
         "/api/v1/sessions/activity", BatchSessionActivityResource(store, activity)
+    )
+    app.add_route(
+        "/api/v1/sessions/recency", SessionRecencyResource(store, show_reader)
     )
     app.add_route(
         "/api/v1/sessions/{session_id}/agent", AgentDetailsResource(store, agent_reader)

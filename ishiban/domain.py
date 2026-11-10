@@ -65,3 +65,5 @@ class CatalogueEntry(ms.Struct, rename="camel"):
     pull_requests: list[PullRequest]
     stage: str
     stage_reason: str
+    parent_session_id: str | None = None
+    created_at: str | None = None

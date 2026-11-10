@@ -6,7 +6,7 @@ import typing as typ
 import msgspec
 import pytest
 
-from ishiban import session_agent
+from ishiban import session_agent, session_show
 from ishiban.session_agent import AgentDetails
 from tests.lody_process_support import create_fake_lody, wait_for_calls
 
@@ -234,8 +234,8 @@ async def test_partial_config_failure_uses_short_cache_then_retries(
     assert await service.read("lody-session-1") is not None, (
         "Retrying after partial expiry must still return verified session metadata."
     )
-    assert len(await wait_for_calls(call_log, 4)) == 4, (
-        "An expired partial result must rerun both metadata commands."
+    assert len(await wait_for_calls(call_log, 3)) == 3, (
+        "Retrying a failed config lookup must reuse the verified session show."
     )
 
 
@@ -275,6 +275,7 @@ async def test_cache_is_keyed_by_session_and_expires_successfully(
     """Successful metadata is cached for five minutes and then refreshed."""
     clock = [10.0]
     monkeypatch.setattr(session_agent, "_monotonic_time", lambda: clock[0])
+    monkeypatch.setattr(session_show, "_monotonic_time", lambda: clock[0])
     executable, call_log = _fake_lody(
         tmp_path,
         _session_response(),

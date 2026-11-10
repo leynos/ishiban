@@ -36,3 +36,21 @@ def fresh_cache_entry[Key, Entry: ExpiringEntry](
         return None
     entries.move_to_end(key)
     return entry
+
+
+def remember_cache_entry[Key, Entry](
+    entries: collections.OrderedDict[Key, Entry],
+    key: Key,
+    entry: Entry,
+    *,
+    capacity: int,
+) -> None:
+    """Store and touch one result while evicting the oldest excess entries.
+
+    For example, inserting a third key into a two-entry cache evicts its
+    least recently used key. The caller owns TTLs and value semantics.
+    """
+    entries[key] = entry
+    entries.move_to_end(key)
+    while len(entries) > capacity:
+        entries.popitem(last=False)

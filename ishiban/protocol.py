@@ -65,6 +65,8 @@ class RawSession(msgspec.Struct, rename="camel", kw_only=True):
     repo_full_name: str | None = None
     branch_name: str | None = None
     pull_requests: list[RawPR] = msgspec.field(default_factory=list)
+    parent_session_id: str | None = None
+    created_at: str | None = None
 
 
 class Catalogue(msgspec.Struct, rename="camel", kw_only=True):

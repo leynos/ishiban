@@ -19,6 +19,45 @@ if typ.TYPE_CHECKING:
     from ishiban.storage import Store
 
 
+async def _existing_session(store: Store, session_id: str) -> dict[str, object]:
+    """Load one current inspector session or reject an absent identity.
+
+    For example, a missing child tab never triggers a Lody or GitHub read.
+
+    Returns
+    -------
+    dict[str, object]
+        The current session projection from this workspace.
+
+    Raises
+    ------
+    falcon.HTTPNotFound
+        If no projection exists for the requested session.
+    """
+    projection = await store.session_projection(session_id)
+    if projection is None:
+        raise falcon.HTTPNotFound
+    return projection
+
+
+def _set_scoped_detail(
+    resp: asgi.Response,
+    identity: tuple[str, str],
+    field: str,
+    value: object,
+) -> None:
+    """Scope one inspector-only value to its current workspace and session.
+
+    For example, agent labels and PR titles use the same identity envelope,
+    while their resolution and public payloads remain endpoint-specific.
+    """
+    resp.media = {
+        "workspaceId": identity[0],
+        "sessionId": identity[1],
+        field: value,
+    }
+
+
 class AgentDetailsResource:
     """Expose only cached agent type and configuration identity/name."""
 
@@ -34,19 +73,16 @@ class AgentDetailsResource:
 
         For example, an unreadable configuration leaves its name unavailable.
 
-        Raises
-        ------
-        falcon.HTTPNotFound
-            If the Lody session is absent from this workspace's journal.
         """
-        if await self.store.session_projection(session_id) is None:
-            raise falcon.HTTPNotFound
-        agent = await self.reader.read(session_id)
-        resp.media = {
-            "workspaceId": self.store.workspace_id,
-            "sessionId": session_id,
-            "agent": msgspec.to_builtins(agent),
-        }
+        projection = await _existing_session(self.store, session_id)
+        basis = int(str(projection.get("lastActivityEventId") or 0))
+        agent = await self.reader.read(session_id, basis)
+        _set_scoped_detail(
+            resp,
+            (self.store.workspace_id, session_id),
+            "agent",
+            msgspec.to_builtins(agent),
+        )
 
 
 class PullRequestDetailsResource:
@@ -64,21 +100,13 @@ class PullRequestDetailsResource:
 
         For example, a merged PR keeps its stage while gaining a display name.
 
-        Raises
-        ------
-        falcon.HTTPNotFound
-            If the session is not known in this workspace.
         """
-        projection = await self.store.session_projection(session_id)
-        if projection is None:
-            raise falcon.HTTPNotFound
+        projection = await _existing_session(self.store, session_id)
         prs = msgspec.convert(
             projection.get("pullRequests", []), type=list[PullRequest]
         )
         urls = [pr.url for pr in prs if not (pr.title or "").strip()]
         titles = await self.reader.read(urls)
-        resp.media = {
-            "workspaceId": self.store.workspace_id,
-            "sessionId": session_id,
-            "titles": titles,
-        }
+        _set_scoped_detail(
+            resp, (self.store.workspace_id, session_id), "titles", titles
+        )

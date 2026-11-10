@@ -5,6 +5,10 @@ locally, including the follow-up interface refinements. Reported review
 findings are addressed; the acceptance record documents one CodeScene advisory
 and an unexplained CodeRabbit completion warning.
 
+Logical session-family grouping is implemented in the current worktree, with
+full gates and browser acceptance pending; see
+[ADR 007](adr-007-session-tab-families.md).
+
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
 **Reference interface:**
@@ -287,15 +291,17 @@ All endpoints are versioned under `/api/v1`. For the local spike, bind to
 loopback by default and serve the UI from the same origin. A deployment beyond
 loopback needs authentication and transport security before it is shared.
 
-| Endpoint                                     | Purpose                                                                                                                                        |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/snapshot`                       | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
-| `GET /api/v1/sessions/{session_id}`          | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
-| `GET /api/v1/sessions/{session_id}/activity` | Resolve unknown activity; `includeKnown=true` also returns current known evidence without another Lody read.                                   |
-| `POST /api/v1/sessions/activity`             | Stream up to eight activity results as bounded NDJSON frames.                                                                                  |
-| `GET /api/v1/events?after=<cursor>`          | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
-| `GET /health`                                | Process liveness.                                                                                                                              |
-| `GET /ready`                                 | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
+| Endpoint                                      | Purpose                                                                                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/snapshot`                        | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
+| `GET /api/v1/sessions/{session_id}`           | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
+| `GET /api/v1/sessions/{session_id}/activity`  | Resolve unknown activity; `includeKnown=true` also returns current known evidence without another Lody read.                                   |
+| `GET /api/v1/session-activity?sessionId=<id>` | Query-based activity fallback for IDs whose path syntax may be normalized.                                                                     |
+| `POST /api/v1/sessions/activity`              | Stream up to eight activity results as bounded NDJSON frames.                                                                                  |
+| `POST /api/v1/sessions/recency`               | Return per-session latest-history facts for bounded visible-family enrichment.                                                                 |
+| `GET /api/v1/events?after=<cursor>`           | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
+| `GET /health`                                 | Process liveness.                                                                                                                              |
+| `GET /ready`                                  | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
 
 Each batch frame, including its newline, fits 1,048,576 UTF-8 bytes. A valid
 larger member becomes a small `response_too_large` marker while sibling members
@@ -638,3 +644,27 @@ retain pending reads; actual execution watermarks invalidate them. The browser
 establishes a quiet baseline during collector startup and compares meaningful
 facts for subsequent pulses. Restart replay remains in the journal without
 creating a flood of update animations.
+
+## Logical session families
+
+[ADR 007](adr-007-session-tab-families.md) accepts one board entry per root
+session family, linked only by `parentSessionId`. The root supplies PR, branch,
+title, and workflow context; each actual tab retains its own runtime state,
+errors, agent details, and CLI identity. `SessionFamily` is a presentation view
+and leaves journal, API, and cache identities untouched. Inspector URLs retain
+the root route and add `?tab=session:<actual-member-id>` for a selected tab.
+
+Visible families receive bounded per-member `latestHistoryAt` reads. Exact
+history time selects activity only when all member reads are available. While
+reads are pending or unavailable, running is the provisional choice under the
+one-active-tab-per-logical-family assumption; successful empty history uses
+`createdAt` for comparison. Workspace, member, and execution-watermark checks
+reject late facts. Selection-only recency changes are quiet, while meaningful
+runtime changes pulse the family after a quiet startup baseline.
+
+The shared session-show reader serves recency and inspector agent metadata
+through at most two CLI children, identity and watermark singleflight, bounded
+LRU/TTL caches, and a 45-second queue-inclusive deadline. It is process-local;
+an API restart re-enriches visible families and does not alter durable activity
+facts. Board and resource integration are implemented in the current worktree;
+full repository gates and browser acceptance remain pending.

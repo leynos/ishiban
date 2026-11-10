@@ -3,6 +3,7 @@ import type {Session, SessionActivityFrame, SessionActivityResponse} from './con
 import {readActivityFrames} from './activity-batch';
 import {readSessionActivityResponse} from './activity-fallback';
 import type {BoardStore} from './client';
+import {withRequestLifetime} from './request-lifetime';
 
 interface Lookup {
   readonly workspaceId: string;
@@ -150,24 +151,24 @@ class ActivityRequests {
 
   /** Apply only current validated responses; for example, preserve the journal cursor. */
   private async run(tasks: readonly Lookup[]): Promise<void> {
-    const controller = new AbortController();
-    this.controllers.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 50_000);
-    const context: BatchContext = {
-      lookups: new Map(tasks.map((task) => [task.sessionId, task])),
-      signal: controller.signal,
-      fallbackSessionIds: new Set<string>(),
-      fallbackTasks: []
-    };
     for (const task of tasks) this.activeSessionIds.add(task.sessionId);
     try {
-      await this.consumeBatch(tasks, context);
+      await withRequestLifetime(this.controllers, async (signal) => {
+        const context: BatchContext = {
+          lookups: new Map(tasks.map((task) => [task.sessionId, task])),
+          signal,
+          fallbackSessionIds: new Set<string>(),
+          fallbackTasks: []
+        };
+        try {
+          await this.consumeBatch(tasks, context);
+        } finally {
+          await Promise.allSettled(context.fallbackTasks);
+        }
+      });
     } catch {
       // Source failures retain unknown activity; a later visible retry may succeed.
     } finally {
-      await Promise.allSettled(context.fallbackTasks);
-      clearTimeout(timeout);
-      this.controllers.delete(controller);
       this.running -= 1;
       for (const task of tasks) {
         this.activeSessionIds.delete(task.sessionId);
@@ -221,7 +222,7 @@ class ActivityRequests {
   private async resolveOversizedMember(task: Lookup, signal: AbortSignal): Promise<void> {
     try {
       const id = encodeURIComponent(task.sessionId);
-      const response = await fetch(`/api/v1/sessions/${id}/activity?includeKnown=true`, {
+      const response = await fetch(`/api/v1/session-activity?sessionId=${id}&includeKnown=true`, {
         signal,
         cache: 'no-store'
       });
@@ -260,9 +261,14 @@ class ActivityVisibility {
   /** Start observing existing and newly rendered marks; for example, watch a mounted board. */
   start(enqueue: (element: Element) => void): void {
     this.observer = new IntersectionObserver((entries) => this.update(entries, enqueue));
-    this.mutation = new MutationObserver((records) => this.applyMutations(records));
+    this.mutation = new MutationObserver((records) => this.applyMutations(records, enqueue));
     document.querySelectorAll(MARKS).forEach((mark) => this.observer?.observe(mark));
-    this.mutation.observe(document.body, {childList: true, subtree: true});
+    this.mutation.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-session-id']
+    });
   }
 
   /** Answer whether a session still has a visible mark; for example, retain visible retries. */
@@ -294,8 +300,12 @@ class ActivityVisibility {
     }
   }
 
-  private applyMutations(records: readonly MutationRecord[]): void {
+  private applyMutations(records: readonly MutationRecord[], enqueue: (element: Element) => void): void {
     for (const record of records) {
+      if (record.type === 'attributes') {
+        this.enqueueChangedIdentity(record.target, enqueue);
+        continue;
+      }
       for (const node of record.addedNodes) {
         visitMarks(node, (mark) => this.observer?.observe(mark));
       }
@@ -306,6 +316,13 @@ class ActivityVisibility {
         });
       }
     }
+  }
+
+  /** Revisit only a mark already visible when its selected raw tab changes. */
+  private enqueueChangedIdentity(target: Node, enqueue: (element: Element) => void): void {
+    if (!(target instanceof Element)) return;
+    if (!this.visible.has(target)) return;
+    enqueue(target);
   }
 }
 

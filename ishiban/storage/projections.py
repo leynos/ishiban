@@ -28,6 +28,8 @@ def empty_session(session_id: str, machine_id: str = "") -> SessionProjection:
         "source": "metadata",
         "freshness": "unavailable",
         "repoFullName": None,
+        "parentSessionId": None,
+        "createdAt": None,
         "branchName": None,
         "stage": "unclassified",
         "stageReason": "No catalogue entry is available.",
@@ -158,6 +160,8 @@ def apply_catalogue(
         "archived": entry.archived,
         "repoFullName": entry.repo_full_name,
         "branchName": entry.branch_name,
+        "parentSessionId": entry.parent_session_id,
+        "createdAt": entry.created_at,
         "pullRequests": [
             {
                 "url": request.url,

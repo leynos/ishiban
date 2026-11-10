@@ -1,11 +1,15 @@
 /** @file Exercise oversized activity markers and their bounded same-session fallback. */
 import {afterEach, expect, it} from 'bun:test';
+import {waitFor} from '@testing-library/react';
 import type {Session, SessionActivityFrame, Snapshot} from '../src/contracts';
 import {createBoardStore} from '../src/client';
 import {startLazyActivity} from '../src/lazy-activity';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
 import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
-import {ControlledIntersectionObserver} from './controlled-intersection-observer';
+import {
+  ControlledIntersectionObserver,
+  installControlledIntersectionObserver
+} from './controlled-intersection-observer';
 import type {Deferred} from './deferred';
 import {
   applyStaleFallbackChange,
@@ -17,7 +21,7 @@ import {
   TRANSFER_NOTICE,
   waitForFallbackOutcome
 } from './lazy-activity-fallback-fixture';
-let restoreIntersectionObserver: PropertyDescriptor | undefined;
+let restoreIntersectionObserver: (() => void) | undefined;
 let restoreFetch: (() => void) | undefined;
 let stopRequests: (() => void) | undefined;
 
@@ -39,12 +43,7 @@ function unknownSession(sessionId: string): Session {
 
 /** Install a visible board and deterministic browser boundaries. */
 function scenario(sessionIds: readonly string[]) {
-  restoreIntersectionObserver = Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver');
-  Object.defineProperty(globalThis, 'IntersectionObserver', {
-    configurable: true,
-    value: ControlledIntersectionObserver
-  });
-  ControlledIntersectionObserver.instances = [];
+  restoreIntersectionObserver = installControlledIntersectionObserver();
 
   const snapshot: Snapshot = {
     ...createBoardSnapshot(),
@@ -109,8 +108,8 @@ async function waitForStart(started: readonly Deferred<void>[], index: number): 
 }
 
 /** Start the marker and its one owned fallback; for example, inspect a large session response. */
-async function beginFallback() {
-  const setup = scenario(['large-session']);
+async function beginFallback(sessionId = 'large-session') {
+  const setup = scenario([sessionId]);
   await waitForStart(setup.started, 0);
   const session = sessionAt(setup.snapshot);
   resolveBatch(requestAt(setup.requests, 0), [oversizedMarker(setup.snapshot.workspaceId, session.sessionId)]);
@@ -131,13 +130,8 @@ afterEach(() => {
   stopRequests = undefined;
   restoreFetch?.();
   restoreFetch = undefined;
-  if (restoreIntersectionObserver) {
-    Object.defineProperty(globalThis, 'IntersectionObserver', restoreIntersectionObserver);
-  } else {
-    Reflect.deleteProperty(globalThis, 'IntersectionObserver');
-  }
+  restoreIntersectionObserver?.();
   restoreIntersectionObserver = undefined;
-  ControlledIntersectionObserver.instances = [];
   document.body.replaceChildren();
 });
 
@@ -155,7 +149,7 @@ it('keeps a later small member moving while one oversized member falls back once
   await waitForStart(started, 1);
 
   expect(requestAt(requests, 1).url).toBe(
-    `/api/v1/sessions/${encodeURIComponent(large.sessionId)}/activity?includeKnown=true`
+    `/api/v1/session-activity?sessionId=${encodeURIComponent(large.sessionId)}&includeKnown=true`
   );
   expect(requestAt(requests, 1).init.signal).toBe(requestAt(requests, 0).init.signal);
   expect(requestAt(requests, 1).init.signal?.aborted).toBe(false);
@@ -163,6 +157,16 @@ it('keeps a later small member moving while one oversized member falls back once
     'running'
   );
   expect(requests).toHaveLength(2);
+});
+
+it.each(['.', '..', 'a/b', '100%?'])('uses the query fallback for exact session ID %s', async (sessionId) => {
+  const {snapshot, store, session, fallback} = await beginFallback(sessionId);
+  expect(fallback.url).toBe(`/api/v1/session-activity?sessionId=${encodeURIComponent(sessionId)}&includeKnown=true`);
+  fallback.response.resolve(
+    Response.json({workspaceId: snapshot.workspaceId, session: {...session, state: 'running'}})
+  );
+  await waitFor(() => expect(storedSession(store).state).toBe('running'));
+  expect(storedSession(store).sessionId).toBe(sessionId);
 });
 
 it.each(fallbackCases)('$name', async (testCase) => {

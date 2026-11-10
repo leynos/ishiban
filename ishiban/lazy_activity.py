@@ -1,16 +1,14 @@
 """Read current persisted activity from Lody only when a caller needs it."""
 
 import asyncio
-import collections
-import dataclasses
 import time
 
 import msgspec
 
 from ishiban import domain
-from ishiban.cache_entries import fresh_cache_entry
+from ishiban.cached_lody_reads import CachedLodyReads, CachedReadPolicy
 from ishiban.lody import read_json_object
-from ishiban.protocol import SESSION_STATES, TURN_STATES, ProtocolError
+from ishiban.protocol import SESSION_STATES, TURN_STATES
 
 MAX_OBSERVE_BYTES = 1_048_576
 MAX_CACHE_ENTRIES = 256
@@ -31,14 +29,6 @@ class _ObserveResponse(msgspec.Struct, rename="camel", forbid_unknown_fields=Tru
     version: int
     workspace_id: str
     session: msgspec.Raw
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _CacheEntry:
-    """Hold one bounded result and its monotonic expiry time."""
-
-    value: domain.ObservedSession | None
-    expires_at: float
 
 
 def _monotonic_time() -> float:
@@ -121,14 +111,16 @@ class LazyActivity:
         self._executable = executable
         self._timeout = timeout
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_OBSERVERS)
-        self._cache: collections.OrderedDict[_SessionKey, _CacheEntry] = (
-            collections.OrderedDict()
+        self._reads = CachedLodyReads[_SessionKey, domain.ObservedSession](
+            CachedReadPolicy(
+                capacity=MAX_CACHE_ENTRIES,
+                max_inflight=MAX_IN_FLIGHT_OBSERVATIONS,
+                success_seconds=SUCCESS_CACHE_SECONDS,
+                failure_seconds=FAILURE_CACHE_SECONDS,
+            ),
+            _monotonic_time,
+            self._load,
         )
-        self._inflight: dict[
-            _SessionKey,
-            asyncio.Task[domain.ObservedSession | None],
-        ] = {}
-        self._is_closed = False
 
     async def read(
         self,
@@ -145,77 +137,26 @@ class LazyActivity:
         ObservedSession or None
             The persisted observation or an unavailable marker.
         """
-        if self._is_closed:
-            return None
-        key = (session_id, revision)
-        now = _monotonic_time()
-        is_cached, cached = self._cached(key, now)
-        if is_cached:
-            return cached
-
-        task = self._inflight.get(key)
-        if task is None:
-            if len(self._inflight) >= MAX_IN_FLIGHT_OBSERVATIONS:
-                return None
-            task = asyncio.create_task(self._load(key))
-            self._inflight[key] = task
-        # One cancelled request must not cancel a shared observer needed by
-        # other waiters; close() owns cancellation of the shared task itself.
-        return await asyncio.shield(task)
-
-    def _cached(
-        self, key: _SessionKey, now: float
-    ) -> tuple[bool, domain.ObservedSession | None]:
-        """Read a fresh cache entry while distinguishing cached unavailability.
-
-        For example, a cached ``None`` suppresses another CLI read until expiry.
-
-        Returns
-        -------
-        tuple[bool, ObservedSession or None]
-            A cache-hit flag and its optional known observation.
-        """
-        entry = fresh_cache_entry(self._cache, key, now=now)
-        if entry is None:
-            return False, None
-        return True, entry.value
+        return await self._reads.read((session_id, revision))
 
     async def close(self) -> None:
         """Cancel and reap every observer owned by this service.
 
-        For example, a Falcon shutdown can await this method to terminate
-        hanging CLI children before the application event loop closes.
+        For example, Falcon shutdown terminates pending CLI children before
+        the application event loop closes.
         """
-        if self._is_closed:
-            return
-        self._is_closed = True
-        tasks = tuple(self._inflight.values())
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._inflight.clear()
-        self._cache.clear()
+        await self._reads.close()
 
     async def _load(self, key: _SessionKey) -> domain.ObservedSession | None:
-        """Observe and cache one key, mapping expected boundary failures to None.
+        """Run one bounded observation for the requested execution revision.
 
         Returns
         -------
         ObservedSession or None
-            The persisted observation or an unavailable marker.
+            The validated persisted observation, if available.
         """
         session_id, _revision = key
-        try:
-            try:
-                value = await self._observe(session_id)
-            except OSError, TimeoutError, ProtocolError, msgspec.DecodeError:
-                value = None
-            ttl = SUCCESS_CACHE_SECONDS if value is not None else FAILURE_CACHE_SECONDS
-            self._remember(key, value, ttl)
-            return value
-        finally:
-            self._inflight.pop(key, None)
+        return await self._observe(session_id)
 
     async def _observe(self, session_id: str) -> domain.ObservedSession | None:
         """Run one bounded, shell-free Lody observation.
@@ -282,18 +223,3 @@ class LazyActivity:
         if not _is_persisted_activity(session, session_id):
             return None
         return session
-
-    def _remember(
-        self,
-        key: _SessionKey,
-        value: domain.ObservedSession | None,
-        ttl: float,
-    ) -> None:
-        """Store one success or short-lived miss while enforcing the LRU bound."""
-        self._cache[key] = _CacheEntry(
-            value=value,
-            expires_at=_monotonic_time() + ttl,
-        )
-        self._cache.move_to_end(key)
-        while len(self._cache) > MAX_CACHE_ENTRIES:
-            self._cache.popitem(last=False)

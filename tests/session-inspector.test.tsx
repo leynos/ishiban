@@ -1,8 +1,9 @@
 /** @file Verify inspector navigation and honest failed-turn diagnostics. */
-import {afterEach, expect, it} from 'bun:test';
+import {afterEach, expect, it, spyOn} from 'bun:test';
 import {cleanup, render, screen} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {Schema} from 'effect';
-import {SessionSchema} from '../src/contracts';
+import {SessionSchema, type Session} from '../src/contracts';
 import {SessionInspector} from '../src/ui/session-inspector';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
 
@@ -177,4 +178,108 @@ it.each(['', '   '])('gives a blank PR title an accessible fallback: %j', (title
   expect(screen.getByRole('link', {name: 'Open pull request'}).getAttribute('href')).toBe(
     'https://github.com/example/project/pull/123'
   );
+});
+
+/** Keep root workflow facts distinct from the running tab in inspector regressions. */
+function inspectorFamily() {
+  const context: Session = {
+    ...firstSession(createBoardSnapshot()),
+    sessionId: 'parent-session',
+    title: 'Import verification support',
+    source: 'persisted',
+    branchName: 'verification-support',
+    stage: 'refine',
+    stageReason: 'The parent PR is ready for review.',
+    latestTurn: {userTurnId: 'old-root-turn', state: 'failed', error: 'Old parent failure'},
+    pullRequests: [{url: 'https://github.com/example/project/pull/492', title: 'Verification support', status: 'open'}]
+  };
+  const activity: Session = {
+    ...context,
+    sessionId: 'latest-tab',
+    title: 'Review queue wait',
+    parentSessionId: context.sessionId,
+    branchName: null,
+    pullRequests: [],
+    state: 'running',
+    latestTurn: {userTurnId: 'child-turn', state: 'running'}
+  };
+  return {context, activity};
+}
+
+it('keeps parent workflow context while linking and describing the selected tab', () => {
+  const {context, activity} = inspectorFamily();
+  render(
+    <SessionInspector
+      session={context}
+      activitySession={activity}
+      workspaceId="workspace-1"
+      workspaceSlug="leynos"
+      currentGeneration={1}
+      onClose={() => {}}
+    />
+  );
+
+  expect(screen.getByRole('heading', {name: 'Verification support', level: 3})).toBeTruthy();
+  expect(screen.getByText(context.title).className).toBe('session-inspector__subtitle');
+  expect(screen.getByText('verification-support')).toBeTruthy();
+  expect(screen.getByText('Refine')).toBeTruthy();
+  expect(screen.getByText(activity.title)).toBeTruthy();
+  expect(screen.getByText('running')).toBeTruthy();
+  expect(screen.queryByRole('region', {name: 'Last turn error'})).toBeNull();
+  expect(screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href')).toBe(
+    'https://lody.ai/leynos/sessions/parent-session?tab=session%3Alatest-tab'
+  );
+});
+
+it('updates selected-tab error evidence without replacing the parent heading', () => {
+  const {context, activity} = inspectorFamily();
+  const props = {session: context, workspaceId: 'workspace-1', currentGeneration: 1, onClose: () => {}};
+  const view = render(<SessionInspector {...props} activitySession={activity} />);
+  const next = {
+    ...activity,
+    sessionId: 'next-tab',
+    latestTurn: {userTurnId: 'next-turn', state: 'failed', error: 'New tab failure'}
+  };
+  view.rerender(<SessionInspector {...props} activitySession={next} />);
+
+  expect(screen.getByRole('heading', {name: 'Verification support', level: 3})).toBeTruthy();
+  expect(screen.getByRole('region', {name: 'Last turn error'}).textContent).toContain('New tab failure');
+  expect(screen.queryByText('latest-tab')).toBeNull();
+  expect(screen.getByText('next-tab')).toBeTruthy();
+  expect(screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href')).toBe(
+    'lody://session/next-tab?workspace=workspace-1'
+  );
+});
+
+it('reads and copies the selected tab identity rather than the parent identity', async () => {
+  const {context, activity} = inspectorFamily();
+  const user = userEvent.setup();
+  const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+    Response.json({
+      workspaceId: 'workspace-1',
+      sessionId: activity.sessionId,
+      agent: {agentType: 'claude', configurationId: 'child-config', configurationName: 'Review configuration'}
+    })
+  );
+  try {
+    render(
+      <SessionInspector
+        session={context}
+        activitySession={activity}
+        workspaceId="workspace-1"
+        currentGeneration={1}
+        onClose={() => {}}
+      />
+    );
+    expect(await screen.findByText('Review configuration')).toBeTruthy();
+    expect(screen.getByText('claude')).toBeTruthy();
+    expect(screen.getByText(activity.sessionId).tagName).toBe('CODE');
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/v1/sessions/latest-tab/agent');
+    await user.click(screen.getByRole('button', {name: 'Copy session ID'}));
+    expect(write).toHaveBeenCalledWith(activity.sessionId);
+  } finally {
+    fetchSpy.mockRestore();
+    write.mockRestore();
+  }
 });

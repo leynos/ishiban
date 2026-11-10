@@ -9,7 +9,9 @@ import {
   type ReactElement,
   type RefObject
 } from 'react';
-import type {InterfaceState, Session, Snapshot} from '../contracts';
+import type {InterfaceState, Snapshot} from '../contracts';
+import {groupSessions, type SessionFamily} from '../session-families';
+import {useSessionRecency} from '../session-recency';
 import {BoardLayout, type BoardViewState} from './board-layout';
 import {filterSessions, type ActivityFilter, type Presentation} from './board-model';
 import {useInterfaceState} from './interface-state';
@@ -21,11 +23,11 @@ interface BoardProps {
 }
 
 interface BoardFocusRestorationProps {
-  readonly inspectorSession: Session | null;
+  readonly inspectorSession: SessionFamily | null;
   readonly snapshotSessions: Snapshot['sessions'];
   readonly selectedSessionId: string | null;
   readonly presentation: Presentation;
-  readonly visibleSessions: readonly Session[];
+  readonly visibleSessions: readonly SessionFamily[];
   readonly onClose: () => void;
   readonly initiatingTriggerRef: RefObject<HTMLButtonElement | null>;
   readonly boardFallbackRef: RefObject<HTMLElement | null>;
@@ -115,7 +117,23 @@ function focusedSessionId(target: EventTarget): string | null {
   if (!(target instanceof HTMLButtonElement)) {
     return null;
   }
-  return target.getAttribute('data-session-id');
+  return target.getAttribute('data-family-id');
+}
+
+/** Map meaningful raw updates to their stable family selection identity. */
+function familyPulseRevisions(
+  families: readonly SessionFamily[],
+  rawRevisions: ReadonlyMap<string, number>
+): ReadonlyMap<string, number> {
+  const cues = new Map<string, number>();
+  for (const family of families) {
+    let revision = 0;
+    for (const member of family.members) {
+      revision = Math.max(revision, rawRevisions.get(member.sessionId) ?? 0);
+    }
+    if (revision > 0) cues.set(family.rootId, revision);
+  }
+  return cues;
 }
 
 /**
@@ -129,16 +147,18 @@ export function Board(props: BoardProps): ReactElement {
   const {snapshot, connection} = props;
   const viewState = useBoardViewState(snapshot.interfaceState);
   const pulseRevisions = useSessionUpdates(snapshot);
+  const recency = useSessionRecency(snapshot);
+  const families = useMemo(() => groupSessions(snapshot.sessions, recency), [snapshot.sessions, recency]);
+  const familyPulses = useMemo(() => familyPulseRevisions(families, pulseRevisions), [families, pulseRevisions]);
   const initiatingTriggerRef = useRef<HTMLButtonElement | null>(null);
   const boardFallbackRef = useRef<HTMLElement | null>(null);
   const markNodesRef = useRef(new Map<string, HTMLButtonElement>());
   const focusedSessionIdRef = useRef<string | null>(null);
   const visibleSessions = useMemo(
-    () => filterSessions(snapshot.sessions, viewState.query, viewState.activityFilter, viewState.includeArchived),
-    [snapshot.sessions, viewState.query, viewState.activityFilter, viewState.includeArchived]
+    () => filterSessions(families, viewState.query, viewState.activityFilter, viewState.includeArchived),
+    [families, viewState.query, viewState.activityFilter, viewState.includeArchived]
   );
-  const inspectorSession =
-    snapshot.sessions.find((session) => session.sessionId === viewState.selectedSessionId) ?? null;
+  const inspectorSession = families.find((family) => family.rootId === viewState.selectedSessionId) ?? null;
 
   const onSelect = (sessionId: string, trigger?: HTMLButtonElement): void => {
     if (trigger instanceof HTMLButtonElement) {
@@ -195,8 +215,9 @@ export function Board(props: BoardProps): ReactElement {
       onFocusCapture={onFocusCapture}
       onMarkNode={onMarkNode}
       onSelect={onSelect}
-      pulseRevisions={pulseRevisions}
+      pulseRevisions={familyPulses}
       snapshot={snapshot}
+      totalFamilies={families.length}
       viewState={viewState}
       visibleSessions={visibleSessions}
     />
