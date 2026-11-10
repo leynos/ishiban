@@ -33,6 +33,7 @@
   grid-template-columns: repeat(4, var(--bank-min-width));
   min-width: max-content;
   width: max-content;
+  padding-inline: 0;
 }
 
 .board-bank,
@@ -42,6 +43,12 @@
 
 .repository-table {
   width: 100%;
+}
+
+/* Selection and pulse layers stay below the sticky repository column. */
+.stage-cell {
+  isolation: isolate;
+  position: relative;
 }
 
 .ishiban-board[data-density] .repository-table th:first-child {

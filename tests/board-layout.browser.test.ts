@@ -151,6 +151,28 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(docked.left).toBeGreaterThan(0);
   });
 
+  it('hides a selected planning mark beneath the sticky repository column', async () => {
+    await browser('eval', "document.querySelector('button.session-mark').click()");
+    const result = await browser(
+      'eval',
+      `(()=>{
+      const mark=document.querySelector('button.session-mark');
+      const pane=document.querySelector('.board-scroll');
+      const heading=document.querySelector('.repository-name');const before=heading.getBoundingClientRect().left;
+      pane.scrollLeft=80;
+      const rect=mark.getBoundingClientRect();
+      const top=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);
+      return {covered:Boolean(top?.closest('.repository-name')),
+        headingShift:heading.getBoundingClientRect().left-before,
+        padding:getComputedStyle(document.querySelector('.board-banks')).paddingInlineStart};
+    })()`
+    );
+    const state = JSON.parse(result);
+    expect(state.covered).toBe(true);
+    expect(Math.abs(state.headingShift)).toBeLessThan(0.5);
+    expect(state.padding).toBe('0px');
+  });
+
   it('bounds a live list pulse to its task button', async () => {
     await browser('find', 'role', 'button', 'click', '--name', 'List', '--exact');
     await watchPulse(snapshot.cursor + 1);
