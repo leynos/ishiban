@@ -307,6 +307,22 @@ exceptions to unrelated files without another review. Frozen migrations must
 remain independent of evolving model metadata, and source protocol records must
 remain independent of journal-write records.
 
+The detail-page tests share one seeded API fixture, collector lifecycle tests
+share one cached-PR setup, and coverage workflow tests share a local action
+loader. `storage.reader._read_turn_page` owns the bounded keyset query,
+lookahead and continuation; `read_detail` composes it with current session and
+provenance reads. Workflow classification handles association eligibility and
+active PRs, while `_classify_terminal` handles terminal evidence. The only new
+Nose exception is the anonymous two-line nullable guard shared by
+`detail_pagination.parse_turn_cursor` and
+`storage.projections._turn_projection`. Nose cannot name these fragments by
+function or range, so the exception names the exact file pair it supports. One
+guard selects the API's first page; the other handles an absent stored turn. A
+shared helper would couple unrelated contracts for trivial indirection. Revisit
+the exception if cross-file duplication grows beyond that guard. The former
+`Store.detail`/ `Store.session_projection` exception is removed because the
+current scan no longer reports that family.
+
 The client exposes its connection lifetime as `liveConnection`, an Effect
 consumed by the cancellable `startLive` browser adapter. Scheduled retries
 continue until the owner cancels the connection; transient failures update
@@ -527,6 +543,15 @@ one-percentage-point ratchet tolerance. The next successful main publisher
 establishes a new measured baseline; future scope or tool changes still need
 comparable measurements or an explicit baseline policy decision.
 
+The main coverage job runs only when `github.ref` is `refs/heads/main`,
+including manual dispatch after a token-authored automerge. It forces the
+shared action to publish the measured baseline on that manual path; the
+pull-request lane never publishes a baseline. A manual dispatch from another
+ref is skipped by the job guard. The next authorized main update must verify
+that the publisher actually saves the measured baseline instead of
+bootstrapping zero again. An unexpected cache miss still uses the authorized
+zero bootstrap, so it is not evidence that measured publication succeeded.
+
 `cache_entries.fresh_cache_entry` shares only monotonic expiry and LRU touch
 behaviour between activity and PR-title lookups. Each adapter retains its own
 keys, entry payloads, clocks, positive/negative TTLs, capacity and async work.
@@ -536,3 +561,9 @@ this helper is not a shared service lifecycle or persistence abstraction.
 Python Syrupy snapshots use `.ambr`; Bun snapshots use `.snap`. Pytest ignores
 the Bun extension during unused-snapshot discovery, while both runners retain
 their own snapshot assertions and unused Python snapshot checks.
+
+`detail_pagination` owns only the versioned, bounded continuation encoding and
+identity validation for session-turn pages. `storage.reader` owns keyset SQL
+ordering and the 100-turn limit; `Store.detail` owns its read transaction, and
+the Falcon route maps malformed cursors to HTTP 400. The cursor is a position
+in current materialized state, not a replay cursor or a frozen snapshot.

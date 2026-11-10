@@ -645,3 +645,39 @@ unchanged. Coverage lanes use the verified compatible pytest 9.1.0/SlipCover
 New workflow contracts keep the PR and main publishers aligned. The unused
 prerequisite worktree remains clean and unpublished; no stack rewrite is
 required.
+
+### Hosted assessment repairs
+
+The first hosted completeness assessment at PR comment `6773725213` finds two
+in-scope gaps. A known active PR alongside an unknown association could claim
+Building or Refine, so workflow classification now requires known lifecycle
+evidence for every association before selecting a definite stage. A collector
+regression covers a valid draft alongside a rejected URL; the existing known
+active plus historical terminal convention remains intact.
+
+Session detail previously loaded every retained turn. It now returns at most
+100 turns per request, with a workspace/session-bound continuation ordered by
+last event ID and turn ID. A bounded lookahead detects another page; malformed
+and foreign continuations return HTTP 400. The next request reads current
+materialized state, so changes between requests can change later pages. A test
+exercises tied event positions, the exact page boundary, full retained history
+and invalid-cursor behaviour.
+
+The coverage investigation also identifies that the shared action publishes the
+measured baseline on a main push by default, but a manual main dispatch needed
+after token-authored automerge would leave it at zero. The main coverage job
+now accepts only `refs/heads/main` and explicitly publishes the baseline on
+either main trigger. The PR lane retains its non-publisher policy. Focused
+regressions passed red before their respective fixes and green afterwards; full
+gates, hosted checks and reassessment of this repair candidate remain pending
+until publication.
+
+Local gate review found six new Nose overlap families and one anonymous
+two-line null-guard match. Shared test setup now covers the actual repeated
+fixtures and workflow-action loading. The null guards remain independent, with
+the narrowest detector-supported file-pair exception documented in the
+developers' guide; a stale store exception is removed. CodeScene's large-method
+and complexity findings prompted bounded turn-page SQL and terminal-stage
+classification helpers. The focused repair suite passes 65 tests, the Nose gate
+passes, and local CodeScene reports 10.00 for each changed runtime and test
+file checked. Full repository gates remain for the integration pass.
