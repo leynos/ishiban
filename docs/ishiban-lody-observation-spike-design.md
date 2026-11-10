@@ -1,8 +1,9 @@
 # Ishiban: single-workspace Lody observation spike
 
 **Status:** Accepted design; proof of concept implemented and validated
-locally. Authenticated review feedback and interface refinements are being
-addressed.
+locally, including the follow-up interface refinements. Reported review
+findings are addressed; the acceptance record documents one CodeScene advisory
+and an unexplained CodeRabbit completion warning.
 
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  

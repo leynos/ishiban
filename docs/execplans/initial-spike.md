@@ -1,8 +1,9 @@
 # Ishiban initial observation proof of concept
 
-Status: review feedback is being addressed, alongside the user's board
-refinements. Authenticated CodeRabbit and CodeScene assessments completed
-against `0037581`. No remote publication or Lody writes are authorized.
+Status: implementation and interface refinements are complete and validated
+locally. Authenticated review reassessment covers `ee829f9`; the full
+implementation review starts at `bbb1bee`. No remote publication or Lody writes
+are authorized.
 
 ## Purpose
 
@@ -129,9 +130,9 @@ proof of concept; tests must not claim upstream historical completeness.
   implementation commit `e022847`; all deterministic gates pass.
 - [x] M4 assessment: authenticated CodeRabbit reviewed all 78 changed files;
   CodeScene completed the same commit delta.
-- [ ] M4 convergence: address five CodeRabbit findings and seven CodeScene
+- [x] M4 convergence: address five CodeRabbit findings and seven CodeScene
   complexity alerts, validate, and reassess the resulting implementation.
-- [ ] M5: add intermediate mark sizes, inert empty cells, update pulses, and
+- [x] M5: add intermediate mark sizes, inert empty cells, update pulses, and
   evidence-based failed/blocked styling, a docked nonmodal inspector, and
   `12rem` repository columns; validate keyboard and browser behaviour.
 
@@ -180,21 +181,21 @@ independent in the rendered board. The isolated demo contains 965 sessions
 across 120 repositories; cells with 6, 10, and 13 sessions wrap into 2, 2, and
 3 rows without truncation.
 
-Agent-browser and css-view verified four panorama banks at 1,280px, seven-pixel
-marks, keyboard interaction, live/demo subscription cleanup, and a 390px mobile
-viewport without document overflow. Automated accessibility inspection reported
-zero violations; four contrast checks required manual inspection because the
-component theme uses background effects. Computed colour checks, including a
-conservative 20% black or white texture overlay, gave contrast ratios of at
-least 6.39:1 for those controls. Browser testing exposed incorrect inspector
-focus restoration; a DOM regression test covers returning to the initiating
-mark and a removed-mark fallback. A fresh browser confirmed the fix, while an
-older tab retained stale JavaScript through heuristic caching. A failing
-asset-header regression test now passes with response caching disabled for the
-spike's unversioned assets. Mobile testing also found hidden fieldset legends
-positioned relative to the page instead of the scroller; a positioned scroll
-container keeps the page width at 390px while retaining 934px of horizontally
-scrollable board content.
+Initial agent-browser and css-view checks verified four panorama banks at
+1,280px, seven-pixel marks, keyboard interaction, live/demo subscription
+cleanup, and a 390px mobile viewport without document overflow. Automated
+accessibility inspection reported zero violations; four contrast checks
+required manual inspection because the component theme uses background effects.
+Computed colour checks, including a conservative 20% black or white texture
+overlay, gave contrast ratios of at least 6.39:1 for those controls. Browser
+testing exposed incorrect inspector focus restoration; a DOM regression test
+covers returning to the initiating mark and a removed-mark fallback. A fresh
+browser confirmed the fix, while an older tab retained stale JavaScript through
+heuristic caching. A failing asset-header regression test now passes with
+response caching disabled for the spike's unversioned assets. Mobile testing
+also found hidden fieldset legends positioned relative to the page instead of
+the scroller; a positioned scroll container keeps the page width at 390px while
+retaining 934px of horizontally scrollable board content.
 
 An isolated loopback fixture measured committed journal updates through two
 animation frames after DOM rendering at 190.1, 253.3, and 225.8 milliseconds.
@@ -222,7 +223,8 @@ saved session or Git provider authentication, exiting before assessment.
 CodeScene 1.0.36 attempted the same delta and refused analysis because
 `CS_ACCESS_TOKEN` is unavailable. Neither tool produced review findings or a
 completed assessment. Credential configuration has been requested without
-exposing secrets; these reviews remain pending, rather than waived.
+exposing secrets. The authenticated follow-up below supersedes that initial
+review limitation.
 
 The final live sample contained 2,764 sessions, including 571 active sessions
 across 65 repositories. Collector shutdown retained every session and persisted
@@ -236,15 +238,78 @@ conventions, observed catalogue limitations, and end-to-end acceptance.
 ## Authenticated review follow-up
 
 CodeRabbit 0.9.3 completed the `bbb1bee..0037581` committed review with 78
-reviewed files. Its findings concern cached active PR facts overriding newer
+reviewed files. Its findings concerned cached active PR facts overriding newer
 terminal catalogue facts, lost partial GraphQL data after a nonzero CLI exit,
 failed batch isolation, exhausted browser retries, and repeated catalogue
-buffer parsing. Regression tests must demonstrate the functional failures
-before their corrections.
+buffer parsing. Regression tests demonstrated the functional failures before
+their corrections.
 
 CodeScene 1.0.36 completed the same delta. It identified complex protocol
 validators and journal dispatch, plus nested PR normalization and SSE polling.
-Separate validation responsibilities and flatten control flow where that makes
-the code clearer. Keep behaviour-preserving refactors in a separate commit from
-functional fixes. Existing and expanded boundary tests must pass before and
-after those refactors; do not change health thresholds or suppress alerts.
+Validation responsibilities were separated and control flow flattened in a
+commit following the functional fixes. Existing and expanded boundary tests
+passed before and after the refactors. Health thresholds and suppressions
+remain unchanged.
+
+## Final follow-up acceptance
+
+Commits `7800ffb`, `aac3329`, `06e0b71`, and `3994e65` separate reliability
+fixes, interface changes, catalogue framing, and behaviour-preserving
+refactoring. Follow-up commits `19e1535` and `ee829f9` address terminal PR
+normalization, permanently closed EventSource recovery, standalone Alembic, the
+documentation index, and cursor-only SSE startup. All five original CodeRabbit
+findings have regression coverage; the seven original CodeScene
+function-complexity and nesting alerts are absent from reassessment. CodeScene
+1.0.36 reports one remaining overall-complexity advisory for `protocol.py`:
+mean 6.22 against threshold 4, with code health 9.38, improved from 8.72.
+Retain explicit, ordered trust-boundary checks rather than introduce a generic
+validation framework solely to change that metric. No health threshold or
+suppression was changed.
+
+Final gates pass: browser build, formatting, full Python and TypeScript lint,
+dead-code and duplication checks, workflow validation, type checking, 98 Python
+tests, 43 Bun tests, Markdown lint and spelling. Mermaid validation, dependency
+audits and Makefile validation also pass; their results were reused because
+those inputs did not change during the final formatting and lint corrections.
+
+Actual agent-browser checks measured every first table column at 192px with the
+default 16px font across Overview, Compact, Balanced, Roomy, and Comfortable.
+The fixed width is `12rem`; horizontal scrolling intentionally replaces the
+initial requirement to fit four banks within 1,280px. Computed CSS from
+css-view confirms solid oxide failed-turn marks and the reference's 135-degree
+oxide/amber blocked pattern. The dock reserves a right-hand column without a
+modal, body scroll lock, or inaccessible final workflow column. A 390px
+viewport stacks the inspector and retains horizontal board scrolling without
+document overflow. Empty placeholders have no hover feedback.
+
+Real-browser fault injection also supplied non-SSE responses to EventSource.
+The client fetched 14 fresh snapshots while responses remained invalid, then
+reached Connected on its fifteenth snapshot once normal service resumed. This
+confirms permanent browser transport failure recovers without reloading.
+
+A real local fixture update retained the same task button and displayed one
+900ms pulse; reduced-motion emulation hid its animation. Automated interaction
+tests cover initial snapshots, duplicate revisions, moves, expiry, filters,
+focus restoration and connection cancellation. Accessibility inspection found
+zero automated violations and one incomplete contrast category requiring manual
+inspection; this does not establish complete WCAG conformance.
+
+The fresh read-only `leynos` catalogue contained 2,764 sessions and completed
+in 8.269 seconds without an observer. Follow-up runtime validation used the
+existing private live journal plus an isolated synthetic journal. Only the
+validation-owned API and browser processes were stopped afterwards; private
+journals remain available. No Lody session or PR was changed.
+
+On 10 November 2026, CodeRabbit 0.9.3 completed the follow-up
+`3994e65..ee829f9` committed review of 16 files. It emitted zero findings, but
+reported `completed_with_warnings` and “Review completed with unverified
+findings”. The output supplied no finding or explanation for that warning. This
+is a completed assessment with a service limitation, not a verified clean
+review. The preceding full `bbb1bee..3994e65` review covered 87 files; its five
+reported follow-ups are addressed in the two later implementation commits.
+
+CodeScene 1.0.36 reassessed the full `bbb1bee..ee829f9` committed range and
+confirmed the same single documented protocol advisory, with no new concerns.
+The implementation and follow-up commits pass the required quality gates. The
+final documentation-only commit updates this acceptance record and design
+status; its Markdown, spelling, formatting and Mermaid gates pass separately.
