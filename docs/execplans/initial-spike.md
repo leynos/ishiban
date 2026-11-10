@@ -681,3 +681,26 @@ and complexity findings prompted bounded turn-page SQL and terminal-stage
 classification helpers. The focused repair suite passes 65 tests, the Nose gate
 passes, and local CodeScene reports 10.00 for each changed runtime and test
 file checked. Full repository gates remain for the integration pass.
+
+### Second hosted assessment bounds
+
+The second hosted assessment at PR comment `6774674032` identifies two
+remaining public-response bounds. A version 1 detail cursor embedded accepted
+identifiers and could exceed its own parser limit. Version 2 instead carries a
+fixed-width structured scope digest, event ID, and inclusive rank within that
+event's turn group. The reader counts the rank in its existing read transaction
+and resumes with bounded lookahead. Long turn and scope identifiers, malformed
+and version 1 tokens, and issued-cursor round trips have focused regressions.
+Concurrent updates can shift ranks because detail reads are not snapshots
+across requests.
+
+The journal and sidecar retain complete private active-turn facts. Public
+snapshot, detail, SSE, and single and batch lazy activity responses now apply
+the same 100-turn preview after activity restoration. They carry exact count,
+truncation, and a semantic full-set revision so hidden same-count changes can
+still produce a meaningful update cue. The inspector discloses a truncated
+count while retaining its Lody session link. No database migration or private
+working-set bound is claimed;
+[ADR 006](../adr-006-public-turn-previews-and-cursors.md) records the boundary
+and trade-off. Local red tests reproduced both unbounded behaviours; integrated
+gates and hosted reassessment remain pending.

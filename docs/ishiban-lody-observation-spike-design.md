@@ -257,6 +257,13 @@ compatibility, but expose only bounded, normalized fields via the public API.
 This is an append-only spike with **no retention pruning**; document that
 database growth needs a later policy.
 
+[ADR 006](adr-006-public-turn-previews-and-cursors.md) bounds the public
+`activeTurns` array to a deterministic 100-turn preview after sidecar activity
+restoration. An exact count, truncation flag, and full-set semantic revision
+retain the visible meaning of hidden turns. The private projection and source
+payload remain complete; this response boundary does not bound private JSON,
+SQL decoding, process memory, or the byte length of individual fields.
+
 ### Projection merge rules
 
 - `snapshot` / `session.changed` with `source: persisted`: update current
@@ -290,13 +297,17 @@ loopback needs authentication and transport security before it is shared.
 
 Session detail returns at most 100 retained turns in ascending
 `(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`
-is a bounded URL-safe continuation bound to the workspace and session; it is
+is a fixed-size URL-safe version 2 continuation with a structured scope digest,
+event ID, and inclusive rank within that event's turn group. The rank is
+counted in the same read transaction and collation as the page query. It is
 `null` after the final page. Clients pass it as `turnCursor` on the next detail
-request. Malformed or foreign continuations return HTTP 400. Every request
-reads the current materialized projection in its own database transaction, so
-concurrent turn updates can change later pages; this cursor does not promise a
-frozen historical snapshot. The session projection and the 30 most recent
-provenance events remain available on each page.
+request. Malformed, foreign, or version 1 continuations return HTTP 400;
+clients restart at the first page after an upgrade. Every request reads the
+current materialized projection in its own database transaction, so concurrent
+turn updates can shift ranks and change later pages. This cursor does not
+promise a frozen historical snapshot. The public session preview and 30 most
+recent provenance events remain available on each page. See
+[ADR 006](adr-006-public-turn-previews-and-cursors.md).
 
 Example `GET /api/v1/snapshot` shape (illustrative data):
 

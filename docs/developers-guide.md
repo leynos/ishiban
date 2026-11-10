@@ -563,7 +563,27 @@ the Bun extension during unused-snapshot discovery, while both runners retain
 their own snapshot assertions and unused Python snapshot checks.
 
 `detail_pagination` owns only the versioned, bounded continuation encoding and
-identity validation for session-turn pages. `storage.reader` owns keyset SQL
-ordering and the 100-turn limit; `Store.detail` owns its read transaction, and
-the Falcon route maps malformed cursors to HTTP 400. The cursor is a position
-in current materialized state, not a replay cursor or a frozen snapshot.
+identity validation for session-turn pages. Version 2 hashes a structured
+workspace/session pair and carries an event ID plus rank within that event's
+turn group, so token size ignores identifier length. `storage.reader` counts
+that rank under the same SQLite transaction and collation used by the ordered
+100-turn page. Continuing scans from the event ID and skips the rank, which can
+shift under concurrent writes; version 1 tokens require a first-page restart.
+`Store.detail` owns its read transaction, and the Falcon route maps malformed
+cursors to HTTP 400. The cursor is a position in current materialized state,
+not a replay cursor or frozen snapshot.
+
+`public_projection.public_session` is the sole transport copy boundary for
+active-turn previews. It runs after activity sidecar overlays in snapshot,
+detail, SSE, and single and batch activity responses. It selects a stable
+100-turn preview and derives exact count, truncation, and a full-set digest
+from user turn identity, state, and error. Stored projections and sidecar cache
+entries stay complete. This response bound does not limit private JSON, SQL
+decode work, process memory, or individual field byte length. See
+[ADR 006](adr-006-public-turn-previews-and-cursors.md) for the trade-off and
+reuse scope.
+
+`tests/board-fixtures.unknownRuntime` supplies only the shared unknown activity
+fields for board pulse and client retention tests. Each test keeps its own
+collector metadata, revision transitions, and assertions. It is not a general
+session or catalogue fixture.

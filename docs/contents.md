@@ -5,6 +5,8 @@ reference material.
 
 ## Design and reference
 
+- [Public turn previews and fixed-size cursors](adr-006-public-turn-previews-and-cursors.md)
+  bounds public active-turn arrays and detail continuation size.
 - [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
   bounds concurrent lazy reads and suppresses unchanged startup pulses.
 

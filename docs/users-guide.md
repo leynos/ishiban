@@ -104,13 +104,18 @@ previous PR facts may be cached and stale.
 ## Inspect the read API
 
 - `GET /api/v1/snapshot` returns session projections, collector health, and one
-  transactionally consistent replay cursor.
+  transactionally consistent replay cursor. Each public session includes at
+  most 100 active turns, an exact `activeTurnCount`, an `activeTurnsTruncated`
+  flag, and an `activeTurnsRevision` for changes hidden beyond the preview. The
+  inspector says how many active turns are shown when the list is truncated.
 - `GET /api/v1/sessions/{session_id}` returns the current session, up to 100
   known turns, and bounded recent provenance. When `nextTurnCursor` is
   non-null, request
   `GET /api/v1/sessions/{session_id}?turnCursor=<nextTurnCursor>` for the next
-  page. A `null` cursor ends the turn list. Invalid or foreign continuations
-  return HTTP 400; a missing session returns HTTP 404.
+  page. A `null` cursor ends the turn list. Invalid, foreign, or older version
+  1 continuations return HTTP 400; restart at the first page after an upgrade.
+  A missing session returns HTTP 404. Each request reads current state, so
+  concurrent updates can change later pages.
 - `GET /api/v1/events?after=N` replays committed projections after cursor `N`
   and then follows new commits. Browser reconnect uses `Last-Event-ID` in
   preference to the original URL cursor.
