@@ -555,3 +555,37 @@ and response bounds, disconnect cleanup, four-way concurrency, queue limits and
 metadata rebase versus execution invalidation. The rebase regression failed
 before the Store change and passes afterwards. Final gates and local reviews
 are recorded below when complete.
+
+### Batched activity acceptance
+
+Commit `999f28c` adds progressive activity batches, four shared observer slots,
+metadata-safe in-flight reuse and semantic restart pulse baselines. The final
+candidate passes build, formatting, full lint, type checking, audit,
+Markdown/spelling, Mermaid and Makefile validation. The full suites report 186
+passing Python tests, 86 passing Bun tests and four passing opt-in Chromium
+regressions. Six default Bun cases remain skipped. All 118 source files fit the
+400-line limit.
+
+An isolated Falcon API and deterministic read-only Lody fixture validate the
+actual browser batch route. Four uncached observations start within about 12
+milliseconds of one another; all eight fixture marks eventually resolve without
+enrichment pulses. Unit and ASGI tests separately establish that a completed
+member arrives before its blocked neighbour. These fixture timings are not a
+latency benchmark for the live Lody workspace. Validation-owned processes and
+the browser profile are stopped; the user's API is preserved.
+
+CodeScene 1.0.36 reviews `996dc77..999f28c`. Retained advisories cover the
+batch preparation phases and identifier validation, the lazy reader's ownership
+guards, two streaming browser tests and independent invalid-request test
+arrangements. The explicit cache/known/pending phases, trust-boundary checks,
+cache/in-flight/overflow decisions and independent assertions remain useful at
+these bounded sizes. CodeScene thresholds and suppressions are unchanged.
+
+CodeRabbit 0.9.4 completes the same 27-file range with one minor documentation
+finding and four trivial suggestions. The follow-up adds the missing acceptance
+record, covers mixed cached/fresh/unavailable results and actual CLI subprocess
+integration, shares test lifecycle setup, and bounds duplication exceptions. An
+operational storage failure is contained within its pending batch member;
+unrelated programming errors still propagate. Its regression fails before the
+handler change and passes afterwards. HTTP body accumulation is shared between
+preferences and activity batches while endpoint limits remain independent.

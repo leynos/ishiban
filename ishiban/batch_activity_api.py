@@ -9,6 +9,7 @@ from falcon import asgi
 from sqlalchemy.exc import OperationalError
 
 from ishiban.activity_api import resolve_activity, restore_cached_activities
+from ishiban.request_body import read_bounded_body
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -41,7 +42,10 @@ class BatchSessionActivityResource:
 
         For example, ``{"sessionIds": ["s1", "s2"]}`` produces two frames.
         """
-        session_ids = _decode_session_ids(await _read_bounded_body(req))
+        body = await read_bounded_body(
+            req, max_bytes=MAX_BATCH_BODY_BYTES, error_message=MAX_BATCH_BODY_ERROR
+        )
+        session_ids = _decode_session_ids(body)
         resp.content_type = "application/x-ndjson"
         resp.set_header("X-Accel-Buffering", "no")
         resp.stream = self._stream_results(session_ids)
@@ -136,31 +140,6 @@ class BatchSessionActivityResource:
             )
         except falcon.HTTPNotFound, OperationalError:
             return session_id, None
-
-
-async def _read_bounded_body(req: asgi.Request) -> bytes:
-    """Read no more than the configured byte limit before JSON decoding.
-
-    For example, the first byte beyond 8,192 raises HTTP 413.
-
-    Returns
-    -------
-    bytes
-        The complete body when it is within the configured limit.
-
-    Raises
-    ------
-    falcon.HTTPContentTooLarge
-        If the declared or streamed body exceeds 8,192 bytes.
-    """
-    if req.content_length is not None and req.content_length > MAX_BATCH_BODY_BYTES:
-        raise falcon.HTTPContentTooLarge(description=MAX_BATCH_BODY_ERROR)
-    body = bytearray()
-    async for chunk in req.stream:
-        if len(body) + len(chunk) > MAX_BATCH_BODY_BYTES:
-            raise falcon.HTTPContentTooLarge(description=MAX_BATCH_BODY_ERROR)
-        body.extend(chunk)
-    return bytes(body)
 
 
 def _decode_session_ids(body: bytes) -> list[str]:

@@ -16,6 +16,8 @@ import msgspec
 from falcon import asgi
 from itsdangerous import BadData, URLSafeTimedSerializer
 
+from ishiban.request_body import read_bounded_body
+
 COOKIE_NAME = "ishiban_interface_state"
 COOKIE_MAX_AGE = 365 * 24 * 60 * 60
 COOKIE_SALT = "ishiban.interface-state.v1"
@@ -122,20 +124,20 @@ class InterfaceStateResource:
     async def on_post(self, req: asgi.Request, resp: asgi.Response) -> None:
         """Validate a bounded JSON update and issue its signed cookie.
 
+        The shared reader rejects bodies above 1,024 bytes with HTTP 413.
+
         Raises
         ------
         falcon.HTTPBadRequest
             If the body is malformed or contains unsupported enum values.
-        falcon.HTTPContentTooLarge
-            If the request body exceeds 1,024 bytes.
         falcon.HTTPUnsupportedMediaType
             If the request is not application/json.
         """
         if req.content_type != "application/json":
             raise falcon.HTTPUnsupportedMediaType
-        if req.content_length is not None and req.content_length > MAX_REQUEST_BYTES:
-            raise falcon.HTTPContentTooLarge(description=MAX_REQUEST_ERROR)
-        body = await _read_bounded_body(req)
+        body = await read_bounded_body(
+            req, max_bytes=MAX_REQUEST_BYTES, error_message=MAX_REQUEST_ERROR
+        )
         try:
             state = msgspec.json.decode(body, type=InterfaceState)
         except msgspec.DecodeError as error:
@@ -143,30 +145,6 @@ class InterfaceStateResource:
             raise falcon.HTTPBadRequest(description=message) from error
         self.cookies._set_cookie(resp, state, secure=req.scheme == "https")
         resp.media = _state_mapping(state)
-
-
-async def _read_bounded_body(req: asgi.Request) -> bytes:
-    """Read at most 1,025 bytes so oversized bodies fail before decoding.
-
-    For example, 1,024 bytes are accepted for validation and the next byte is
-    enough to reject the request.
-
-    Returns
-    -------
-    bytes
-        The complete request body after the size check.
-
-    Raises
-    ------
-    falcon.HTTPContentTooLarge
-        If the request exceeds the configured byte limit.
-    """
-    body = bytearray()
-    async for chunk in req.stream:
-        if len(body) + len(chunk) > MAX_REQUEST_BYTES:
-            raise falcon.HTTPContentTooLarge(description=MAX_REQUEST_ERROR)
-        body.extend(chunk)
-    return bytes(body)
 
 
 def _state_mapping(state: InterfaceState) -> dict[str, str]:

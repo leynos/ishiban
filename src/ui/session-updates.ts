@@ -30,7 +30,6 @@ function sameUnorderedFacts<Item>(
   current: readonly Item[],
   keyOf: (item: Item) => string
 ): boolean {
-  if (previous === current) return true;
   if (previous.length !== current.length) return false;
   const previousKeys = previous.map((item) => keyOf(item)).toSorted();
   const currentKeys = current.map((item) => keyOf(item)).toSorted();
@@ -49,8 +48,8 @@ function pullRequestFactKey(pullRequest: PullRequestFact): string {
 
 /** Compare latest-turn outcome fields without object-identity noise. */
 function sameLatestTurn(previous: TurnFact | null, current: TurnFact | null): boolean {
-  if (previous === current) return true;
-  if (previous === null || current === null) return false;
+  if (previous === null) return current === null;
+  if (current === null) return false;
   return turnFactKey(previous) === turnFactKey(current);
 }
 
@@ -75,7 +74,6 @@ function sameWorkflowMetadata(previous: Session, current: Session): boolean {
 
 /** Compare fields that describe the session's board and inspector metadata. */
 function sameSessionMetadata(previous: Session, current: Session): boolean {
-  if (previous === current) return true;
   return (
     sameBoardMetadata(previous, current) &&
     sameWorkflowMetadata(previous, current) &&

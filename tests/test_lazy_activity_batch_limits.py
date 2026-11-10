@@ -13,15 +13,15 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 
-def _slow_lody(
-    tmp_path: pathlib.Path, delay: float
-) -> tuple[pathlib.Path, pathlib.Path]:
+def _slow_service(
+    tmp_path: pathlib.Path, delay: float, *, timeout: float = 20.0
+) -> tuple[lazy_activity.LazyActivity, pathlib.Path]:
     """Create a valid fake observer whose response arrives after a short delay.
 
     Returns
     -------
-    tuple of pathlib.Path
-        The executable and its invocation log.
+    tuple of LazyActivity and pathlib.Path
+        The observer service and its invocation log.
     """
     response = {
         "ok": True,
@@ -39,7 +39,11 @@ def _slow_lody(
     response_code = (
         f"time.sleep({delay!r})\npayload = {payload!r}.replace('@SESSION_ID@', args[2])"
     )
-    return create_fake_lody(tmp_path, response_code)
+    executable, call_log = create_fake_lody(tmp_path, response_code)
+    service = lazy_activity.LazyActivity(
+        "workspace-1", "leynos", str(executable), timeout=timeout
+    )
+    return service, call_log
 
 
 @pytest.mark.asyncio
@@ -49,8 +53,7 @@ async def test_unique_inflight_limit_reuses_keys_and_rejects_overflow(
 ) -> None:
     """Existing keys join while excess unique observations fail closed."""
     monkeypatch.setattr(lazy_activity, "MAX_IN_FLIGHT_OBSERVATIONS", 2)
-    executable, call_log = _slow_lody(tmp_path, 0.3)
-    service = lazy_activity.LazyActivity("workspace-1", "leynos", str(executable))
+    service, call_log = _slow_service(tmp_path, 0.3)
     pending = [
         asyncio.create_task(service.read(f"session-{index}", 1)) for index in range(2)
     ]
@@ -77,10 +80,7 @@ async def test_queued_observation_gets_full_child_timeout(
 ) -> None:
     """Semaphore wait time does not consume the queued child's process budget."""
     monkeypatch.setattr(lazy_activity, "MAX_CONCURRENT_OBSERVERS", 1)
-    executable, _call_log = _slow_lody(tmp_path, 0.25)
-    service = lazy_activity.LazyActivity(
-        "workspace-1", "leynos", str(executable), timeout=0.4
-    )
+    service, _call_log = _slow_service(tmp_path, 0.25, timeout=0.4)
     results = await asyncio.gather(
         service.read("session-first", 1),
         service.read("session-queued", 1),
@@ -98,8 +98,7 @@ async def test_total_observation_lifetime_includes_semaphore_wait(
 ) -> None:
     """A queued observer expires at the service-wide lifetime boundary."""
     monkeypatch.setattr(lazy_activity, "MAX_CONCURRENT_OBSERVERS", 1)
-    executable, call_log = _slow_lody(tmp_path, 0.2)
-    service = lazy_activity.LazyActivity("workspace-1", "leynos", str(executable))
+    service, call_log = _slow_service(tmp_path, 0.2)
     first = asyncio.create_task(service.read("session-first", 1))
     await wait_for_calls(call_log)
     monkeypatch.setattr(lazy_activity, "MAX_OBSERVATION_LIFETIME_SECONDS", 0.05)

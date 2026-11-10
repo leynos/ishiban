@@ -337,14 +337,14 @@ reason = "SnapshotResource.on_get and InterfaceStateResource.on_get/on_post call
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
-full_name = ["ishiban.interface_state._read_bounded_body", "ishiban.interface_state._state_mapping"]
+full_name = ["ishiban.interface_state._state_mapping"]
 reason = "InterfaceStateResource.on_post reads bounded bodies and maps validated state; on_get and the signer also map state. Skylos does not propagate reachability through these Falcon handlers."
 
 
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
-full_name = ["ishiban.batch_activity_api._read_bounded_body", "ishiban.batch_activity_api._decode_session_ids"]
+full_name = ["ishiban.request_body.read_bounded_body", "ishiban.batch_activity_api._decode_session_ids"]
 reason = "BatchSessionActivityResource.on_post invokes these bounded decoders; Skylos does not propagate this Falcon handler dispatch path."
 
 [[tool.skylos.dead_code.entrypoints]]
@@ -542,16 +542,4 @@ reason = "Keep a one-line null guard local to browser activity retention and ind
 
 [[tool.duplication_gate.allow]]
 members = ["src/ui/session-updates.ts::recordSessionCue", "src/ui/session-updates.ts::sameSessionMetadata", "src/ui/session-updates.ts::hasMeaningfulChange", "src/ui/session-updates.ts::sameRuntime"]
-reason = "Keep explicit semantic comparison guards separate from cue mutation; their short branches have distinct runtime, metadata, and animation responsibilities. See docs/developers-guide.md."
-
-[[tool.duplication_gate.allow]]
-unit = "src/ui/session-updates.ts"
-reason = "Keep short identity fast paths on independent array, turn, metadata, and runtime comparators; extracting a shared boolean guard would hide their distinct comparison policies. See docs/developers-guide.md."
-
-[[tool.duplication_gate.allow]]
-members = ["ishiban/batch_activity_api.py", "ishiban/interface_state.py"]
-reason = "Keep the six-line bounded body loops explicit at separate HTTP trust boundaries with independently specified byte limits and diagnostics. See docs/developers-guide.md."
-
-[[tool.duplication_gate.allow]]
-unit = "tests/test_lazy_activity_batch_limits.py"
-reason = "Keep independent queue-capacity and lifetime tests explicit; their three-line fake-process arrangement overlaps but their scheduling and assertions differ. See docs/developers-guide.md."
+reason = "Keep semantic comparison separate from cue mutation; these named functions have distinct runtime, metadata, and animation responsibilities. Shared identity fast paths have been removed. See docs/developers-guide.md."

@@ -461,19 +461,33 @@ activity and semantic pulse comparisons. `batch_activity_api` owns only bounded
 HTTP decoding and response-waiter cleanup; `activity_api.resolve_activity`
 shares projection restoration and lookup precedence with the single-session
 route. `src/activity-batch.ts` owns incremental UTF-8 NDJSON decoding and
-Effect frame validation, with one-MiB frame and eight-MiB response limits.
-These helpers are specific to activity reads and are not generic transport
-APIs. The browser pipelines two four-member batches; the shared reader permits
-four children and 64 pending observations with a 45-second total lifetime.
-Metadata replay preserves in-flight identity ownership and execution-watermark
-reuse. The dead-code configuration records the batch handler's exact bounded
-decoders and msgspec request type as runtime entry points; Falcon dispatch is
-not propagated by Skylos.
+Effect frame validation, with a 1,048,576-character frame limit and an
+eight-MiB response limit. These helpers are specific to activity reads and are
+not generic transport APIs. The browser pipelines two four-member batches; the
+shared reader permits four children and 64 pending observations with a
+45-second total lifetime. Metadata replay preserves in-flight identity
+ownership and execution-watermark reuse. The dead-code configuration records
+the batch handler's exact bounded decoders and msgspec request type as runtime
+entry points; Falcon dispatch is not propagated by Skylos.
 
-The batch decoder and preference endpoint retain independent short bounded body
-loops because their limits and diagnostics belong to separate HTTP contracts.
-Semantic cue comparators retain explicit fast paths and boolean guards rather
-than sharing animation mutation. Independent queue-bound tests retain their own
-process arrangement; browser batch tests share controlled board setup. These
-considered duplication exceptions are recorded by exact module or symbol in the
-gate configuration.
+The batch decoder and preference endpoint share
+`request_body.read_bounded_body`, which accumulates HTTP bodies only. Each
+caller supplies its own byte limit and diagnostic and owns JSON decoding. This
+helper is restricted to bounded JSON API requests; CLI transport ownership
+remains separate. Semantic cue comparison stays separate from animation
+mutation, with a single unchanged-object fast path before comparison.
+Queue-bound tests share their fake-service setup; browser batch tests share
+controlled board setup. Batch API tests reuse session seeding and cache setup
+from `tests/batch_activity_support.py` and retain independent assertions.
+
+Command-response fixtures use the dev-only `cmd-mox` 0.2.0 dependency and the
+plugin registered in `tests/conftest.py`. The exact `pytest_plugins` runtime
+entry-point name joins `pytestmark` in the Vulture configuration. Prefer its
+`cmd_mox` fixture for ordinary CLI outcomes and assert the recorded arguments
+and invocation count. The fixture owns replay, verification and cleanup; do not
+duplicate those lifecycle calls. Dynamic responses use a command spy with an
+`Invocation` to `Response` handler. The batch ASGI test still launches real
+shim subprocesses, without writing a private executable or parsing call logs.
+Keep dedicated real process fixtures for tests of transport chunking, delayed
+EOF, timeout and cancellation behaviour that command-response mocks do not
+model.
