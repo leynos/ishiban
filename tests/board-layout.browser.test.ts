@@ -23,7 +23,9 @@ async function browser(...args: string[]): Promise<string> {
     new Response(child.stderr).text(),
     child.exited
   ]);
-  if (status !== 0) throw new Error(`Browser command failed: ${error}`);
+  if (status !== 0) {
+    throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
+  }
   return output.trim();
 }
 
@@ -72,6 +74,29 @@ function publishObservation(cursor: number): void {
   for (const sink of sinks) sink.enqueue(message);
 }
 
+/** Observe one task revision only; for example, watchPulse(snapshot.cursor + 1). */
+async function watchPulse(cursor: number): Promise<void> {
+  const selector = JSON.stringify(
+    `[data-session-id="${firstSession(snapshot).sessionId}"] [data-session-update-pulse="${cursor}"]`
+  );
+  await browser(
+    'eval',
+    `(()=>{
+    window.layoutObserver?.disconnect();window.layoutPulse=null;
+    window.layoutObserver=new MutationObserver(()=>{
+      const pulse=document.querySelector(${selector});if(!pulse)return;
+      const task=pulse.parentElement,p=pulse.getBoundingClientRect(),b=task.getBoundingClientRect();
+      const style=getComputedStyle(pulse),owner=getComputedStyle(task);
+      window.layoutPulse={cursor:${cursor},pulseWidth:p.width,pulseHeight:p.height,
+        taskWidth:b.width,taskHeight:b.height,parentPosition:owner.position,parentOverflow:owner.overflow,
+        display:style.display,animation:style.animationName};
+    });
+    window.layoutObserver.observe(document.querySelector('.board-scroll'),{subtree:true,childList:true});
+    return true;
+  })()`
+  );
+}
+
 describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   beforeAll(async () => {
     server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
@@ -85,9 +110,12 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   });
 
   afterAll(async () => {
-    await browser('close');
-    await server?.stop(true);
-    sinks.clear();
+    try {
+      await browser('close');
+    } finally {
+      await server?.stop(true);
+      sinks.clear();
+    }
   });
 
   it('hides compact evidence without hiding the activity glyph or accessible evidence', async () => {
@@ -125,27 +153,23 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
 
   it('bounds a live list pulse to its task button', async () => {
     await browser('find', 'role', 'button', 'click', '--name', 'List', '--exact');
-    await browser(
-      'eval',
-      `(()=>{window.layoutPulse=null;
-      new MutationObserver(()=>{const pulse=document.querySelector('.session-update-pulse');
-        if(!pulse)return;const p=pulse.getBoundingClientRect(),b=pulse.parentElement.getBoundingClientRect();
-        const style=getComputedStyle(pulse);
-        window.layoutPulse={pulseWidth:p.width,pulseHeight:p.height,taskWidth:b.width,taskHeight:b.height,
-          display:style.display,animation:style.animationName};
-      }).observe(document.querySelector('.board-scroll'),{subtree:true,childList:true});return true;})()`
-    );
+    await watchPulse(snapshot.cursor + 1);
     expect(sinks.size).toBeGreaterThan(0);
     publishObservation(snapshot.cursor + 1);
-    await browser('wait', '--fn', 'window.layoutPulse !== null');
+    await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 1}`);
     const bounds = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    expect(bounds.cursor).toBe(snapshot.cursor + 1);
+    expect(bounds.parentPosition).toBe('relative');
+    expect(bounds.parentOverflow).toBe('clip');
     expect(bounds.pulseWidth).toBeLessThanOrEqual(bounds.taskWidth * 1.5 + 8);
     expect(bounds.pulseHeight).toBeLessThanOrEqual(bounds.taskHeight * 1.5 + 8);
     await browser('set', 'media', 'light', 'reduced-motion');
-    await browser('eval', 'window.layoutPulse=null');
+    await browser('wait', '--fn', 'matchMedia("(prefers-reduced-motion: reduce)").matches');
+    await watchPulse(snapshot.cursor + 2);
     publishObservation(snapshot.cursor + 2);
-    await browser('wait', '--fn', 'window.layoutPulse !== null');
+    await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 2}`);
     const reduced = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    expect(reduced.cursor).toBe(snapshot.cursor + 2);
     expect(reduced.animation).toBe('none');
     expect(reduced.display).toBe('none');
   });

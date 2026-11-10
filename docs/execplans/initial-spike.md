@@ -329,3 +329,21 @@ the docked inspector. Positioned list buttons clip their pulse locally, and
 reduced-motion preferences suppress list pulses as well as table pulses. The
 opt-in browser suite serves synthetic snapshots and real SSE from Bun; it does
 not modify Lody data or depend on the authenticated catalogue.
+
+Validation passes for commit `4ac4653`: browser build, formatting, full lint,
+type checking, 43 Bun tests, 98 Python tests, Markdown/spelling, and Mermaid.
+The three opt-in Chromium regressions also pass. On the authenticated live
+page, css-view confirms a 1,280px main area and scroll pane; opening the
+inspector reduces the pane to 880px while retaining horizontal scroll. All five
+densities retain a 192px first column at the default font size. A 390px
+viewport keeps document width at 390px and scrolls the pane independently.
+
+CodeScene's `e110801..4ac4653` committed delta completed with no new issues.
+CodeRabbit completed the same seven-file review with four test-harness
+findings. Follow-up changes include command arguments, exit status and output
+in browser errors; stop the fixture server even if browser cleanup fails; check
+the pulse's computed clipping and positioned owner; and match each pulse to its
+exact task and event revision after media preferences settle. All three browser
+regressions pass again with these stricter checks. The review service reported
+`completed_with_warnings` and “unverified findings”; the reported findings were
+checked against the implementation and addressed locally.
