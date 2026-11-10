@@ -1,5 +1,7 @@
 """Persist lazy session runtime outside the replayable journal."""
 
+import asyncio
+import sqlite3
 import time
 import typing as typ
 
@@ -7,6 +9,7 @@ import msgspec
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
 
 from ishiban.protocol import SESSION_STATES
 from ishiban.storage.database import create_engine
@@ -15,6 +18,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 MAX_ROWS_PER_WORKSPACE = 10_000
+INITIALIZE_ATTEMPTS = 5
 RUNTIME_FIELDS = (
     "state",
     "latestTurn",
@@ -146,12 +150,41 @@ class ActivityCache:
         self._initialized = False
 
     async def initialize(self) -> None:
-        """Create the cache-only table without migrating the journal database."""
+        """Create the cache table safely across concurrent first opens.
+
+        For example, simultaneous API and collector startup share one sidecar.
+
+        Raises
+        ------
+        sqlalchemy.exc.OperationalError
+            If startup fails or SQLite remains busy after five attempts.
+        """
         if self._initialized:
             return
-        async with self._engine.begin() as connection:
-            await connection.run_sync(_METADATA.create_all)
-        self._initialized = True
+        for attempt in range(INITIALIZE_ATTEMPTS):
+            try:
+                async with self._engine.begin() as connection:
+                    await connection.execute(
+                        sa.schema.CreateTable(_RUNTIME_CACHE, if_not_exists=True)
+                    )
+            except OperationalError as error:
+                if not isinstance(error.orig, sqlite3.OperationalError):
+                    raise
+                if (
+                    error.orig.sqlite_errorcode & 0xFF
+                    not in {
+                        sqlite3.SQLITE_BUSY,
+                        sqlite3.SQLITE_LOCKED,
+                    }
+                    or attempt == INITIALIZE_ATTEMPTS - 1
+                ):
+                    raise
+                # WAL setup can contend before the idempotent DDL is reached.
+                # Yield so the other connection can finish its first open.
+                await asyncio.sleep(0.05)
+            else:
+                self._initialized = True
+                return
 
     async def close(self) -> None:
         """Dispose the sidecar engine and allow a later initialize call."""

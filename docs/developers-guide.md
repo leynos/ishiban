@@ -423,8 +423,12 @@ and `Store.events` remain raw readers. `Store.activity_snapshot` and
 lookup revision before caching and returns a freshly checked view. API replay
 decorates its own copies, preserving the stored event and its cursor. The
 sidecar uses SQLAlchemy and bounded upserts without a journal migration.
-Generated cache-ordering tests vary execution watermarks and Unicode metadata
-to check invalidation, metadata preservation and projection immutability.
+Sidecar creation uses SQL-level `IF NOT EXISTS` and bounded asynchronous
+retries for SQLite busy/locked errors during initial WAL setup, allowing the
+API and collector to start concurrently. Other startup failures propagate
+immediately. Generated cache-ordering tests vary execution watermarks and
+Unicode metadata to check invalidation, metadata preservation and projection
+immutability.
 
 The cache and journal retain separate initialization guards because they own
 different engines. Their short guards, explicit envelope fixtures and

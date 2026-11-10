@@ -3,6 +3,7 @@
 import asyncio
 import pathlib
 import sqlite3
+import types
 import typing as typ
 
 import msgspec
@@ -278,7 +279,9 @@ async def test_cache_prunes_oldest_rows_per_workspace(
     """The sidecar retains only the configured newest workspace rows."""
     monkeypatch.setattr(activity_cache, "MAX_ROWS_PER_WORKSPACE", 2)
     save_times = iter((100, 200, 300))
-    monkeypatch.setattr(activity_cache.time, "time_ns", lambda: next(save_times))
+    monkeypatch.setattr(
+        activity_cache, "time", types.SimpleNamespace(time_ns=lambda: next(save_times))
+    )
     cache = await _initialized_cache(_journal_url(tmp_path / "journal.sqlite3"))
     try:
         await cache.remember(_projection("s1", state="idle"))
@@ -344,4 +347,21 @@ async def test_memory_journal_urls_keep_an_independent_memory_cache(
         await reopened.close()
     assert restored == _projection(), (
         "A fresh memory cache must not inherit another engine's activity rows."
+    )
+
+
+@pytest.mark.asyncio
+async def test_fresh_cache_initializes_concurrently(tmp_path: pathlib.Path) -> None:
+    """Independent collector and API engines can create the same fresh sidecar."""
+    url = _journal_url(tmp_path / "simultaneous.sqlite3")
+    first = ActivityCache(url, "workspace-1")
+    second = ActivityCache(url, "workspace-1")
+    try:
+        await asyncio.gather(first.initialize(), second.initialize())
+        await first.remember(_projection(state="idle"))
+        restored = (await second.merge([_projection()]))[0]
+    finally:
+        await asyncio.gather(first.close(), second.close())
+    assert restored["state"] == "idle", (
+        "Both startup paths must share one usable cache after simultaneous creation."
     )
