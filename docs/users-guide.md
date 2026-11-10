@@ -298,8 +298,9 @@ Collected activity, failed outcomes and supplied error details survive page
 refreshes and API or collector restarts. They are stored in a local SQLite
 sidecar, shared by windows viewing the same workspace. Newer execution evidence
 replaces them; metadata or unknown startup snapshots retain them. The displayed
-observation time describes when the runtime facts were read. Removing the
-sidecar clears these last-known observations. Previously lost browser-only
+observation time describes when the runtime facts were read. To clear these
+last-known observations, stop the API and collector, remove the sidecar, then
+restart both processes and refresh the browser. Previously lost browser-only
 results need to be collected again.
 
 The inspector prefers a known PR name as its linked heading, with the session

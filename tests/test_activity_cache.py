@@ -3,7 +3,6 @@
 import asyncio
 import pathlib
 import sqlite3
-import types
 import typing as typ
 
 import msgspec
@@ -278,14 +277,17 @@ async def test_cache_prunes_oldest_rows_per_workspace(
 ) -> None:
     """The sidecar retains only the configured newest workspace rows."""
     monkeypatch.setattr(activity_cache, "MAX_ROWS_PER_WORKSPACE", 2)
-    save_times = iter((100, 200, 300))
-    monkeypatch.setattr(
-        activity_cache, "time", types.SimpleNamespace(time_ns=lambda: next(save_times))
-    )
-    cache = await _initialized_cache(_journal_url(tmp_path / "journal.sqlite3"))
+    journal_path = tmp_path / "journal.sqlite3"
+    cache = await _initialized_cache(_journal_url(journal_path))
     try:
         await cache.remember(_projection("s1", state="idle"))
         await cache.remember(_projection("s2", state="running"))
+        with sqlite3.connect(f"{journal_path}.activity.sqlite3") as connection:
+            connection.executemany(
+                "UPDATE activity_runtime_cache SET saved_at_ns = ? "
+                "WHERE workspace_id = ? AND session_id = ?",
+                [(0, "workspace-1", "s1"), (1, "workspace-1", "s2")],
+            )
         await cache.remember(_projection("s3", state="waiting"))
         restored = await cache.merge([
             _projection("s1"),

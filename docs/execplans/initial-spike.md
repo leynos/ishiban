@@ -1,9 +1,9 @@
 # Ishiban initial observation proof of concept
 
-Status: the implementation is validated through `be2bd5e`; persistence fixes
-for collected on-demand outcomes are in progress. Earlier review dispositions
-are recorded below. The full implementation review starts at `bbb1bee`. No
-remote publication or Lody writes are authorized.
+Status: implementation and persistent on-demand observations are complete and
+validated through `6d0ddd5`, with the final fixture and acceptance record
+below. The full implementation review starts at `bbb1bee`. No remote
+publication or Lody writes are authorized.
 
 ## Purpose
 
@@ -488,7 +488,49 @@ unknown projection must not resurrect it. Run the repository gates and local
 reviews, record advisory dispositions, commit completed work, and run the stop
 hook.
 
-Progress: regression tests reproduce snapshot loss; sidecar, watermark and
-browser-retention changes are being integrated. Existing public raw journal
+Progress: all three milestones are complete. Existing public raw journal
 readers remain unchanged. The helper manifest and installed agent roles remain
 those recorded in the conformance basis above.
+
+### Persistence acceptance
+
+Commit `60f3a8e` persists on-demand runtime observations, and `6d0ddd5` makes
+fresh sidecar startup safe under contention. Inspection of the installed Lody
+CLI confirms that `projectSessionCatalog` emits unknown metadata for historical
+sessions. Those startup snapshots do not invalidate collected execution facts.
+
+Real Chromium validation against an isolated Falcon API and deterministic CLI
+retains the failure and its diagnostic after refresh, API restart, a new tab,
+and collector-generation changes with metadata and persisted unknown input. The
+raw journal still contains unknown state while the API restores the cached
+failure. No additional CLI observation is made for those reloads. A newer known
+running turn replaces the failure. API and property tests also verify that a
+subsequent unknown update cannot resurrect superseded failures.
+
+The full runtime candidate passes formatting, lint, type checking, dependency
+audits, Markdown/spelling, Mermaid and Makefile validation. There are 169
+passing Python tests, 76 passing Bun tests, six skipped default Bun cases, and
+four passing opt-in Chromium regressions. The size check covers 111 source
+files; none exceeds 400 lines. Validation-owned processes are stopped, the
+user's API is preserved, and no Lody session is mutated.
+
+CodeRabbit 0.9.4 completes the `84e8998..60f3a8e` review of 22 files with two
+findings: concurrent table creation and the scope of the eviction test clock. A
+new concurrent-startup test also exposes WAL setup contention before table
+creation. SQL-level `IF NOT EXISTS` and bounded SQLite busy/locked retries make
+the test pass. The `60f3a8e..6d0ddd5` focused review completes across three
+files with one trivial clock-fixture suggestion. The final eviction fixture
+uses fixed timestamps written directly to the sidecar, leaving all clocks
+unchanged.
+
+CodeScene 1.0.36 completes the full `84e8998..6d0ddd5` delta. Four files retain
+advisories: cache initialization and writes have complexity 9 at threshold 9,
+with a module mean of 4.07 against 4; the SSE owner has complexity 9 and nested
+branches; activity lookup has nested branches; and two retention tests have
+similar scope-reset scaffolding. Explicit lifecycle ownership, selective SQLite
+retry policy and independent demo/removal assertions are retained. CodeScene
+thresholds and suppressions are unchanged.
+
+Restart both the API and collector once to load these changes. Existing
+browser-only observations require a fresh read; subsequent collected outcomes
+survive restarts. The journal schema does not require a migration.
