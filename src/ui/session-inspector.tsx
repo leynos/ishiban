@@ -159,6 +159,8 @@ function SessionFacts({
     session.activeTurns.length === 0
       ? 'None supplied'
       : session.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
+  const activeTurnCount = session.activeTurnCount ?? session.activeTurns.length;
+  const isActiveTurnPreview = session.activeTurnsTruncated ?? false;
   return (
     <dl className="inspector-facts">
       <dt>Repository</dt>
@@ -180,7 +182,14 @@ function SessionFacts({
       <dt>Last known turn</dt>
       <dd>{latestTurnLabel(session)}</dd>
       <dt>Active turns</dt>
-      <dd>{activeTurnSummary}</dd>
+      <dd>
+        {isActiveTurnPreview ? (
+          <p>
+            Showing {session.activeTurns.length} of {activeTurnCount} active turns.
+          </p>
+        ) : null}
+        {activeTurnSummary}
+      </dd>
       <dt>Observed</dt>
       <dd>{observedAtLabel(session.lastObservedAt)}</dd>
     </dl>

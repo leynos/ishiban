@@ -3,7 +3,7 @@ import {expect, it} from 'bun:test';
 import {Schema} from 'effect';
 import {SessionSchema, SnapshotSchema, type Session, type Snapshot} from '../src/contracts';
 import {createBoardStore, type BoardStore} from '../src/client';
-import {createBoardSnapshot, firstSession} from './board-fixtures';
+import {createBoardSnapshot, firstSession, unknownRuntime} from './board-fixtures';
 
 interface LazyScenario {
   readonly store: BoardStore;
@@ -26,6 +26,9 @@ function createLazyScenario(): LazyScenario {
     lastActivityEventId: 12,
     latestTurn: null,
     activeTurns: [],
+    activeTurnCount: 0,
+    activeTurnsTruncated: false,
+    activeTurnsRevision: '0'.repeat(64),
     lastObservedAt: null
   };
   const snapshot: Snapshot = {
@@ -43,7 +46,10 @@ function createLazyScenario(): LazyScenario {
     source: 'persisted',
     freshness: 'synced',
     latestTurn: {userTurnId: 'lazy-turn', state: 'failed', error: 'retained failure'},
-    activeTurns: [],
+    activeTurns: [{userTurnId: 'lazy-active', state: 'waiting'}],
+    activeTurnCount: 1,
+    activeTurnsTruncated: false,
+    activeTurnsRevision: '1'.repeat(64),
     lastObservedAt: 1234
   });
   const enriched = store.getSnapshot().snapshot;
@@ -57,11 +63,7 @@ function metadataRefresh(session: Session, lastEventId: number): Session {
   return {
     ...session,
     title: 'Refreshed metadata title',
-    state: 'unknown',
-    source: 'metadata',
-    freshness: 'unavailable',
-    latestTurn: null,
-    activeTurns: [],
+    ...unknownRuntime('2'.repeat(64)),
     lastObservedAt: null,
     archived: true,
     stage: 'building',
@@ -80,6 +82,9 @@ function expectMetadataCarry(actual: Session | undefined, incoming: Session, ret
     state: retained.state,
     latestTurn: retained.latestTurn,
     activeTurns: retained.activeTurns,
+    activeTurnCount: retained.activeTurnCount,
+    activeTurnsTruncated: retained.activeTurnsTruncated,
+    activeTurnsRevision: retained.activeTurnsRevision,
     source: retained.source,
     freshness: retained.freshness,
     lastObservedAt: retained.lastObservedAt,

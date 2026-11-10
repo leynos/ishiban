@@ -1,6 +1,8 @@
 /** @file Verify inspector navigation and honest failed-turn diagnostics. */
 import {afterEach, expect, it} from 'bun:test';
 import {cleanup, render, screen} from '@testing-library/react';
+import {Schema} from 'effect';
+import {SessionSchema} from '../src/contracts';
 import {SessionInspector} from '../src/ui/session-inspector';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
 
@@ -66,6 +68,46 @@ it('does not present a synthetic demo session as an actual Lody session', () => 
   );
   expect(screen.queryByRole('link', {name: 'Open in Lody'})).toBeNull();
   expect(screen.getByText('Synthetic demo session')).toBeTruthy();
+});
+
+it('accepts legacy sessions and validates summary marker types when present', () => {
+  const legacy = firstSession(createBoardSnapshot());
+  const decodeSession = Schema.decodeUnknownSync(SessionSchema);
+
+  expect(decodeSession(legacy).sessionId).toBe(legacy.sessionId);
+  expect(() => decodeSession({...legacy, activeTurnCount: '143'})).toThrow();
+  expect(() => decodeSession({...legacy, activeTurnCount: -1})).toThrow();
+  expect(() => decodeSession({...legacy, activeTurnCount: 1.5})).toThrow();
+  expect(() => decodeSession({...legacy, activeTurnsTruncated: 'yes'})).toThrow();
+  expect(() => decodeSession({...legacy, activeTurnsRevision: 143})).toThrow();
+});
+
+it('explains a truncated active-turn preview and keeps the Lody session link', () => {
+  const session = {
+    ...firstSession(createBoardSnapshot()),
+    source: 'persisted' as const,
+    activeTurns: Array.from({length: 100}, (_, index) => ({
+      userTurnId: `turn-${index}`,
+      state: 'running'
+    })),
+    activeTurnCount: 143,
+    activeTurnsTruncated: true,
+    activeTurnsRevision: 'a'.repeat(64)
+  };
+  render(
+    <SessionInspector
+      session={session}
+      currentGeneration={1}
+      onClose={() => {}}
+      workspaceId="workspace-1"
+      workspaceSlug="leynos"
+    />
+  );
+
+  expect(screen.getByText('Showing 100 of 143 active turns.')).toBeTruthy();
+  expect(screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href')).toBe(
+    'https://lody.ai/leynos/sessions/demo-session-001-01'
+  );
 });
 
 it('does not display failure text on a successful turn', () => {

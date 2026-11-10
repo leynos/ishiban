@@ -19,6 +19,12 @@ interface CommittedSnapshot {
 type TurnFact = NonNullable<Session['latestTurn']>;
 type PullRequestFact = Session['pullRequests'][number];
 
+interface ActiveTurnSummary {
+  readonly count: number;
+  readonly isTruncated: boolean;
+  readonly revision: string;
+}
+
 /** Keep only cues that belong to sessions in the current snapshot. */
 function unexpiredCues(cues: ReadonlyMap<string, PulseCue>, now: number): Map<string, PulseCue> {
   return new Map([...cues].filter(([, cue]) => cue.expiresAt > now));
@@ -51,6 +57,32 @@ function sameLatestTurn(previous: TurnFact | null, current: TurnFact | null): bo
   if (previous === null) return current === null;
   if (current === null) return false;
   return turnFactKey(previous) === turnFactKey(current);
+}
+
+/** Read a complete full-set summary; for legacy frames, return no summary. */
+function activeTurnSummary(session: Session): ActiveTurnSummary | undefined {
+  if (session.activeTurnCount === undefined) return undefined;
+  if (session.activeTurnsTruncated === undefined) return undefined;
+  if (session.activeTurnsRevision === undefined) return undefined;
+  return {
+    count: session.activeTurnCount,
+    isTruncated: session.activeTurnsTruncated,
+    revision: session.activeTurnsRevision
+  };
+}
+
+/** Compare the full active set when summaries exist; for old frames, compare the preview. */
+function sameActiveTurnSummary(previous: Session, current: Session): boolean {
+  const previousSummary = activeTurnSummary(previous);
+  const currentSummary = activeTurnSummary(current);
+  if (previousSummary === undefined || currentSummary === undefined) {
+    return sameUnorderedFacts(previous.activeTurns, current.activeTurns, turnFactKey);
+  }
+  return (
+    previousSummary.count === currentSummary.count &&
+    previousSummary.isTruncated === currentSummary.isTruncated &&
+    previousSummary.revision === currentSummary.revision
+  );
 }
 
 /** Compare fields that identify the session's visible title, repository and branch. */
@@ -86,7 +118,7 @@ function sameRuntime(previous: Session, current: Session): boolean {
   return (
     previous.state === current.state &&
     sameLatestTurn(previous.latestTurn, current.latestTurn) &&
-    sameUnorderedFacts(previous.activeTurns, current.activeTurns, turnFactKey)
+    sameActiveTurnSummary(previous, current)
   );
 }
 

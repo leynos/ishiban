@@ -9,6 +9,7 @@ import typing as typ
 
 import falcon
 
+from ishiban.public_projection import public_session
 from ishiban.storage.projections import apply_observation
 
 if typ.TYPE_CHECKING:
@@ -35,7 +36,10 @@ class SessionActivityResource:
 
         """
         projection = await resolve_activity(self.store, self.activity, session_id)
-        resp.media = {"workspaceId": self.store.workspace_id, "session": projection}
+        resp.media = {
+            "workspaceId": self.store.workspace_id,
+            "session": public_session(projection) if projection is not None else None,
+        }
 
 
 async def resolve_activity(

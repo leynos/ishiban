@@ -9,6 +9,7 @@ from falcon import asgi
 from sqlalchemy.exc import OperationalError
 
 from ishiban.activity_api import resolve_activity, restore_cached_activities
+from ishiban.public_projection import public_session
 from ishiban.request_body import read_bounded_body
 
 if typ.TYPE_CHECKING:
@@ -215,7 +216,7 @@ def _encode_frame(
         msgspec.json.encode({
             "workspaceId": workspace_id,
             "sessionId": session_id,
-            "session": projection,
+            "session": public_session(projection) if projection is not None else None,
         })
         + b"\n"
     )

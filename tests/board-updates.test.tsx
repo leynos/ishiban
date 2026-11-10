@@ -3,7 +3,13 @@ import {afterEach, expect, it, jest} from 'bun:test';
 import {act, cleanup, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Board} from '../src/ui/board';
-import {createBoardSnapshot, firstSession, moveFirstSession, updateFirstSession} from './board-fixtures';
+import {
+  createBoardSnapshot,
+  firstSession,
+  moveFirstSession,
+  unknownRuntime,
+  updateFirstSession
+} from './board-fixtures';
 
 afterEach(() => {
   cleanup();
@@ -225,13 +231,49 @@ it('normalizes turn and pull-request order while pulsing their semantic changes'
   expect(getPulse(getFirstMark())).not.toBe(firstPulse);
 });
 
+it('uses summary revisions for hidden turns and the visible set for partial frames', () => {
+  const initial = updateFirstSession(createBoardSnapshot(), {
+    activeTurns: [
+      {userTurnId: 'visible-turn', state: 'running'},
+      {userTurnId: 'second-turn', state: 'waiting'}
+    ],
+    activeTurnCount: 101,
+    activeTurnsTruncated: true,
+    activeTurnsRevision: 'a'.repeat(64)
+  });
+  const first = firstSession(initial);
+  const {rerender} = render(<Board connection="Connected" snapshot={initial} />);
+  const updateRevision = () => getFirstMark().getAttribute('data-update-revision');
+
+  const hiddenChange = updateFirstSession(initial, {
+    lastEventId: first.lastEventId + 1,
+    activeTurnsRevision: 'b'.repeat(64)
+  });
+  rerender(<Board connection="Connected" snapshot={hiddenChange} />);
+  expect(updateRevision()).toBe(String(first.lastEventId + 1));
+
+  const reordered = updateFirstSession(hiddenChange, {
+    lastEventId: first.lastEventId + 2,
+    activeTurns: firstSession(hiddenChange).activeTurns.toReversed()
+  });
+  rerender(<Board connection="Connected" snapshot={reordered} />);
+  expect(updateRevision()).toBe(String(first.lastEventId + 1));
+
+  const partial = updateFirstSession(reordered, {
+    lastEventId: first.lastEventId + 3,
+    activeTurnsTruncated: undefined,
+    activeTurns: [
+      {userTurnId: 'second-turn', state: 'failed'},
+      {userTurnId: 'visible-turn', state: 'running'}
+    ]
+  });
+  rerender(<Board connection="Connected" snapshot={partial} />);
+  expect(updateRevision()).toBe(String(first.lastEventId + 3));
+});
+
 it('keeps lazy runtime resolution quiet while pulsing metadata changes on lazy sessions', () => {
   const initial = updateFirstSession(createBoardSnapshot(), {
-    state: 'unknown',
-    source: 'metadata',
-    freshness: 'unavailable',
-    latestTurn: null,
-    activeTurns: []
+    ...unknownRuntime('a'.repeat(64))
   });
   const first = firstSession(initial);
   const {rerender} = render(<Board connection="Connected" snapshot={initial} />);
@@ -242,6 +284,8 @@ it('keeps lazy runtime resolution quiet while pulsing metadata changes on lazy s
     freshness: 'synced',
     activitySource: 'lazy',
     latestTurn: {userTurnId: 'resolved-turn', state: 'failed', error: 'last turn failed'},
+    activeTurnCount: 1,
+    activeTurnsRevision: 'b'.repeat(64),
     lastObservedAt: 1234
   });
   rerender(<Board connection="Connected" snapshot={lazyResolution} />);

@@ -19,6 +19,7 @@ from ishiban.detail_pagination import parse_turn_cursor
 from ishiban.inspector_api import AgentDetailsResource, PullRequestDetailsResource
 from ishiban.interface_state import InterfaceStateCookies, InterfaceStateResource
 from ishiban.lazy_activity import LazyActivity
+from ishiban.public_projection import public_session
 from ishiban.pull_request_details import PullRequestTitles
 from ishiban.session_agent import SessionAgentDetails
 
@@ -115,6 +116,8 @@ class SnapshotResource:
     async def on_get(self, req: asgi.Request, resp: asgi.Response) -> None:
         """Serve the snapshot; for example, include explicit collector health."""
         snapshot = await self.store.activity_snapshot()
+        sessions = typ.cast("list[dict[str, object]]", snapshot["sessions"])
+        snapshot["sessions"] = [public_session(session) for session in sessions]
         if self.workspace_slug is not None:
             snapshot["workspaceSlug"] = self.workspace_slug
         snapshot["interfaceState"] = msgspec.to_builtins(self.cookies.read(req))
@@ -150,7 +153,8 @@ class SessionResource:
         if detail is None:
             raise falcon.HTTPNotFound
         projection = msgspec.convert(detail["session"], type=dict[str, object])
-        detail["session"] = (await self.store.restore_activity([projection]))[0]
+        restored = (await self.store.restore_activity([projection]))[0]
+        detail["session"] = public_session(restored)
         resp.media = detail
 
 
@@ -220,7 +224,7 @@ class EventsResource:
         ]
         views = await self.store.restore_activity(projections)
         for row, view in zip(session_rows, views, strict=True):
-            row["projection"] = view
+            row["projection"] = public_session(view)
         return rows
 
 

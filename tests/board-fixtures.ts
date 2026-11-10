@@ -55,3 +55,35 @@ export function moveFirstSession(snapshot: Snapshot): Snapshot {
     stageReason: 'Demo classification: one Plan-prefixed pull request is open.'
   });
 }
+
+/**
+ * Describe unresolved collector activity; for example, seed an unknown session.
+ * @param revision The full active-turn semantic revision.
+ * @returns The shared runtime fields for unknown activity fixtures.
+ * @example
+ * unknownRuntime('a'.repeat(64)).activeTurnCount === 0;
+ */
+export function unknownRuntime(
+  revision: string
+): Pick<
+  Session,
+  | 'state'
+  | 'source'
+  | 'freshness'
+  | 'latestTurn'
+  | 'activeTurns'
+  | 'activeTurnCount'
+  | 'activeTurnsTruncated'
+  | 'activeTurnsRevision'
+> {
+  return {
+    state: 'unknown',
+    source: 'metadata',
+    freshness: 'unavailable',
+    latestTurn: null,
+    activeTurns: [],
+    activeTurnCount: 0,
+    activeTurnsTruncated: false,
+    activeTurnsRevision: revision
+  };
+}
