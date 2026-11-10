@@ -256,7 +256,7 @@ class Store:
     ) -> dict[str, object] | None:
         """Persist a matching lazy read in the sidecar and return its current view.
 
-        For example, a late read cannot overwrite a newer collector revision.
+        For example, metadata replay can advance while new execution rejects a read.
 
         Returns
         -------
@@ -267,9 +267,14 @@ class Store:
         previous = await self.session_projection(session_id)
         if previous is None or previous.get("state") != "unknown":
             return None
-        if previous.get("lastEventId") != projection.get("lastEventId"):
+        if previous.get("lastActivityEventId", 0) != projection.get(
+            "lastActivityEventId", 0
+        ):
             return None
-        await self._activity_cache.remember(projection)
+        await self._activity_cache.remember({
+            **projection,
+            "lastEventId": previous["lastEventId"],
+        })
         current = await self.session_projection(session_id)
         if current is None:
             return None

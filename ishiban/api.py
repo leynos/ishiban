@@ -14,6 +14,7 @@ import msgspec
 from falcon import asgi
 
 from ishiban.activity_api import SessionActivityResource
+from ishiban.batch_activity_api import BatchSessionActivityResource
 from ishiban.inspector_api import AgentDetailsResource, PullRequestDetailsResource
 from ishiban.interface_state import InterfaceStateCookies, InterfaceStateResource
 from ishiban.lazy_activity import LazyActivity
@@ -242,6 +243,9 @@ def create_app(
     app.add_route(
         "/api/v1/sessions/{session_id}/activity",
         SessionActivityResource(store, activity),
+    )
+    app.add_route(
+        "/api/v1/sessions/activity", BatchSessionActivityResource(store, activity)
     )
     app.add_route(
         "/api/v1/sessions/{session_id}/agent", AgentDetailsResource(store, agent_reader)

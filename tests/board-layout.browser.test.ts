@@ -68,7 +68,7 @@ function publishObservation(cursor: number): void {
     cursor,
     workspaceId: snapshot.workspaceId,
     sessionId: session.sessionId,
-    projection: {...session, lastEventId: cursor}
+    projection: {...session, lastEventId: cursor, title: `${session.title} update ${cursor}`}
   });
   const message = encoder.encode(`id: ${cursor}\nevent: observation\ndata: ${data}\n\n`);
   for (const sink of sinks) sink.enqueue(message);

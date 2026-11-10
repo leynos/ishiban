@@ -597,3 +597,12 @@ the durable journal and raw replay readers remain unchanged. Collector
 execution watermarks invalidate older cached outcomes even across missed
 updates. Refreshes and process restarts retain failures and supplied
 diagnostics without creating events or collector evidence generations.
+
+## Batched cold reads and restart cues
+
+[ADR 005](adr-005-batched-activity-and-update-cues.md) adds progressive batched
+activity reads with four shared observer slots. Metadata-only revision changes
+retain pending reads; actual execution watermarks invalidate them. The browser
+establishes a quiet baseline during collector startup and compares meaningful
+facts for subsequent pulses. Restart replay remains in the journal without
+creating a flood of update animations.

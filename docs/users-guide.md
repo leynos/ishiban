@@ -315,3 +315,14 @@ opens and cached for five minutes. Configuration secrets are never requested.
 Unavailable metadata is labelled explicitly; demo IDs are not offered for CLI
 copying. Resolved on-demand activity survives metadata-only collector refreshes
 and reconnect snapshots; newer execution evidence still replaces it.
+
+Visible unknown sessions are requested automatically in small batches. Each
+result appears as soon as it is available, so a slow session does not hold up
+its neighbours. Up to four Lody reads run concurrently across browser windows;
+cached results can appear immediately. The installed Lody CLI still requires an
+individual observation per uncached session, so a cold workspace can take time
+to resolve.
+
+Restarting the collector establishes a fresh pulse baseline. Replayed metadata,
+unchanged runtime facts and on-demand enrichment do not pulse. Meaningful task
+changes received after startup continue to pulse.

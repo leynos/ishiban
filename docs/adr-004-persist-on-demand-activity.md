@@ -38,8 +38,10 @@ on known persisted observations and turn transitions. Metadata and unknown
 observations preserve that watermark. A cache entry records its base journal
 revision and cannot override a later execution watermark, including when the
 browser missed the known update before another unknown projection. Late lookups
-are checked against the current revision; cache upserts cannot replace entries
-based on newer revisions.
+are checked against the execution watermark and rebased onto current metadata
+when it is unchanged; cache upserts cannot replace entries based on newer
+revisions. [ADR 005](adr-005-batched-activity-and-update-cues.md) defines this
+refinement and the batched transport.
 
 ## Consequences
 

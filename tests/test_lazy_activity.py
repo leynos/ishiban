@@ -259,10 +259,10 @@ async def test_same_key_reads_share_one_process_when_a_waiter_is_cancelled(
 
 
 @pytest.mark.asyncio
-async def test_unrelated_reads_use_at_most_two_cli_processes(
+async def test_unrelated_reads_use_at_most_four_cli_processes(
     tmp_path: pathlib.Path,
 ) -> None:
-    """The observer semaphore caps parallel child processes at two."""
+    """The observer semaphore caps parallel child processes at four."""
     executable, _call_log = _fake_lody(
         tmp_path,
         _response(),
@@ -271,7 +271,7 @@ async def test_unrelated_reads_use_at_most_two_cli_processes(
     )
     service = lazy_activity.LazyActivity("workspace-1", "leynos", str(executable))
     results = await asyncio.gather(
-        *(service.read(f"session-{index}", 1) for index in range(4))
+        *(service.read(f"session-{index}", 1) for index in range(8))
     )
     assert all(result is not None for result in results), (
         "Each valid independent observation must complete."
@@ -280,7 +280,7 @@ async def test_unrelated_reads_use_at_most_two_cli_processes(
         (tmp_path / "maximum").read_text,
         encoding="utf-8",
     )
-    assert maximum == "2", "No more than two Lody observer processes may overlap."
+    assert maximum == "4", "No more than four Lody observer processes may overlap."
     await service.close()
 
 

@@ -534,3 +534,24 @@ thresholds and suppressions are unchanged.
 Restart both the API and collector once to load these changes. Existing
 browser-only observations require a fresh read; subsequent collected outcomes
 survive restarts. The journal schema does not require a migration.
+
+### Batched activity and restart pulse follow-up
+
+The browser now coalesces visible unknown marks into two progressive streams of
+four members. The API accepts up to eight IDs, returns cached members first and
+emits pending results in completion order. Four shared Lody observers and 64
+unique pending reads bound work across callers. Metadata replay shares
+in-flight reads and permits a checked rebase while the execution watermark is
+unchanged. New execution still rejects stale results. The installed CLI
+requires a separate observation for each uncached historical session.
+
+Pulse tracking ignores revision-only and bookkeeping changes and establishes a
+quiet baseline through collector startup. Runtime enrichment remains quiet;
+meaningful task changes after startup still pulse. The raw journal retains
+restart observations. ADR 005 records transport ownership and these policies.
+
+Focused verification covers streamed early results, per-member isolation, input
+and response bounds, disconnect cleanup, four-way concurrency, queue limits and
+metadata rebase versus execution invalidation. The rebase regression failed
+before the Store change and passes afterwards. Final gates and local reviews
+are recorded below when complete.

@@ -383,17 +383,18 @@ responses restore preferences from that cookie. The React preference hook owns
 ordered writes and save status; no initial-render write or localStorage cache
 is needed.
 
-The lazy activity service owns bounded read-only CLI observations, a two-child
-limit, revision-keyed caching and shared in-flight requests. The API's
-`session_projection` read reuses the existing projection query without loading
-transcripts. Lazy response projections are marked separately and do not create
-journal rows. The client activity merge is scoped to the live store and rejects
-foreign, stale, or already-resolved revisions. Intersection and mutation
-observers own visible-mark discovery and cleanup; requests that have not
-started are skipped when their mark leaves the viewport. Update-cue tracking
-suppresses lazy enrichment even if an earlier journal cue is still active.
-Discarded queued work releases only its own retry marker, so a task revealed
-again can be read immediately without clearing a newer attempt's backoff.
+The lazy activity service owns bounded read-only CLI observations, a four-child
+limit, execution-watermark-keyed caching and shared in-flight requests. The
+API's `session_projection` read reuses the existing projection query without
+loading transcripts. Lazy response projections are marked separately and do not
+create journal rows. The client activity merge is scoped to the live store and
+rejects foreign, stale, or already-resolved revisions. Intersection and
+mutation observers own visible-mark discovery and cleanup; requests that have
+not started are skipped when their mark leaves the viewport. Update-cue
+tracking suppresses lazy enrichment even if an earlier journal cue is still
+active. Discarded queued work releases only its own retry marker, so a task
+revealed again can be read immediately without clearing a newer attempt's
+backoff.
 
 Inspector agent metadata uses a separate bounded reader and 128-entry TTL
 cache. The only exported fields are agent type, configuration ID and
@@ -419,16 +420,16 @@ still suppress their own pulses.
 `storage.activity_cache.ActivityCache` owns only derived runtime observations
 in the journal's `.activity.sqlite3` sidecar. `Store.snapshot`, `Store.detail`
 and `Store.events` remain raw readers. `Store.activity_snapshot` and
-`Store.restore_activity` prepare API views; `Store.remember_activity` checks a
-lookup revision before caching and returns a freshly checked view. API replay
-decorates its own copies, preserving the stored event and its cursor. The
-sidecar uses SQLAlchemy and bounded upserts without a journal migration.
-Sidecar creation uses SQL-level `IF NOT EXISTS` and bounded asynchronous
-retries for SQLite busy/locked errors during initial WAL setup, allowing the
-API and collector to start concurrently. Other startup failures propagate
-immediately. Generated cache-ordering tests vary execution watermarks and
-Unicode metadata to check invalidation, metadata preservation and projection
-immutability.
+`Store.restore_activity` prepare API views; `Store.remember_activity` checks an
+execution watermark before rebasing and caching and returns a freshly checked
+view. API replay decorates its own copies, preserving the stored event and its
+cursor. The sidecar uses SQLAlchemy and bounded upserts without a journal
+migration. Sidecar creation uses SQL-level `IF NOT EXISTS` and bounded
+asynchronous retries for SQLite busy/locked errors during initial WAL setup,
+allowing the API and collector to start concurrently. Other startup failures
+propagate immediately. Generated cache-ordering tests vary execution watermarks
+and Unicode metadata to check invalidation, metadata preservation and
+projection immutability.
 
 The cache and journal retain separate initialization guards because they own
 different engines. Their short guards, explicit envelope fixtures and
@@ -454,3 +455,25 @@ tests; they are not application data contracts.
 reading between those two reader suites. Each suite retains its own protocol
 fixtures and assertions. `tests/deferred.ts` supplies controlled asynchronous
 completion for browser-hook tests without production timing delays.
+
+[ADR 005](adr-005-batched-activity-and-update-cues.md) defines streaming batch
+activity and semantic pulse comparisons. `batch_activity_api` owns only bounded
+HTTP decoding and response-waiter cleanup; `activity_api.resolve_activity`
+shares projection restoration and lookup precedence with the single-session
+route. `src/activity-batch.ts` owns incremental UTF-8 NDJSON decoding and
+Effect frame validation, with one-MiB frame and eight-MiB response limits.
+These helpers are specific to activity reads and are not generic transport
+APIs. The browser pipelines two four-member batches; the shared reader permits
+four children and 64 pending observations with a 45-second total lifetime.
+Metadata replay preserves in-flight identity ownership and execution-watermark
+reuse. The dead-code configuration records the batch handler's exact bounded
+decoders and msgspec request type as runtime entry points; Falcon dispatch is
+not propagated by Skylos.
+
+The batch decoder and preference endpoint retain independent short bounded body
+loops because their limits and diagnostics belong to separate HTTP contracts.
+Semantic cue comparators retain explicit fast paths and boolean guards rather
+than sharing animation mutation. Independent queue-bound tests retain their own
+process arrangement; browser batch tests share controlled board setup. These
+considered duplication exceptions are recorded by exact module or symbol in the
+gate configuration.

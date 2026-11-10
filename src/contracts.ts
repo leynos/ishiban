@@ -63,7 +63,9 @@ export const SnapshotSchema = Schema.Struct({
 export type Session = typeof SessionSchema.Type;
 export type Snapshot = typeof SnapshotSchema.Type;
 export type Collector = typeof CollectorSchema.Type;
-export const SessionActivitySchema = Schema.Struct({
+export const SessionActivityFrameSchema = Schema.Struct({
   workspaceId: Schema.String,
+  sessionId: Schema.String,
   session: Schema.NullOr(SessionSchema)
 });
+export type SessionActivityFrame = typeof SessionActivityFrameSchema.Type;

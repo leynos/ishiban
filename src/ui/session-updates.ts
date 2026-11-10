@@ -1,6 +1,6 @@
-/** @file Track recent committed session event revisions for visual pulses. */
+/** @file Track short visual cues for meaningful session changes. */
 import {useEffect, useMemo, useState} from 'react';
-import type {Snapshot} from '../contracts';
+import type {Session, Snapshot} from '../contracts';
 
 const PULSE_LIFETIME_MS = 900;
 
@@ -16,38 +16,141 @@ interface CommittedSnapshot {
   readonly cues: ReadonlyMap<string, PulseCue>;
 }
 
+type TurnFact = NonNullable<Session['latestTurn']>;
+type PullRequestFact = Session['pullRequests'][number];
+
 /** Keep only cues that belong to sessions in the current snapshot. */
 function unexpiredCues(cues: ReadonlyMap<string, PulseCue>, now: number): Map<string, PulseCue> {
   return new Map([...cues].filter(([, cue]) => cue.expiresAt > now));
 }
 
-/** Record new sessions and changed event identifiers after a committed snapshot. */
+/** Compare unordered facts; for example, reordered pull requests remain equivalent. */
+function sameUnorderedFacts<Item>(
+  previous: readonly Item[],
+  current: readonly Item[],
+  keyOf: (item: Item) => string
+): boolean {
+  if (previous === current) return true;
+  if (previous.length !== current.length) return false;
+  const previousKeys = previous.map((item) => keyOf(item)).toSorted();
+  const currentKeys = current.map((item) => keyOf(item)).toSorted();
+  return previousKeys.every((key, index) => key === currentKeys[index]);
+}
+
+/** Encode the user-visible turn facts; for example, omit timing and provenance fields. */
+function turnFactKey(turn: TurnFact): string {
+  return JSON.stringify([turn.userTurnId, turn.state, turn.error ?? null]);
+}
+
+/** Encode the user-visible pull-request facts; for example, preserve URL association. */
+function pullRequestFactKey(pullRequest: PullRequestFact): string {
+  return JSON.stringify([pullRequest.url, pullRequest.title, pullRequest.status]);
+}
+
+/** Compare latest-turn outcome fields without object-identity noise. */
+function sameLatestTurn(previous: TurnFact | null, current: TurnFact | null): boolean {
+  if (previous === current) return true;
+  if (previous === null || current === null) return false;
+  return turnFactKey(previous) === turnFactKey(current);
+}
+
+/** Compare fields that identify the session's visible title, repository and branch. */
+function sameBoardMetadata(previous: Session, current: Session): boolean {
+  return (
+    previous.title === current.title &&
+    previous.repoFullName === current.repoFullName &&
+    previous.branchName === current.branchName
+  );
+}
+
+/** Compare workflow state that explains where the session belongs on the board. */
+function sameWorkflowMetadata(previous: Session, current: Session): boolean {
+  return (
+    previous.stage === current.stage &&
+    previous.stageReason === current.stageReason &&
+    previous.archived === current.archived &&
+    previous.removed === current.removed
+  );
+}
+
+/** Compare fields that describe the session's board and inspector metadata. */
+function sameSessionMetadata(previous: Session, current: Session): boolean {
+  if (previous === current) return true;
+  return (
+    sameBoardMetadata(previous, current) &&
+    sameWorkflowMetadata(previous, current) &&
+    sameUnorderedFacts(previous.pullRequests, current.pullRequests, pullRequestFactKey)
+  );
+}
+
+/** Compare execution state while ignoring observation timestamps and source labels. */
+function sameRuntime(previous: Session, current: Session): boolean {
+  return (
+    previous.state === current.state &&
+    sameLatestTurn(previous.latestTurn, current.latestTurn) &&
+    sameUnorderedFacts(previous.activeTurns, current.activeTurns, turnFactKey)
+  );
+}
+
+/** Detect a meaningful new-revision change; for example, ignore metadata generation alone. */
+function hasMeaningfulChange(previous: Session, current: Session): boolean {
+  if (previous === current) return false;
+  if (sameSessionMetadata(previous, current)) {
+    if (current.activitySource === 'lazy') return false;
+    return !sameRuntime(previous, current);
+  }
+  return true;
+}
+
+/** Startup replay and generation transitions establish a quiet semantic baseline. */
+function shouldResetBaseline(previous: Snapshot, current: Snapshot): boolean {
+  return (
+    previous.collector.state === 'connecting' ||
+    current.collector.state === 'connecting' ||
+    previous.collector.generation !== current.collector.generation
+  );
+}
+
+/** Apply one session's revision outcome; for example, preserve a cue for timestamp-only refreshes. */
+function recordSessionCue(
+  session: Session,
+  previousSession: Session | undefined,
+  cues: Map<string, PulseCue>,
+  now: number
+): void {
+  if (previousSession === undefined) {
+    cues.set(session.sessionId, {revision: session.lastEventId, expiresAt: now + PULSE_LIFETIME_MS});
+    return;
+  }
+  const isUnchangedRevision = previousSession.lastEventId === session.lastEventId;
+  if (session.activitySource === 'lazy' && isUnchangedRevision) {
+    cues.delete(session.sessionId);
+    return;
+  }
+  if (isUnchangedRevision || !hasMeaningfulChange(previousSession, session)) return;
+  cues.set(session.sessionId, {revision: session.lastEventId, expiresAt: now + PULSE_LIFETIME_MS});
+}
+
+/** Record new sessions and semantically changed event revisions after a committed snapshot. */
 function cuesForSnapshot(
   previous: Snapshot,
   current: Snapshot,
   existing: ReadonlyMap<string, PulseCue>
 ): Map<string, PulseCue> {
+  if (shouldResetBaseline(previous, current)) return new Map();
   const previousSessions = new Map(previous.sessions.map((session) => [session.sessionId, session]));
   const now = Date.now();
   const cues = unexpiredCues(existing, now);
   for (const session of current.sessions) {
-    const previousSession = previousSessions.get(session.sessionId);
-    const isUnchangedRevision = previousSession?.lastEventId === session.lastEventId;
-    if (session.activitySource === 'lazy' && isUnchangedRevision) {
-      cues.delete(session.sessionId);
-      continue;
-    }
-    if (previousSession === undefined || previousSession.lastEventId !== session.lastEventId) {
-      cues.set(session.sessionId, {revision: session.lastEventId, expiresAt: now + PULSE_LIFETIME_MS});
-    }
+    recordSessionCue(session, previousSessions.get(session.sessionId), cues, now);
   }
   return cues;
 }
 
 /**
- * Return active event revisions, excluding initial, workspace, and metadata-only snapshots.
+ * Return active revisions for meaningful session changes, excluding initial and restart replay.
  * @param snapshot The latest immutable snapshot received from the client.
- * @returns Session IDs mapped to event revisions whose 900 ms cue is still active.
+ * @returns Session IDs mapped to 900 ms cues for meaningful new revisions.
  */
 export function useSessionUpdates(snapshot: Snapshot): ReadonlyMap<string, number> {
   const [committed, setCommitted] = useState<CommittedSnapshot>(() => ({

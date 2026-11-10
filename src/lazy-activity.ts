@@ -1,6 +1,6 @@
 /** @file Resolve visible unknown activity without manufacturing journal events. */
-import {Schema} from 'effect';
-import {SessionActivitySchema} from './contracts';
+import type {SessionActivityFrame} from './contracts';
+import {readActivityFrames} from './activity-batch';
 import type {BoardStore} from './client';
 
 interface Lookup {
@@ -15,13 +15,17 @@ interface AttemptStamp {
   readonly token: symbol;
 }
 const MARKS = 'button[data-session-id]';
+const BATCH_SIZE = 4;
+const MAX_BATCHES = 2;
 
 /** Own two bounded browser lookups; for example, enqueue a visible unknown session. */
 class ActivityRequests {
   private readonly queue: Lookup[] = [];
   private readonly attempted = new Map<string, AttemptStamp>();
   private readonly controllers = new Set<AbortController>();
+  private readonly activeSessionIds = new Set<string>();
   private running = 0;
+  private isDrainScheduled = false;
   private isStopped = false;
   constructor(
     private readonly store: BoardStore,
@@ -36,7 +40,7 @@ class ActivityRequests {
     if (!session) return;
     if (session.state !== 'unknown') return;
     if (session.source === 'demo') return;
-    if (this.queue.length >= 256) return;
+    if (this.queue.length >= 256 || this.activeSessionIds.has(sessionId)) return;
     const key = `${snapshot.workspaceId}:${sessionId}:${session.lastEventId}`;
     if (this.isRecentlyAttempted(key)) return;
     const retryToken = Symbol(key);
@@ -48,7 +52,7 @@ class ActivityRequests {
       retryKey: key,
       retryToken
     });
-    this.drain();
+    this.scheduleDrain();
   }
 
   /** Bound retry bookkeeping; for example, discard the oldest of 513 revisions. */
@@ -90,47 +94,81 @@ class ActivityRequests {
     return this.isVisible(task.sessionId);
   }
 
-  /** Start at most two reads; for example, leave off-screen work unrequested. */
+  /** Coalesce viewport entries from one browser turn before sending a batch. */
+  private scheduleDrain(): void {
+    if (this.isDrainScheduled) return;
+    this.isDrainScheduled = true;
+    queueMicrotask(() => {
+      this.isDrainScheduled = false;
+      this.drain();
+    });
+  }
+
+  /** Start two streaming batches, leaving offscreen queued work unrequested. */
   private drain(): void {
-    while (!this.isStopped && this.running < 2) {
+    while (!this.isStopped && this.running < MAX_BATCHES) {
+      const tasks = this.nextBatch();
+      if (tasks.length === 0) return;
+      this.running += 1;
+      void this.run(tasks);
+    }
+  }
+
+  /** Gather current visible revisions; for example, discard a mark scrolled away. */
+  private nextBatch(): Lookup[] {
+    const tasks: Lookup[] = [];
+    while (tasks.length < BATCH_SIZE) {
       const task = this.queue.shift();
-      if (!task) return;
+      if (!task) break;
       if (!this.matches(task)) {
         this.forgetDropped(task);
         continue;
       }
-      this.running += 1;
-      void this.run(task);
+      tasks.push(task);
     }
+    return tasks;
   }
 
   /** Apply only current validated responses; for example, preserve the journal cursor. */
-  private async run(task: Lookup): Promise<void> {
+  private async run(tasks: readonly Lookup[]): Promise<void> {
     const controller = new AbortController();
     this.controllers.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), 50_000);
+    const lookups = new Map(tasks.map((task) => [task.sessionId, task]));
+    for (const task of tasks) this.activeSessionIds.add(task.sessionId);
     try {
-      const response = await fetch(`/api/v1/sessions/${encodeURIComponent(task.sessionId)}/activity`, {
+      const response = await fetch('/api/v1/sessions/activity', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({sessionIds: [...lookups.keys()]}),
         signal: controller.signal,
         cache: 'no-store'
       });
       if (!response.ok) return;
-      const result = Schema.decodeUnknownSync(SessionActivitySchema)(await response.json());
-      if (this.isStopped) return;
-      if (result.workspaceId !== task.workspaceId) return;
-      const session = result.session;
-      if (!session) return;
-      if (session.sessionId !== task.sessionId) return;
-      if (session.lastEventId !== task.revision) return;
-      this.store.activity(result.workspaceId, session);
+      await readActivityFrames(response, (frame) => this.applyFrame(lookups, frame));
     } catch {
       // Source failures retain unknown activity; a later visible retry may succeed.
     } finally {
       clearTimeout(timeout);
       this.controllers.delete(controller);
       this.running -= 1;
-      this.drain();
+      for (const task of tasks) {
+        this.activeSessionIds.delete(task.sessionId);
+        if (!this.isStopped && this.isVisible(task.sessionId)) this.enqueue(task.sessionId);
+      }
+      this.scheduleDrain();
     }
+  }
+
+  /** Match every streamed result against the request's workspace, identity and revision. */
+  private applyFrame(lookups: ReadonlyMap<string, Lookup>, frame: SessionActivityFrame): void {
+    if (this.isStopped) return;
+    const task = lookups.get(frame.sessionId);
+    if (!task || frame.workspaceId !== task.workspaceId) return;
+    const session = frame.session;
+    if (!session || session.sessionId !== task.sessionId) return;
+    if (session.lastEventId < task.revision) return;
+    this.store.activity(frame.workspaceId, session);
   }
 }
 

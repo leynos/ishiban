@@ -15,7 +15,9 @@ MAX_OBSERVE_BYTES = 1_048_576
 MAX_CACHE_ENTRIES = 256
 SUCCESS_CACHE_SECONDS = 300.0
 FAILURE_CACHE_SECONDS = 30.0
-MAX_CONCURRENT_OBSERVERS = 2
+MAX_CONCURRENT_OBSERVERS = 4
+MAX_IN_FLIGHT_OBSERVATIONS = 64
+MAX_OBSERVATION_LIFETIME_SECONDS = 45.0
 DEFAULT_TIMEOUT_SECONDS = 20.0
 
 type _SessionKey = tuple[str, int]
@@ -77,8 +79,8 @@ def _is_persisted_activity(session: domain.ObservedSession, session_id: str) -> 
 class LazyActivity:
     """Fetch on-demand session facts with bounded process and cache ownership.
 
-    For example, two concurrent reads of the same session revision share one
-    Lody subprocess while unrelated reads use at most two subprocesses.
+    For example, two reads of the same revision share one Lody subprocess,
+    while unrelated reads use at most four subprocesses.
     """
 
     def __init__(
@@ -100,7 +102,7 @@ class LazyActivity:
         executable : str, default ``"lody"``
             Lody executable or a test executable path.
         timeout : float, default 20 seconds
-            Maximum time for one queued observation and its child process.
+            Maximum run time for one observer subprocess after it starts.
         """
         self._workspace_id = workspace_id
         self._selector = selector
@@ -144,6 +146,8 @@ class LazyActivity:
 
         task = self._inflight.get(key)
         if task is None:
+            if len(self._inflight) >= MAX_IN_FLIGHT_OBSERVATIONS:
+                return None
             task = asyncio.create_task(self._load(key))
             self._inflight[key] = task
         # One cancelled request must not cancel a shared observer needed by
@@ -204,7 +208,7 @@ class LazyActivity:
             self._selector,
             "--json",
         )
-        async with asyncio.timeout(self._timeout):
+        async with asyncio.timeout(MAX_OBSERVATION_LIFETIME_SECONDS):
             async with self._semaphore:
                 return await self._read_response(command, session_id)
 

@@ -73,7 +73,9 @@ async def test_lazy_activity_keeps_the_journal_cursor_and_evidence_unchanged(
             assert after == baseline, (
                 "The reader must leave every journal fact untouched."
             )
-        lookup.assert_awaited_once_with("s1", baseline["sessions"][0]["lastEventId"])
+        lookup.assert_awaited_once_with(
+            "s1", baseline["sessions"][0].get("lastActivityEventId", 0)
+        )
 
 
 @pytest.mark.asyncio

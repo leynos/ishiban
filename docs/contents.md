@@ -5,6 +5,9 @@ reference material.
 
 ## Design and reference
 
+- [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
+  bounds concurrent lazy reads and suppresses unchanged startup pulses.
+
 - [Persistent on-demand activity decision](adr-004-persist-on-demand-activity.md)
   preserves collected runtime outcomes across browser and process restarts.
 - [Interface state and lazy activity decision](adr-003-interface-state-and-lazy-activity.md)

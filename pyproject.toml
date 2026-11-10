@@ -341,6 +341,16 @@ reason = "InterfaceStateResource.on_post reads bounded bodies and maps validated
 
 
 
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = ["ishiban.batch_activity_api._read_bounded_body", "ishiban.batch_activity_api._decode_session_ids"]
+reason = "BatchSessionActivityResource.on_post invokes these bounded decoders; Skylos does not propagate this Falcon handler dispatch path."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "class"
+full_name = ["ishiban.batch_activity_api._ActivityBatchRequest"]
+reason = "The Falcon batch handler passes this typed request shape to msgspec.json.decode; Skylos does not follow the handler's decoder reachability."
+
 [tool.nose]
 version = "0.20.0"
 roots = ["."]
@@ -429,7 +439,7 @@ members = ["tests/storage_support.py::as_snapshot", "tests/storage_support.py::a
 reason = "Preserve distinct static API contract casts; a generic cast wrapper would obscure the asserted snapshot, replay, or detail shape. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["ishiban/api.py::__init__", "ishiban/activity_api.py::__init__", "ishiban/inspector_api.py::__init__"]
+members = ["ishiban/api.py::__init__", "ishiban/activity_api.py::__init__", "ishiban/inspector_api.py::__init__", "ishiban/batch_activity_api.py::__init__"]
 reason = "Keep independent Falcon resource constructors explicit; inheritance solely for injected store assignment adds unrelated resource coupling. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
@@ -527,3 +537,20 @@ reason = "Keep reconnect, newer-execution and scope-reset assertions independent
 [[tool.duplication_gate.allow]]
 members = ["src/client.ts", "tools/oxlint-plugin-df12/jsdoc-helpers.js"]
 reason = "Keep a one-line null guard local to browser activity retention and independent AST analysis; the domains do not share an abstraction. See docs/developers-guide.md#duplication-review."
+
+
+[[tool.duplication_gate.allow]]
+members = ["src/ui/session-updates.ts::recordSessionCue", "src/ui/session-updates.ts::sameSessionMetadata", "src/ui/session-updates.ts::hasMeaningfulChange", "src/ui/session-updates.ts::sameRuntime"]
+reason = "Keep explicit semantic comparison guards separate from cue mutation; their short branches have distinct runtime, metadata, and animation responsibilities. See docs/developers-guide.md."
+
+[[tool.duplication_gate.allow]]
+unit = "src/ui/session-updates.ts"
+reason = "Keep short identity fast paths on independent array, turn, metadata, and runtime comparators; extracting a shared boolean guard would hide their distinct comparison policies. See docs/developers-guide.md."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/batch_activity_api.py", "ishiban/interface_state.py"]
+reason = "Keep the six-line bounded body loops explicit at separate HTTP trust boundaries with independently specified byte limits and diagnostics. See docs/developers-guide.md."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_lazy_activity_batch_limits.py"
+reason = "Keep independent queue-capacity and lifetime tests explicit; their three-line fake-process arrangement overlaps but their scheduling and assertions differ. See docs/developers-guide.md."

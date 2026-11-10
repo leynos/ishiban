@@ -4,12 +4,13 @@ import fc from 'fast-check';
 import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
 import {useSyncExternalStore} from 'react';
 import type {ReactElement} from 'react';
-import type {Session, Snapshot} from '../src/contracts';
+import type {Session, Snapshot, SessionActivityFrame} from '../src/contracts';
 import {createBoardStore, type BoardStore} from '../src/client';
 import {createDemoSnapshot} from '../src/demo';
 import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
 import {deferred, type Deferred} from './deferred';
+import {ControlledIntersectionObserver} from './controlled-intersection-observer';
 interface ActivityRequest {
   readonly url: string;
   readonly init: NonNullable<Parameters<typeof fetch>[1]>;
@@ -24,62 +25,6 @@ interface ActivityMergeScenario {
   readonly hasNewerRevision: boolean;
   readonly isCurrentlyUnknown: boolean;
   readonly nextActivity: 'idle' | 'pending' | 'running' | 'waiting';
-}
-
-/** Deliver exact viewport transitions while retaining the real rendered marks. */
-class ControlledIntersectionObserver implements IntersectionObserver {
-  static instances: ControlledIntersectionObserver[] = [];
-
-  readonly root: Element | Document | null = null;
-  readonly rootMargin = '0px';
-  readonly scrollMargin = '0px';
-  readonly thresholds: ReadonlyArray<number> = [0];
-  readonly observed = new Set<Element>();
-  disconnected = false;
-
-  constructor(
-    private readonly callback: IntersectionObserverCallback,
-    _options?: IntersectionObserverInit
-  ) {
-    ControlledIntersectionObserver.instances.push(this);
-  }
-
-  observe(target: Element): void {
-    this.observed.add(target);
-  }
-
-  unobserve(target: Element): void {
-    this.observed.delete(target);
-  }
-
-  disconnect(): void {
-    this.disconnected = true;
-    this.observed.clear();
-  }
-
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
-
-  /** Mark an observed session button as entering or leaving the viewport. */
-  setVisibility(target: Element, isIntersecting: boolean): void {
-    if (!this.observed.has(target)) throw new Error('Only observed marks can change visibility.');
-    const bounds = target.getBoundingClientRect();
-    this.callback(
-      [
-        {
-          target,
-          isIntersecting,
-          intersectionRatio: isIntersecting ? 1 : 0,
-          time: 0,
-          rootBounds: null,
-          boundingClientRect: bounds,
-          intersectionRect: bounds
-        }
-      ],
-      this
-    );
-  }
 }
 
 const seedSnapshot = createDemoSnapshot();
@@ -139,6 +84,12 @@ function mountBoard(sessions: readonly Session[]) {
   stopLazyActivity = startLazyActivity(store);
   return {snapshot, store, observer: currentObserver()};
 }
+/** Install controlled boundaries around the board's real visible marks. */
+function activityBoard(sessions: readonly Session[]) {
+  installIntersectionObserver();
+  const transport = installFetch();
+  return {...transport, ...mountBoard(sessions)};
+}
 /** Dispose observer subscriptions and abort owned activity reads between cases. */
 function stopActivity(): void {
   stopLazyActivity?.();
@@ -169,7 +120,7 @@ function currentObserver(): ControlledIntersectionObserver {
   if (!observer) throw new Error('Lazy activity must install an intersection observer.');
   return observer;
 }
-/** Record GET requests and hold their responses for deterministic ordering. */
+/** Record batch requests and hold their responses for deterministic ordering. */
 function installFetch() {
   const requests: ActivityRequest[] = [];
   const started = Array.from({length: 8}, () => deferred<void>());
@@ -204,9 +155,14 @@ function requestAt(requests: readonly ActivityRequest[], index: number): Activit
   if (!request) throw new Error('The expected visible activity request did not start.');
   return request;
 }
-/** Encode the same workspace/session envelope returned by the API. */
-function resolveActivity(request: ActivityRequest, workspaceId: string, session: Session): void {
-  request.response.resolve(Response.json({workspaceId, session}));
+/** Encode a completed member while preserving its explicit request identity. */
+function activityFrame(workspaceId: string, session: Session): SessionActivityFrame {
+  return {workspaceId, sessionId: session.sessionId, session};
+}
+/** Complete a streaming batch using independently validated NDJSON frames. */
+function resolveBatch(request: ActivityRequest, frames: readonly SessionActivityFrame[]): void {
+  const body = `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`;
+  request.response.resolve(new Response(body, {headers: {'content-type': 'application/x-ndjson'}}));
 }
 /** Accept only same-workspace, same-session, current unknown revisions. */
 function activityReplyMatches(scenario: ActivityMergeScenario): boolean {
@@ -246,10 +202,8 @@ afterEach(() => {
   ControlledIntersectionObserver.instances = [];
 });
 
-it('loads only visible unknown real activity and drops offscreen queued work', async () => {
-  installIntersectionObserver();
-  const {requests} = installFetch();
-  const {snapshot, store, observer} = mountBoard([
+it('batches visible unknown activity and allows immediate rediscovery after dropping offscreen work', async () => {
+  const {requests, started, snapshot, store, observer} = activityBoard([
     KNOWN_SESSION,
     DEMO_UNKNOWN_SESSION,
     UNKNOWN_REAL_ONE,
@@ -257,38 +211,36 @@ it('loads only visible unknown real activity and drops offscreen queued work', a
     UNKNOWN_REAL_THREE,
     UNKNOWN_REAL_FOUR
   ]);
-
   revealSessions(observer, [DEMO_UNKNOWN_SESSION, KNOWN_SESSION, UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
   observer.setVisibility(markFor(UNKNOWN_REAL_ONE.title), true);
   const queuedMark = markFor(UNKNOWN_REAL_THREE.title);
   observer.setVisibility(queuedMark, true);
   observer.setVisibility(queuedMark, false);
-  expect(requests).toHaveLength(2);
-
+  await waitForRequest(started, 0);
+  expect(requests).toHaveLength(1);
   const firstRequest = requestAt(requests, 0);
-  const secondRequest = requestAt(requests, 1);
-  expect(firstRequest.url).toBe(`/api/v1/sessions/${encodeURIComponent(UNKNOWN_REAL_ONE.sessionId)}/activity`);
-  expect(firstRequest.init.method).toBeUndefined();
+  expect(firstRequest.url).toBe('/api/v1/sessions/activity');
+  expect(firstRequest.init.method).toBe('POST');
+  expect(JSON.parse(String(firstRequest.init.body))).toEqual({
+    sessionIds: [UNKNOWN_REAL_ONE.sessionId, UNKNOWN_REAL_TWO.sessionId]
+  });
   expect(firstRequest.init.cache).toBe('no-store');
   expect(firstRequest.init.signal?.aborted).toBe(false);
-  resolveActivity(firstRequest, snapshot.workspaceId, {
-    ...UNKNOWN_REAL_ONE,
-    state: 'running',
-    activitySource: 'lazy'
-  });
+  resolveBatch(firstRequest, [
+    activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_ONE, state: 'running', activitySource: 'lazy'}),
+    {workspaceId: snapshot.workspaceId, sessionId: UNKNOWN_REAL_TWO.sessionId, session: null}
+  ]);
   await waitFor(() => {
     const enrichedSession = store
       .getSnapshot()
       .snapshot?.sessions.find((session) => session.sessionId === UNKNOWN_REAL_ONE.sessionId);
     expect(enrichedSession?.state).toBe('running');
   });
-
   observer.setVisibility(queuedMark, true);
-  expect(requests).toHaveLength(3);
-  expect(requestAt(requests, 2).url).toBe(
-    `/api/v1/sessions/${encodeURIComponent(UNKNOWN_REAL_THREE.sessionId)}/activity`
-  );
-
+  await waitForRequest(started, 1);
+  expect(requests).toHaveLength(2);
+  const secondRequest = requestAt(requests, 1);
+  expect(JSON.parse(String(secondRequest.init.body))).toEqual({sessionIds: [UNKNOWN_REAL_THREE.sessionId]});
   const current = store.getSnapshot().snapshot;
   expect(current?.cursor).toBe(snapshot.cursor);
   expect(current?.sessions[2]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
@@ -299,52 +251,103 @@ it('loads only visible unknown real activity and drops offscreen queued work', a
   stopActivity();
   expect(observer.disconnected).toBe(true);
   expect(secondRequest.init.signal?.aborted).toBe(true);
-  expect(requests).toHaveLength(3);
 });
 
-it('rejects stale SSE revisions and foreign-workspace activity replies', async () => {
-  installIntersectionObserver();
-  const {requests, started} = installFetch();
-  const {snapshot, store, observer} = mountBoard([
+it('rejects stale, foreign and mismatched members without discarding a valid batch member', async () => {
+  const {requests, started, snapshot, store, observer} = activityBoard([
     UNKNOWN_REAL_ONE,
     UNKNOWN_REAL_TWO,
     UNKNOWN_REAL_THREE,
     UNKNOWN_REAL_FOUR
   ]);
-
   revealSessions(observer, [UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO, UNKNOWN_REAL_THREE, UNKNOWN_REAL_FOUR]);
-  expect(requests).toHaveLength(2);
-
-  const newerSession: Session = {
-    ...UNKNOWN_REAL_ONE,
-    state: 'pending',
-    lastEventId: UNKNOWN_REAL_ONE.lastEventId + 1
-  };
+  await waitForRequest(started, 0);
+  expect(requests).toHaveLength(1);
+  const newerSession: Session = {...UNKNOWN_REAL_ONE, state: 'pending', lastEventId: UNKNOWN_REAL_ONE.lastEventId + 1};
   await act(async () => {
     store.session(snapshot.cursor + 1, newerSession);
     await Promise.resolve();
   });
-  const firstRequest = requestAt(requests, 0);
-  const secondRequest = requestAt(requests, 1);
-
-  resolveActivity(firstRequest, snapshot.workspaceId, {
-    ...UNKNOWN_REAL_ONE,
-    state: 'running',
-    activitySource: 'lazy'
-  });
-  await waitForRequest(started, 2);
-  resolveActivity(secondRequest, 'another-workspace', {
-    ...UNKNOWN_REAL_TWO,
-    state: 'waiting',
-    activitySource: 'lazy'
-  });
-  await waitForRequest(started, 3);
-
+  resolveBatch(requestAt(requests, 0), [
+    activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_ONE, state: 'running', activitySource: 'lazy'}),
+    activityFrame('another-workspace', {...UNKNOWN_REAL_TWO, state: 'waiting', activitySource: 'lazy'}),
+    {
+      workspaceId: snapshot.workspaceId,
+      sessionId: UNKNOWN_REAL_THREE.sessionId,
+      session: {...UNKNOWN_REAL_THREE, sessionId: 'wrong-session', state: 'idle'}
+    },
+    activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_FOUR, state: 'waiting', activitySource: 'lazy'})
+  ]);
+  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[3]?.state).toBe('waiting'));
   const current = store.getSnapshot().snapshot;
-  expect(current?.cursor).toBe(snapshot.cursor + 1);
-  expect(current?.sessions[0]?.state).toBe('pending');
-  expect(current?.sessions[0]?.lastEventId).toBe(newerSession.lastEventId);
-  expect(current?.sessions[1]?.state).toBe('unknown');
+  if (!current) throw new Error('The validated batch must retain its workspace.');
+  expect(current.cursor).toBe(snapshot.cursor + 1);
+  expect(current.sessions[0]?.state).toBe('pending');
+  expect(current.sessions[0]?.lastEventId).toBe(newerSession.lastEventId);
+  expect(current.sessions[1]?.state).toBe('unknown');
+  expect(current.sessions[2]?.state).toBe('unknown');
+});
+
+it('shares a pending lookup through metadata replay and accepts its current rebased result', async () => {
+  const {requests, started, snapshot, store, observer} = activityBoard([UNKNOWN_REAL_ONE]);
+  revealSessions(observer, [UNKNOWN_REAL_ONE]);
+  await waitForRequest(started, 0);
+  const current: Session = {
+    ...UNKNOWN_REAL_ONE,
+    title: 'Updated metadata',
+    lastEventId: UNKNOWN_REAL_ONE.lastEventId + 1
+  };
+  await act(async () => {
+    store.session(snapshot.cursor + 1, current);
+    await Promise.resolve();
+  });
+  expect(requests).toHaveLength(1);
+  resolveBatch(requestAt(requests, 0), [
+    activityFrame(snapshot.workspaceId, {...current, state: 'running', activitySource: 'lazy'})
+  ]);
+  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
+  expect(store.getSnapshot().snapshot?.sessions[0]?.title).toBe('Updated metadata');
+  expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor + 1);
+  expect(requests).toHaveLength(1);
+});
+
+it('pipelines two bounded batches and applies an early member before its stream ends', async () => {
+  installIntersectionObserver();
+  const {requests, started} = installFetch();
+  const sessions = Array.from(
+    {length: 9},
+    (_, index): Session => ({
+      ...UNKNOWN_REAL_ONE,
+      sessionId: `pipeline-${index}`,
+      title: `Pipeline ${index}`,
+      lastEventId: 100 + index
+    })
+  );
+  const {snapshot, store, observer} = mountBoard(sessions);
+  revealSessions(observer, sessions);
+  await waitForRequest(started, 1);
+  expect(requests).toHaveLength(2);
+  const requestedIds = requests.flatMap((request) => JSON.parse(String(request.init.body)).sessionIds);
+  expect(requestedIds).toHaveLength(8);
+  expect(new Set(requestedIds).size).toBe(8);
+  for (const request of requests)
+    expect(JSON.parse(String(request.init.body)).sessionIds.length).toBeLessThanOrEqual(4);
+  const first = sessions[0];
+  if (!first) throw new Error('The pipeline fixture needs its first session.');
+  const request = requestAt(requests, 0);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const result = activityFrame(snapshot.workspaceId, {...first, state: 'running', activitySource: 'lazy'});
+      controller.enqueue(new TextEncoder().encode(`${JSON.stringify(result)}\n`));
+      request.init.signal?.addEventListener('abort', () => controller.close(), {once: true});
+    }
+  });
+  request.response.resolve(new Response(stream));
+  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
+  expect(store.getSnapshot().snapshot?.sessions[1]?.state).toBe('unknown');
+  expect(requests).toHaveLength(2);
+  stopActivity();
+  expect(requests.every((item) => item.init.signal?.aborted)).toBe(true);
 });
 
 it('merges only matching unknown activity replies without changing the journal boundary', () => {

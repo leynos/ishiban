@@ -33,34 +33,74 @@ class SessionActivityResource:
 
         For example, a metadata-only CLI result leaves the session unresolved.
 
-        Raises
-        ------
-        falcon.HTTPNotFound
-            If the session does not exist in the bound workspace.
         """
-        previous = await self.store.session_projection(session_id)
-        if previous is None:
-            raise falcon.HTTPNotFound
-        projection: dict[str, object] | None = None
-        if previous.get("state") == "unknown":
-            cached = (await self.store.restore_activity([previous]))[0]
-            if cached.get("activitySource") == "lazy":
-                resp.media = {"workspaceId": self.store.workspace_id, "session": cached}
-                return
-            revision = int(str(previous["lastEventId"]))
-            observed = await self.activity.read(session_id, revision)
-            if observed is not None:
-                projection = apply_observation(
-                    previous, observed, 0, time.time_ns() // 1_000_000
-                )
-                for key in (
-                    "machineId",
-                    "title",
-                    "archived",
-                    "removed",
-                    "lastEvidenceGeneration",
-                ):
-                    projection[key] = previous.get(key)
-                projection["activitySource"] = "lazy"
-                projection = await self.store.remember_activity(projection)
+        projection = await resolve_activity(self.store, self.activity, session_id)
         resp.media = {"workspaceId": self.store.workspace_id, "session": projection}
+
+
+async def resolve_activity(
+    store: Store, activity: LazyActivity, session_id: str
+) -> dict[str, object] | None:
+    """Resolve one unknown session using cache and revision-safe observation.
+
+    For example, a cached lazy result is returned without starting another Lody
+    request, while a missing session raises ``HTTPNotFound``.
+
+    Returns
+    -------
+    dict[str, object] or None
+        The lazy projection, or ``None`` for known or unavailable activity.
+
+    Raises
+    ------
+    falcon.HTTPNotFound
+        If the identity is absent from the configured workspace.
+    """
+    previous = await store.session_projection(session_id)
+    if previous is None:
+        raise falcon.HTTPNotFound
+    if previous.get("state") != "unknown":
+        return None
+
+    cached = await restore_cached_activities(store, [previous])
+    if cached[0] is not None:
+        return cached[0]
+
+    revision = int(str(previous.get("lastActivityEventId", 0)))
+    observed = await activity.read(session_id, revision)
+    if observed is None:
+        return None
+
+    projection = apply_observation(previous, observed, 0, time.time_ns() // 1_000_000)
+    for key in (
+        "machineId",
+        "title",
+        "archived",
+        "removed",
+        "lastEvidenceGeneration",
+    ):
+        projection[key] = previous.get(key)
+    projection["activitySource"] = "lazy"
+    return await store.remember_activity(projection)
+
+
+async def restore_cached_activities(
+    store: Store, projections: list[dict[str, object]]
+) -> list[dict[str, object] | None]:
+    """Restore only cache hits while preserving input order for a request batch.
+
+    For example, an unknown session without a retained cache entry maps to
+    ``None`` and remains eligible for a fresh observer read.
+
+    Returns
+    -------
+    list[dict[str, object] or None]
+        Lazy projections aligned with the supplied session projections.
+    """
+    if not projections:
+        return []
+    restored = await store.restore_activity(projections)
+    return [
+        projection if projection.get("activitySource") == "lazy" else None
+        for projection in restored
+    ]
