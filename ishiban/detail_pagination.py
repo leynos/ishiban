@@ -71,14 +71,15 @@ def parse_turn_cursor(
         cursor = msgspec.json.decode(data, type=TurnPageCursor)
     except (binascii.Error, msgspec.DecodeError, msgspec.ValidationError) as exc:
         raise InvalidTurnCursorError from exc
-    _validate_turn_cursor(cursor, token, workspace_id, session_id)
+    _validate_cursor_identity(cursor, workspace_id, session_id)
+    _validate_cursor_position(cursor, token)
     return cursor
 
 
-def _validate_turn_cursor(
-    cursor: TurnPageCursor, token: str, workspace_id: str, session_id: str
+def _validate_cursor_identity(
+    cursor: TurnPageCursor, workspace_id: str, session_id: str
 ) -> None:
-    """Reject a cursor whose decoded position or identity is invalid.
+    """Reject a continuation bound to another session or protocol version.
 
     For example, a cursor from another workspace raises
     ``InvalidTurnCursorError``.
@@ -86,13 +87,25 @@ def _validate_turn_cursor(
     Raises
     ------
     InvalidTurnCursorError
-        If the cursor position or identity is invalid.
+        If the version, workspace or session does not match.
     """
     if cursor.version != 1 or cursor.workspace_id != workspace_id:
         raise InvalidTurnCursorError
-    if cursor.session_id != session_id or not cursor.user_turn_id:
+    if cursor.session_id != session_id:
         raise InvalidTurnCursorError
-    if len(cursor.user_turn_id) > MAX_TURN_ID_LENGTH:
+
+
+def _validate_cursor_position(cursor: TurnPageCursor, token: str) -> None:
+    """Reject an invalid keyset position or noncanonical encoded token.
+
+    For example, a negative event ID cannot identify a retained turn.
+
+    Raises
+    ------
+    InvalidTurnCursorError
+        If the turn identity, event position or encoding is invalid.
+    """
+    if not cursor.user_turn_id or len(cursor.user_turn_id) > MAX_TURN_ID_LENGTH:
         raise InvalidTurnCursorError
     if not 0 < cursor.last_event_id <= MAX_EVENT_ID:
         raise InvalidTurnCursorError
