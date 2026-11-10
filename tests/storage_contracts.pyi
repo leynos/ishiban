@@ -19,6 +19,7 @@ class Projection(typ.TypedDict, total=False):
     source: str
     freshness: str
     generation: int
+    lastError: str | None
     lastEventId: int
     title: str
     lastActivityEventId: int
