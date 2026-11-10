@@ -187,7 +187,10 @@ export function Board(props: BoardProps): ReactElement {
   const viewState = useBoardViewState(snapshot.interfaceState);
   const pulseRevisions = useSessionUpdates(snapshot);
   const recency = useSessionRecency(snapshot);
-  const families = useMemo(() => groupSessions(snapshot.sessions, recency), [snapshot.sessions, recency]);
+  const families = useMemo(
+    () => groupSessions(snapshot.sessions, recency.facts, recency.limitedRoots),
+    [snapshot.sessions, recency]
+  );
   const familyPulses = useMemo(() => familyPulseRevisions(families, pulseRevisions), [families, pulseRevisions]);
   const initiatingTriggerRef = useRef<HTMLButtonElement | null>(null);
   const boardFallbackRef = useRef<HTMLElement | null>(null);

@@ -130,3 +130,28 @@ export function createFamilySnapshot(count: number, workspaceId = 'family-worksp
   }
   return {...initial, workspaceId, workspaceSlug: 'leynos', sessions};
 }
+
+/**
+ * Exercise accepted 256-code-point IDs at the recency JSON byte boundary.
+ * @returns One linked family with eight distinct maximum-length IDs.
+ * @throws {Error} If the shared family fixture loses its root or child template.
+ * @example
+ * createMultibyteFamilySnapshot().sessions.every((session) => [...session.sessionId].length === 256); // true
+ */
+export function createMultibyteFamilySnapshot(): Snapshot {
+  const baseline = createFamilySnapshot(1, 'w1');
+  const [root, child] = baseline.sessions;
+  if (!root || !child) throw new Error('The multibyte family requires root and child templates.');
+  const rootId = `${'😀'.repeat(255)}0`;
+  return {
+    ...baseline,
+    sessions: [
+      {...root, sessionId: rootId},
+      ...Array.from({length: 7}, (_, index) => ({
+        ...child,
+        sessionId: `${'😁'.repeat(255)}${index}`,
+        parentSessionId: rootId
+      }))
+    ]
+  };
+}

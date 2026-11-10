@@ -2,8 +2,11 @@
 
 ## Status
 
-Accepted and implemented for the proof of concept. Full repository gates and
-browser acceptance remain pending.
+Accepted and implemented for the proof of concept. The core family browser
+acceptance and the `b26d0ba` hosted CI and Act Validation runs passed. Three
+newly assessed recency edge cases are repaired and pass full local gates and
+focused follow-up validation. Published checks and assessment are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
 
 ## Context
 
@@ -67,6 +70,26 @@ prior selection facts. Recency-only updates are quiet; meaningful runtime
 changes pulse the visible family, with initial replay establishing a quiet
 baseline.
 
+Admit complete visible families within a shared 512-member browser fact budget,
+in deterministic root order. Skip a family when all its real members cannot
+fit, rather than reading a subset that can never establish the latest tab. The
+inspector explicitly labels that family's selection provisional. Hidden-family
+facts remain cached while room exists, and only non-admitted facts can be
+evicted to make room for admitted work. When visibility changes, release queued
+work and ignore in-flight results from families that have lost admission. The
+budget status is derived from current visible families, without a persistent
+negative cache. This bound belongs to the browser recency owner; it does not
+change the complete source catalogue or private journal. An open inspector also
+labels recency pending or unavailable when a hidden family's cached facts are
+later evicted to make room for visible work.
+
+Pack each request by both member count and actual UTF-8 JSON bytes. Accepted
+256-code-point IDs may occupy more than 1,024 bytes each; count-only batches
+could exceed the server's 8,192-byte limit. Valid siblings from a streamed
+response remain usable, while malformed or missing members trigger the same
+30-second transport cooldown as HTTP failure. A normal per-member `unavailable`
+result stays separate from malformed transport.
+
 The request contains only `sessionIds`; workspace scope stays in request
 ownership and response validation. Transport failures pause further batch
 submissions for 30 seconds independently of the per-member cache, preventing
@@ -113,7 +136,7 @@ session checks.
 ## References
 
 - [Observation proof-of-concept plan](execplans/initial-spike.md) tracks the
-  implementation milestone and its pending validation.
+  implementation and candidate-specific validation.
 - [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
   defines the existing bounded activity transport and quiet update baseline.
 - [Persisted on-demand activity](adr-004-persist-on-demand-activity.md)

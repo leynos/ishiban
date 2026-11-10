@@ -20,7 +20,11 @@ if typ.TYPE_CHECKING:
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-async def _capture_browser_request(directory: pathlib.Path) -> bytes:
+async def _capture_browser_request(
+    directory: pathlib.Path,
+    *,
+    variable: str = "ISHIBAN_RECENCY_REQUEST_CAPTURE",
+) -> bytes:
     """Run the real recency hook and retain its wire body for Falcon.
 
     For example, an extra browser field is rejected by the server in the
@@ -31,8 +35,8 @@ async def _capture_browser_request(directory: pathlib.Path) -> bytes:
     bytes
         The browser controller's actual JSON request body.
     """
-    capture = directory / "recency-request.json"
-    environment = {**os.environ, "ISHIBAN_RECENCY_REQUEST_CAPTURE": str(capture)}
+    capture = directory / f"{variable.lower()}.json"
+    environment = {**os.environ, variable: str(capture)}
     process = await asyncio.create_subprocess_exec(
         "bun",
         "test",
@@ -106,3 +110,56 @@ async def test_browser_recency_payload_passes_real_asgi_decoder(
     )
     assert len(lody.invocations) == 2, "Each uncached member must be resolved once."
     assert before == after, "Contract validation must leave the journal unchanged."
+
+
+@pytest.mark.asyncio
+async def test_multibyte_browser_batches_pass_real_asgi_decoder(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+) -> None:
+    """Accepted long IDs reach Falcon in separate requests within its byte cap."""
+    captured = await _capture_browser_request(
+        tmp_path, variable="ISHIBAN_RECENCY_MULTIBYTE_CAPTURE"
+    )
+    bodies: list[str] = json.loads(captured)
+    member_ids = [
+        session_id for body in bodies for session_id in json.loads(body)["sessionIds"]
+    ]
+    assert len(bodies) == 2, "The browser must split this eight-member byte load."
+    assert len(member_ids) == 8, "Splitting must deliver every accepted member."
+    assert len(set(member_ids)) == 8, "Each accepted member must appear only once."
+    assert all(len(session_id) == 256 for session_id in member_ids), (
+        "The fixture must use Python's 256-code-point acceptance boundary."
+    )
+    assert all(len(body.encode()) <= 8192 for body in bodies), (
+        "Every actual browser payload must respect Falcon's request limit."
+    )
+
+    lody = cmd_mox.spy("lody").runs(_show_member)
+    async with opened_store(tmp_path) as store:
+        await seed_unknown_sessions(store, member_ids)
+        before = (await store.snapshot(), await store.events(0))
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            results = [
+                await conductor.simulate_post(
+                    "/api/v1/sessions/recency",
+                    body=body.encode(),
+                    headers={"content-type": "application/json"},
+                )
+                for body in bodies
+            ]
+            after = (await store.snapshot(), await store.events(0))
+    assert [result.status_code for result in results] == [200, 200], (
+        "Both actual wire requests must pass Falcon's decoder."
+    )
+    frames = [
+        json.loads(line) for result in results for line in result.content.splitlines()
+    ]
+    assert {frame["sessionId"] for frame in frames} == set(member_ids), (
+        "The resolver must echo all requested identities without normalization."
+    )
+    assert all(frame["outcome"] == "available" for frame in frames), (
+        "Each accepted ID must reach the bounded read-only CLI resolver."
+    )
+    assert len(lody.invocations) == 8, "The native adapter must read each ID once."
+    assert before == after, "Recency enrichment must not mutate the journal."

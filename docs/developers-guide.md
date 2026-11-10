@@ -543,12 +543,13 @@ restoration; do not reset selection just because a catalogue parent link
 arrives after the observer's standalone record.
 
 `POST /api/v1/sessions/recency` reads latest history timestamps for up to eight
-session IDs in an 8,192-byte request. It returns independent NDJSON results,
-with successful empty history represented by `latestHistoryAt: null` and
-unavailable reads represented by a distinct outcome. Each result carries the
-workspace, actual session ID, and last activity event ID used as its execution
-watermark. Discard stale facts when any of those identities or the watermark
-changes.
+session IDs in an 8,192-byte UTF-8 JSON request. Pack by both byte size and
+count; an accepted 256-code-point Unicode ID can approach 1,024 UTF-8 bytes
+before JSON framing. The endpoint returns independent NDJSON results, with
+successful empty history represented by `latestHistoryAt: null` and unavailable
+reads represented by a distinct outcome. Each result carries the workspace,
+actual session ID, and last activity event ID used as its execution watermark.
+Discard stale facts when any of those identities or the watermark changes.
 
 The request body contains only `sessionIds`; workspace identity belongs to the
 local request ownership and validated response, not an extra request field. The
@@ -556,7 +557,20 @@ cross-runtime request contract test captures the real browser hook's wire body
 with Bun and submits those bytes to Falcon's strict decoder and CmdMox
 resolver. Transport failures also impose a separate 30-second owner-wide
 cooldown, independent of the bounded per-member fact cache, so an endpoint
-failure cannot cause an immediate retry loop across visible families.
+failure cannot cause an immediate retry loop across visible families. Malformed
+or missing HTTP 200 members engage the same cooldown after valid siblings are
+applied. The recency decoder marks malformed members before the shared frame
+reader skips them; activity decoding retains its independent-member policy.
+
+`src/session-recency.ts` admits whole visible families into a shared 512-member
+fact budget. It keeps a selected running tab provisional when that budget
+cannot fit a family, and exposes a bounded, derived incomplete status to the
+inspector. Successful admitted families can settle without having their facts
+evicted by another visible family. Hidden facts remain cached while space
+allows; only non-admitted facts yield space to new admitted reads. Queue and
+in-flight ownership are checked again when visibility or execution changes.
+This admission policy is specific to history recency, not the separate durable
+activity cache or server-side session-show cache.
 
 `ishiban.session_show.SessionShowReader` owns shared session-show subprocesses
 for inspector agent metadata and family recency. It verifies workspace and

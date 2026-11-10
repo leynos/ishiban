@@ -245,6 +245,8 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
           onClose={onClose}
           session={inspectorSession.context}
           activitySession={inspectorSession.activity}
+          recencyIncomplete={inspectorSession.recencyIncomplete}
+          recencyBudgetLimited={inspectorSession.recencyBudgetLimited}
         />
       )}
     </div>

@@ -11,6 +11,8 @@ export interface SessionFamily {
   readonly context: Session;
   readonly activity: Session;
   readonly members: readonly Session[];
+  readonly recencyIncomplete: boolean;
+  readonly recencyBudgetLimited: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+
  *
  * @param sessions Unmodified records from one workspace catalogue.
  * @param recency Per-session history lookup outcomes; missing keys remain pending.
+ * @param limitedRoots Visible families excluded from the bounded lookup budget.
  * @returns Stable families whose context and members preserve their original records.
  * @example
  * const family = groupSessions([root, child], new Map())[0];
@@ -57,7 +60,8 @@ const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+
  */
 export function groupSessions(
   sessions: readonly Session[],
-  recency: ReadonlyMap<string, RecencyFact>
+  recency: ReadonlyMap<string, RecencyFact>,
+  limitedRoots: ReadonlySet<string> = new Set()
 ): readonly SessionFamily[] {
   const orderedSessions = sessions.toSorted((left, right) => compareIds(left.sessionId, right.sessionId));
   const sessionsById = new Map(orderedSessions.map((session) => [session.sessionId, session]));
@@ -76,7 +80,19 @@ export function groupSessions(
     .map(([rootId, members]) => {
       const context = sessionsById.get(rootId);
       if (context === undefined) throw new Error(`Session family root ${rootId} is missing its record.`);
-      return {rootId, context, activity: selectActivity(members, recency), members};
+      const recencyBudgetLimited = limitedRoots.has(rootId);
+      const recencyIncomplete =
+        recencyBudgetLimited ||
+        (members.length > 1 &&
+          members.some((member) => member.source !== 'demo' && recency.get(member.sessionId)?.outcome !== 'available'));
+      return {
+        rootId,
+        context,
+        activity: selectActivity(members, recency),
+        members,
+        recencyIncomplete,
+        recencyBudgetLimited
+      };
     });
 }
 

@@ -553,8 +553,8 @@ members = ["src/ui/session-updates.ts::recordSessionCue", "src/ui/session-update
 reason = "Keep semantic comparison separate from cue mutation; these named functions have distinct runtime, metadata, and animation responsibilities. Shared identity fast paths have been removed. See docs/developers-guide.md."
 
 [[tool.duplication_gate.allow]]
-members = ["tests/session-recency.test.tsx", "tests/board-families.test.tsx", "tests/session-recency-transport.test.tsx"]
-reason = "Keep hook scope/basis/viewport, rendered workflow/search/pulse and strict payload/transport cooldown assertions independent. Snapshot, browser-global setup and controlled fetch ownership are shared; the remaining shallow module match contains imports and test registration, not a shared scenario algorithm. See docs/developers-guide.md#duplication-review."
+members = ["tests/session-recency.test.tsx", "tests/board-families.test.tsx", "tests/session-recency-transport.test.tsx", "tests/session-recency-pressure.test.tsx"]
+reason = "Keep hook scope/basis/viewport, rendered workflow/search/pulse, strict payload/transport cooldown and whole-family capacity assertions independent. Snapshot, browser-global setup and controlled fetch ownership are shared; the reviewed shallow module match shares ten import and test-registration lines, not a scenario algorithm. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
 unit = "ishiban/inspector_api.py"

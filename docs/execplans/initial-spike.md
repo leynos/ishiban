@@ -1,13 +1,15 @@
 # Ishiban initial observation proof of concept
 
 Status: the original implementation and its local acceptance are complete.
-Draft PR #9 is published, and hosted CI, full-PR CodeScene cleanup and review
-convergence are in progress under the user's subsequent `pr-babysitting`
-assignment. Session-family backend, resource, and board integration is
-implemented in the current worktree. Its full quality gates and browser
-acceptance remain pending. The original implementation's publication
-restriction is superseded by the user's PR creation and babysitting requests.
-Lody writes remain forbidden; no merge has been authorized.
+Draft PR #9 is published. The core session-family browser acceptance, full
+local quality gates, and hosted CI and Act Validation on `b26d0ba` passed.
+CodeRabbit then identified three further recency edge cases, now repaired with
+full local gates and focused follow-up checks passing. The repair candidate's
+hosted checks, reassessment, and formal review are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). The original
+implementation's publication restriction is superseded by the user's PR
+creation and babysitting requests. Lody writes remain forbidden; no merge has
+been authorized.
 
 ## Purpose
 
@@ -813,3 +815,34 @@ highlighting and focus use the current family root. Closing the inspector
 focuses the surviving root mark. Twenty focused board tests pass, with Bun
 types, lint, formatting, and direct CodeScene checks clear for both changed
 files. The change preserves raw journal and CLI identities.
+
+### Recency admission and stream integrity, 10 November 2026
+
+**Surprise and decision.** Assessment 4 confirmed the query fallback for opaque
+IDs but found three recency edge cases: a 513-member family can churn through
+the 512-entry browser cache; eight accepted multibyte IDs can exceed the
+8,192-byte request cap; and malformed or missing HTTP 200 members can bypass
+the transport cooldown. Admit only complete visible families within a shared
+512-member budget, label non-admitted selection provisional, pack requests by
+actual encoded bytes, and cool down after an incomplete stream while retaining
+valid siblings. [ADR 007](../adr-007-session-tab-families.md) records the
+ownership, cache-retention policy, and user-visible limit.
+
+**Progress and verification.** Red Bun regressions reproduced a 513-tab family
+starting unfinishable reads, rejection of a byte-heavy accepted batch, and an
+immediate third request after a malformed HTTP 200 member. The bounded repair
+passes 24 focused family/recency Bun cases, including aggregate 300+300 member
+pressure, release on hide, rejection of in-flight results after admission
+changes, a provisional inspector notice, and subsequent cooldown recovery. The
+browser-to-ASGI integration passes two Python cases, including actual multibyte
+request bodies through Falcon and CmdMox without journal writes.
+
+Full local gates subsequently passed: 248 Python tests, 144 Bun tests (with
+eight opt-in skips), four Chromium layout cases, browser build, formatting,
+lint, typecheck, dependency audit, Markdown/spelling, diagrams, and Makefile
+validation. The working-tree CodeScene delta reports no issues; all changed
+source and test files score 10.0 in direct reviews. A test-only cleanup derives
+expected membership from raw parent links; its four focused cases pass.
+Published candidate checks and reassessment are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
+introduced.

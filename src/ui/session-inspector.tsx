@@ -8,6 +8,8 @@ import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from '.
 interface SessionInspectorProps {
   readonly session: Session;
   readonly activitySession?: Session;
+  readonly recencyIncomplete?: boolean;
+  readonly recencyBudgetLimited?: boolean;
   readonly currentGeneration: number;
   readonly onClose: () => void;
   readonly workspaceId: string;
@@ -238,6 +240,9 @@ export function SessionInspector(props: SessionInspectorProps): ReactElement {
   const {currentGeneration, onClose} = props;
   const session = usePullRequestTitles(props.session, props.workspaceId);
   const activitySession = props.activitySession ?? props.session;
+  const recencyNotice = props.recencyBudgetLimited
+    ? 'This family cannot fit within the visible tab lookup budget. Its selected tab is provisional.'
+    : "Tab recency is pending or unavailable. This family's selected tab is provisional.";
   return (
     <aside aria-labelledby="session-inspector-heading" className="session-inspector" id="session-inspector">
       <header className="session-inspector__header">
@@ -258,6 +263,7 @@ export function SessionInspector(props: SessionInspectorProps): ReactElement {
       <p className="session-inspector__description" id="inspector-description">
         {session.stageReason}
       </p>
+      {props.recencyIncomplete ? <p role="status">{recencyNotice}</p> : null}
       <SessionFacts session={session} activitySession={activitySession} currentGeneration={currentGeneration} />
       <AgentDetails
         key={activitySession.sessionId}

@@ -344,6 +344,13 @@ matches member session IDs and titles. Board counts and PR-workflow filters
 count families. See [ADR 007](adr-007-session-tab-families.md) for recency and
 selection details.
 
+The board reads tab history only for visible families. When too many tabs are
+visible to read as complete families within the local lookup budget, the
+inspector says its selected tab is provisional. Scrolling another family out of
+view releases capacity for the remaining visible work. A failed or malformed
+history response pauses new requests briefly while valid sibling results stay
+available.
+
 The inspector keeps your selection as the board discovers related tabs.
 
 Archiving the root hides the logical task, including any child tabs Lody leaves

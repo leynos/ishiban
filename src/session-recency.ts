@@ -32,9 +32,12 @@ interface CacheEntry {
   readonly fact: RecencyFact;
   readonly expiresAt: number;
 }
-interface ScopedFacts {
-  readonly workspaceId: string;
+export interface RecencyState {
   readonly facts: ReadonlyMap<string, RecencyFact>;
+  readonly limitedRoots: ReadonlySet<string>;
+}
+interface ScopedFacts extends RecencyState {
+  readonly workspaceId: string;
 }
 const MARKS = 'button[data-family-id]';
 const MAX_BATCH = 8;
@@ -42,6 +45,13 @@ const MAX_RUNNING = 2;
 const MAX_BODY = 8192;
 const MAX_FRAME = 1_048_576;
 const MAX_RESPONSE = 8_388_608;
+const MAX_CACHE = 512;
+
+// Example: ['tab'] measures the bytes in {"sessionIds":["tab"]}.
+/** Measure the exact recency POST request shape; only this endpoint reuses it. */
+function encodedBodyBytes(sessionIds: readonly string[]): number {
+  return new TextEncoder().encode(JSON.stringify({sessionIds})).byteLength;
+}
 
 /** Retain a known history fact when one refresh is unavailable. */
 function retainedFact(fact: RecencyFact, prior: CacheEntry | undefined, basis: number): RecencyFact {
@@ -61,12 +71,14 @@ class RecencyRequests {
   private readonly controllers = new Set<AbortController>();
   private readonly cache = new Map<string, CacheEntry>();
   private readonly familyByMember = new Map<string, string>();
+  private eligible = new Set<string>();
+  private limitedRoots = new Set<string>();
   private running = 0;
   private transportRetryAt = 0;
   private stopped = false;
   constructor(
     snapshot: Snapshot,
-    private readonly publish: (facts: ReadonlyMap<string, RecencyFact>) => void
+    private readonly publish: (state: RecencyState) => void
   ) {
     this.snapshot = snapshot;
     this.families = groupSessions(snapshot.sessions, new Map());
@@ -90,7 +102,7 @@ class RecencyRequests {
         hasStaleFacts = true;
       }
     }
-    if (hasStaleFacts) this.publish(new Map([...this.cache].map(([id, entry]) => [id, entry.fact])));
+    if (hasStaleFacts) this.publishState();
     this.revisit();
   }
 
@@ -102,24 +114,48 @@ class RecencyRequests {
 
   /** Stop requesting a family when every mark has left the viewport. */
   hiddenFamily(rootId: string): void {
-    this.visible.delete(rootId);
+    if (this.visible.delete(rootId)) this.revisit();
   }
 
   /** Retry expired facts and changed execution bases for visible family members. */
   revisit(): void {
     this.familyByMember.clear();
+    const eligible = new Set<string>();
+    const limitedRoots = new Set<string>();
     for (const family of this.families) {
-      this.indexFamily(family);
+      this.indexFamily(family, eligible, limitedRoots);
     }
+    this.eligible = eligible;
+    this.queue.splice(0, this.queue.length, ...this.queue.filter((task) => this.isVisibleCurrent(task)));
+    this.enqueueAdmittedMembers(eligible);
+    const hasLimitChange =
+      limitedRoots.size !== this.limitedRoots.size ||
+      [...limitedRoots].some((rootId) => !this.limitedRoots.has(rootId));
+    this.limitedRoots = limitedRoots;
+    if (hasLimitChange) this.publishState();
     this.drain();
   }
 
-  /** Index one family's members and queue only its visible real observations. */
-  private indexFamily(family: ReturnType<typeof groupSessions>[number]): void {
+  /** Preserve stable family member order when filling the bounded queue. */
+  private enqueueAdmittedMembers(eligible: ReadonlySet<string>): void {
+    for (const family of this.families) {
+      for (const member of family.members) {
+        if (eligible.has(member.sessionId)) this.enqueue(member.sessionId, member.lastActivityEventId ?? 0);
+      }
+    }
+  }
+
+  /** Admit whole visible families so every admitted member can settle in the fact cache. */
+  private indexFamily(family: SessionFamily, eligible: Set<string>, limitedRoots: Set<string>): void {
     for (const member of family.members) this.familyByMember.set(member.sessionId, family.rootId);
     if (family.members.length < 2 || !this.visible.has(family.rootId)) return;
-    for (const member of family.members) {
-      if (member.source !== 'demo') this.enqueue(member.sessionId, member.lastActivityEventId ?? 0);
+    const realMembers = family.members.filter((member) => member.source !== 'demo');
+    if (realMembers.length > MAX_CACHE - eligible.size) {
+      limitedRoots.add(family.rootId);
+      return;
+    }
+    for (const member of realMembers) {
+      eligible.add(member.sessionId);
     }
   }
 
@@ -135,29 +171,71 @@ class RecencyRequests {
   /** Match the raw execution watermark before publishing a lookup fact. */
   private isCurrent(task: Lookup): boolean {
     if (this.stopped || this.snapshot.workspaceId !== task.workspaceId) return false;
+    if (!this.eligible.has(task.sessionId)) return false;
     const current = this.snapshot.sessions.find((session) => session.sessionId === task.sessionId);
     return current !== undefined && (current.lastActivityEventId ?? 0) === task.basis;
   }
 
-  /** Bound cache entries while retaining current facts after transient lookup failure. */
+  /** Evict only non-admitted facts when a complete visible family needs room. */
   private record(task: Lookup, fact: RecencyFact): void {
     if (!this.isCurrent(task)) return;
     const prior = this.cache.get(task.sessionId);
     const finalFact = retainedFact(fact, prior, task.basis);
     this.cache.delete(task.sessionId);
+    if (this.cache.size >= MAX_CACHE) {
+      const evictable = [...this.cache.keys()].find((sessionId) => !this.eligible.has(sessionId));
+      if (evictable === undefined) return;
+      this.cache.delete(evictable);
+    }
     this.cache.set(task.sessionId, {
       basis: task.basis,
       fact: finalFact,
       expiresAt: Date.now() + (fact.outcome === 'available' ? 300_000 : 30_000)
     });
-    if (this.cache.size > 512) this.cache.delete(this.cache.keys().next().value ?? '');
-    this.publish(new Map([...this.cache].map(([id, entry]) => [id, entry.fact])));
+    this.publishState();
+  }
+
+  /** Publish one scoped projection without retaining an unbounded retry history. */
+  private publishState(): void {
+    this.publish({
+      facts: new Map([...this.cache].map(([id, entry]) => [id, entry.fact])),
+      limitedRoots: new Set(this.limitedRoots)
+    });
+  }
+
+  /** Pack queued members by both request count and actual encoded byte size. */
+  private takeBatch(): Lookup[] {
+    const tasks: Lookup[] = [];
+    while (tasks.length < MAX_BATCH) {
+      const candidate = this.nextCurrentQueued();
+      if (!candidate) break;
+      const proposed = [...tasks.map((task) => task.sessionId), candidate.sessionId];
+      if (encodedBodyBytes(proposed) <= MAX_BODY) {
+        tasks.push(candidate);
+        continue;
+      }
+      if (tasks.length > 0) {
+        this.queue.unshift(candidate);
+        break;
+      }
+      this.record(candidate, {outcome: 'unavailable'});
+    }
+    return tasks;
+  }
+
+  /** Remove stale queued work until the next current visible member appears. */
+  private nextCurrentQueued(): Lookup | undefined {
+    while (this.queue.length > 0) {
+      const candidate = this.queue.shift();
+      if (candidate && this.isVisibleCurrent(candidate)) return candidate;
+    }
+    return undefined;
   }
 
   /** Send at most two eight-member requests, retaining all later visible work. */
   private drain(): void {
     while (this.canStartBatch()) {
-      const tasks = this.queue.splice(0, MAX_BATCH).filter((task) => this.isVisibleCurrent(task));
+      const tasks = this.takeBatch();
       if (tasks.length === 0) continue;
       for (const task of tasks) this.active.add(task.sessionId);
       this.running += 1;
@@ -183,7 +261,8 @@ class RecencyRequests {
     try {
       await withRequestLifetime(this.controllers, async (signal) => {
         const body = JSON.stringify({sessionIds: tasks.map((task) => task.sessionId)});
-        if (new TextEncoder().encode(body).byteLength > MAX_BODY) throw new Error('Recency request exceeds byte limit');
+        if (encodedBodyBytes(tasks.map((task) => task.sessionId)) > MAX_BODY)
+          throw new Error('Recency request exceeds byte limit');
         const response = await fetch('/api/v1/sessions/recency', {
           method: 'POST',
           headers: {'content-type': 'application/json'},
@@ -191,12 +270,21 @@ class RecencyRequests {
           signal
         });
         if (!response.ok) throw new Error('Recency request failed');
+        const integrity = {isMalformed: false};
         await readBoundedFrames(
           response,
           {maxFrameChars: MAX_FRAME, maxResponseBytes: MAX_RESPONSE, maxResults: MAX_BATCH},
-          (line) => Schema.decodeUnknownSync(FrameSchema)(JSON.parse(line)),
+          (line) => {
+            try {
+              return Schema.decodeUnknownSync(FrameSchema)(JSON.parse(line));
+            } catch (error) {
+              integrity.isMalformed = true;
+              throw error;
+            }
+          },
           (frame) => this.applyFrame(outstanding, frame)
         );
+        if (integrity.isMalformed || outstanding.size > 0) throw new Error('Recency response is incomplete');
       });
     } catch {
       // A broken transport must not spin through visible members as the LRU evicts failures.
@@ -283,11 +371,15 @@ function releaseDetachedMarks(observer: IntersectionObserver, observed: Set<Elem
  * @param snapshot Current validated workspace projection.
  * @returns Current scoped history recency facts for family selection.
  */
-export function useSessionRecency(snapshot: Snapshot): ReadonlyMap<string, RecencyFact> {
-  const [scoped, setScoped] = useState<ScopedFacts>(() => ({workspaceId: snapshot.workspaceId, facts: new Map()}));
+export function useSessionRecency(snapshot: Snapshot): RecencyState {
+  const [scoped, setScoped] = useState<ScopedFacts>(() => ({
+    workspaceId: snapshot.workspaceId,
+    facts: new Map(),
+    limitedRoots: new Set()
+  }));
   const requestsRef = useRef<RecencyRequests | null>(null);
   useEffect(() => {
-    const requests = new RecencyRequests(snapshot, (facts) => setScoped({workspaceId: snapshot.workspaceId, facts}));
+    const requests = new RecencyRequests(snapshot, (state) => setScoped({workspaceId: snapshot.workspaceId, ...state}));
     requestsRef.current = requests;
     const stopObservation = observeFamilies(requests);
     const retry = setInterval(() => requests.revisit(), 15_000);
@@ -299,5 +391,5 @@ export function useSessionRecency(snapshot: Snapshot): ReadonlyMap<string, Recen
     };
   }, [snapshot.workspaceId]);
   useEffect(() => requestsRef.current?.update(snapshot), [snapshot]);
-  return scoped.workspaceId === snapshot.workspaceId ? scoped.facts : new Map();
+  return scoped.workspaceId === snapshot.workspaceId ? scoped : {facts: new Map(), limitedRoots: new Set()};
 }

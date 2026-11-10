@@ -1,5 +1,5 @@
 /** @file Verify visible-family recency ownership across scope and viewport changes. */
-import {afterEach, expect, it} from 'bun:test';
+import {afterEach, expect, it, setSystemTime} from 'bun:test';
 import {act, cleanup, renderHook, waitFor} from '@testing-library/react';
 import type {Snapshot} from '../src/contracts';
 import {useSessionRecency} from '../src/session-recency';
@@ -60,7 +60,7 @@ it('does not publish a previous workspace response for matching raw session IDs'
   await act(async () => {
     network.gates[0]?.resolve(availableFrame(initial, 'root-0', '2026-11-10T18:41:02.707Z'));
   });
-  expect(result.current.size).toBe(0);
+  expect(result.current.facts.size).toBe(0);
 });
 
 it('ignores foreign members while retaining a later valid sibling', async () => {
@@ -75,31 +75,41 @@ it('ignores foreign members while retaining a later valid sibling', async () => 
   await act(async () => {
     network.gates[0]?.resolve(new Response(`${foreign}${valid}`));
   });
-  await waitFor(() => expect(result.current.get('child-0')?.outcome).toBe('available'));
-  expect(result.current.get('root-0')?.outcome).toBe('unavailable');
+  await waitFor(() => expect(result.current.facts.get('child-0')?.outcome).toBe('available'));
+  expect(result.current.facts.get('root-0')?.outcome).toBe('unavailable');
 });
 
 it('rejects a late member after its execution watermark advances', async () => {
-  const marks = installFamilyMarks(1);
-  const network = installPendingFetch();
-  const initial = createFamilySnapshot(1);
-  const {result, rerender} = renderHook(({snapshot}) => useSessionRecency(snapshot), {
-    initialProps: {snapshot: initial}
-  });
-  act(() => browser?.visibility(marks[0]!, true));
-  await waitFor(() => expect(network.requests.length).toBe(1));
-  const next = {
-    ...initial,
-    sessions: initial.sessions.map((session) =>
-      session.sessionId === 'child-0' ? {...session, lastActivityEventId: 17} : session
-    )
-  };
-  rerender({snapshot: next});
-  await act(async () => {
-    network.gates[0]?.resolve(availableFrame(initial, 'child-0', '2026-11-10T18:41:02.707Z'));
-  });
-  expect(result.current.get('child-0')?.outcome).not.toBe('available');
-  await waitFor(() => expect(network.requests.length).toBe(2));
+  let now = Date.now();
+  setSystemTime(now);
+  try {
+    const marks = installFamilyMarks(1);
+    const network = installPendingFetch();
+    const initial = createFamilySnapshot(1);
+    const {result, rerender} = renderHook(({snapshot}) => useSessionRecency(snapshot), {
+      initialProps: {snapshot: initial}
+    });
+    act(() => browser?.visibility(marks[0]!, true));
+    await waitFor(() => expect(network.requests.length).toBe(1));
+    const next = {
+      ...initial,
+      sessions: initial.sessions.map((session) =>
+        session.sessionId === 'child-0' ? {...session, lastActivityEventId: 17} : session
+      )
+    };
+    rerender({snapshot: next});
+    await act(async () => {
+      network.gates[0]?.resolve(availableFrame(initial, 'child-0', '2026-11-10T18:41:02.707Z'));
+    });
+    expect(result.current.facts.get('child-0')?.outcome).not.toBe('available');
+    expect(network.requests.length).toBe(1);
+    now += 30_001;
+    setSystemTime(now);
+    rerender({snapshot: {...next}});
+    await waitFor(() => expect(network.requests.length).toBe(2));
+  } finally {
+    setSystemTime();
+  }
 });
 
 it('drops a queued family after its mark leaves the viewport', async () => {
@@ -111,7 +121,9 @@ it('drops a queued family after its mark leaves the viewport', async () => {
   await waitFor(() => expect(network.requests.length).toBe(2));
   act(() => browser?.visibility(marks[2]!, false));
   await act(async () => {
-    network.gates[0]?.resolve(availableFrame(snapshot, 'child-0', '2026-11-10T18:41:02.707Z'));
+    const child = await availableFrame(snapshot, 'child-0', '2026-11-10T18:41:02.707Z').text();
+    const root = await availableFrame(snapshot, 'root-0', '2026-11-03T22:05:49.972Z').text();
+    network.gates[0]?.resolve(new Response(child + root));
   });
   await waitFor(() => expect(network.requests.length).toBe(3));
   expect(network.requests[2]).toEqual(['child-3', 'root-3']);
