@@ -50,4 +50,8 @@ The digest and preview sort still inspect the complete decoded private active
 set, so private JSON size, SQL decode work, and process memory are not bounded
 by this decision. Individual turn text and other public fields also have no new
 byte-size cap. A future retention or private working-set policy needs a
-separate design.
+separate design. The batch transport therefore applies the independent byte
+boundary in [ADR 005](adr-005-batched-activity-and-update-cues.md). A 100-turn
+preview can still exceed one NDJSON frame when accepted identifiers or
+catalogue fields are long; the browser's bounded single-session fallback
+handles that case without claiming a private working-set limit.

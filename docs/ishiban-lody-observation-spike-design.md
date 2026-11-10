@@ -287,13 +287,24 @@ All endpoints are versioned under `/api/v1`. For the local spike, bind to
 loopback by default and serve the UI from the same origin. A deployment beyond
 loopback needs authentication and transport security before it is shared.
 
-| Endpoint                            | Purpose                                                                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/snapshot`              | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
-| `GET /api/v1/sessions/{session_id}` | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
-| `GET /api/v1/events?after=<cursor>` | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
-| `GET /health`                       | Process liveness.                                                                                                                              |
-| `GET /ready`                        | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
+| Endpoint                                     | Purpose                                                                                                                                        |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/snapshot`                       | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
+| `GET /api/v1/sessions/{session_id}`          | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
+| `GET /api/v1/sessions/{session_id}/activity` | Resolve unknown activity; `includeKnown=true` also returns current known evidence without another Lody read.                                   |
+| `POST /api/v1/sessions/activity`             | Stream up to eight activity results as bounded NDJSON frames.                                                                                  |
+| `GET /api/v1/events?after=<cursor>`          | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
+| `GET /health`                                | Process liveness.                                                                                                                              |
+| `GET /ready`                                 | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
+
+Each batch frame, including its newline, fits 1,048,576 UTF-8 bytes. A valid
+larger member becomes a small `response_too_large` marker while sibling members
+continue. The browser may recover that member through the bounded
+single-session activity route. An identity too large even for a marker receives
+HTTP 413 before the stream starts. This transport limit leaves the private
+journal and cache complete; see
+[ADR 005](adr-005-batched-activity-and-update-cues.md) and
+[ADR 006](adr-006-public-turn-previews-and-cursors.md).
 
 Session detail returns at most 100 retained turns in ascending
 `(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`

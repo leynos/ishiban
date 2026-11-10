@@ -21,6 +21,7 @@ if typ.TYPE_CHECKING:
 MAX_BATCH_BODY_BYTES = 8_192
 MAX_BATCH_SESSIONS = 8
 MAX_SESSION_ID_CHARS = 256
+MAX_ACTIVITY_FRAME_BYTES = 1_048_576
 MAX_BATCH_BODY_ERROR = "The activity request body exceeds 8,192 bytes."
 
 
@@ -42,11 +43,23 @@ class BatchSessionActivityResource:
         """Validate a bounded JSON list and open its NDJSON response stream.
 
         For example, ``{"sessionIds": ["s1", "s2"]}`` produces two frames.
+
+        Raises
+        ------
+        falcon.HTTPContentTooLarge
+            If a member identity cannot fit even its small outcome marker.
         """
         body = await read_bounded_body(
             req, max_bytes=MAX_BATCH_BODY_BYTES, error_message=MAX_BATCH_BODY_ERROR
         )
         session_ids = _decode_session_ids(body)
+        if any(
+            len(_oversize_frame(self.store.workspace_id, session_id))
+            > MAX_ACTIVITY_FRAME_BYTES
+            for session_id in session_ids
+        ):
+            message = "An activity result identity exceeds the frame limit."
+            raise falcon.HTTPContentTooLarge(description=message)
         resp.content_type = "application/x-ndjson"
         resp.set_header("X-Accel-Buffering", "no")
         resp.stream = self._stream_results(session_ids)
@@ -212,11 +225,32 @@ def _encode_frame(
     bytes
         The compact JSON object followed by exactly one newline.
     """
-    return (
+    frame = (
         msgspec.json.encode({
             "workspaceId": workspace_id,
             "sessionId": session_id,
             "session": public_session(projection) if projection is not None else None,
+        })
+        + b"\n"
+    )
+    if len(frame) <= MAX_ACTIVITY_FRAME_BYTES:
+        return frame
+    return _oversize_frame(workspace_id, session_id)
+
+
+def _oversize_frame(workspace_id: str, session_id: str) -> bytes:
+    """Identify one oversized member without serializing its private facts.
+
+    Returns
+    -------
+    bytes
+        A typed NDJSON marker with no ``session`` field for legacy decoders.
+    """
+    return (
+        msgspec.json.encode({
+            "workspaceId": workspace_id,
+            "sessionId": session_id,
+            "outcome": "response_too_large",
         })
         + b"\n"
     )

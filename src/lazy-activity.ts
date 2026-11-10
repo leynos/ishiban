@@ -1,6 +1,7 @@
 /** @file Resolve visible unknown activity without manufacturing journal events. */
-import type {SessionActivityFrame} from './contracts';
+import type {Session, SessionActivityFrame, SessionActivityResponse} from './contracts';
 import {readActivityFrames} from './activity-batch';
+import {readSessionActivityResponse} from './activity-fallback';
 import type {BoardStore} from './client';
 
 interface Lookup {
@@ -14,9 +15,27 @@ interface AttemptStamp {
   readonly timestamp: number;
   readonly token: symbol;
 }
+interface BatchContext {
+  readonly lookups: ReadonlyMap<string, Lookup>;
+  readonly signal: AbortSignal;
+  readonly fallbackSessionIds: Set<string>;
+  readonly fallbackTasks: Promise<void>[];
+}
+
+/** Validate the fallback response against its requested identity and revision. */
+function fallbackProjectionFor(task: Lookup, result: SessionActivityResponse): Session | undefined {
+  if (result.workspaceId !== task.workspaceId) return undefined;
+  const session = result.session;
+  if (!session) return undefined;
+  if (session.sessionId !== task.sessionId) return undefined;
+  if (session.lastEventId !== task.revision) return undefined;
+  return session;
+}
+
 const MARKS = 'button[data-session-id]';
 const BATCH_SIZE = 4;
 const MAX_BATCHES = 2;
+const TRANSFER_NOTICE = 'Activity details exceed the transfer limit. Open the session in Lody.';
 
 /** Own two bounded browser lookups; for example, enqueue a visible unknown session. */
 class ActivityRequests {
@@ -134,21 +153,19 @@ class ActivityRequests {
     const controller = new AbortController();
     this.controllers.add(controller);
     const timeout = setTimeout(() => controller.abort(), 50_000);
-    const lookups = new Map(tasks.map((task) => [task.sessionId, task]));
+    const context: BatchContext = {
+      lookups: new Map(tasks.map((task) => [task.sessionId, task])),
+      signal: controller.signal,
+      fallbackSessionIds: new Set<string>(),
+      fallbackTasks: []
+    };
     for (const task of tasks) this.activeSessionIds.add(task.sessionId);
     try {
-      const response = await fetch('/api/v1/sessions/activity', {
-        method: 'POST',
-        headers: {'content-type': 'application/json'},
-        body: JSON.stringify({sessionIds: [...lookups.keys()]}),
-        signal: controller.signal,
-        cache: 'no-store'
-      });
-      if (!response.ok) return;
-      await readActivityFrames(response, (frame) => this.applyFrame(lookups, frame));
+      await this.consumeBatch(tasks, context);
     } catch {
       // Source failures retain unknown activity; a later visible retry may succeed.
     } finally {
+      await Promise.allSettled(context.fallbackTasks);
       clearTimeout(timeout);
       this.controllers.delete(controller);
       this.running -= 1;
@@ -160,15 +177,70 @@ class ActivityRequests {
     }
   }
 
-  /** Match every streamed result against the request's workspace, identity and revision. */
-  private applyFrame(lookups: ReadonlyMap<string, Lookup>, frame: SessionActivityFrame): void {
+  /** Stream independently completed members while retaining one batch owner. */
+  private async consumeBatch(tasks: readonly Lookup[], context: BatchContext): Promise<void> {
+    const response = await fetch('/api/v1/sessions/activity', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({sessionIds: [...context.lookups.keys()]}),
+      signal: context.signal,
+      cache: 'no-store'
+    });
+    if (response.status === 413) {
+      for (const task of tasks) this.showTransferNotice(task, context.signal);
+      return;
+    }
+    if (!response.ok) return;
+    await readActivityFrames(response, (frame) => this.applyFrame(context, frame));
+  }
+
+  /** Match each member and own any slower same-session fallback through batch cleanup. */
+  private applyFrame(context: BatchContext, frame: SessionActivityFrame): void {
     if (this.isStopped) return;
-    const task = lookups.get(frame.sessionId);
+    const task = context.lookups.get(frame.sessionId);
     if (!task || frame.workspaceId !== task.workspaceId) return;
+    if ('outcome' in frame) {
+      this.admitFallback(context, task);
+      return;
+    }
     const session = frame.session;
     if (!session || session.sessionId !== task.sessionId) return;
     if (session.lastEventId < task.revision) return;
     this.store.activity(frame.workspaceId, session);
+  }
+
+  /** Start one request for a marked member without delaying later stream frames. */
+  private admitFallback(context: BatchContext, task: Lookup): void {
+    if (context.fallbackSessionIds.has(task.sessionId)) return;
+    if (!this.matches(task)) return;
+    context.fallbackSessionIds.add(task.sessionId);
+    context.fallbackTasks.push(this.resolveOversizedMember(task, context.signal));
+  }
+
+  /** Recover one cached oversized result while the batch continues reading siblings. */
+  private async resolveOversizedMember(task: Lookup, signal: AbortSignal): Promise<void> {
+    try {
+      const id = encodeURIComponent(task.sessionId);
+      const response = await fetch(`/api/v1/sessions/${id}/activity?includeKnown=true`, {
+        signal,
+        cache: 'no-store'
+      });
+      const result = await readSessionActivityResponse(response, signal);
+      const session = fallbackProjectionFor(task, result);
+      if (!session) return;
+      if (!this.matches(task)) return;
+      this.store.activity(result.workspaceId, session);
+    } catch {
+      this.showTransferNotice(task, signal);
+    }
+  }
+
+  /** Keep transport failures quiet and revision-local; for example, report a 413 response. */
+  private showTransferNotice(task: Lookup, signal: AbortSignal): void {
+    if (this.isStopped) return;
+    if (signal.aborted) return;
+    if (!this.matches(task)) return;
+    this.store.activityNotice(task.workspaceId, task.sessionId, task.revision, TRANSFER_NOTICE);
   }
 }
 

@@ -28,14 +28,19 @@ class SessionActivityResource:
         self.activity = activity
 
     async def on_get(
-        self, _req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str
     ) -> None:
         """Resolve a known session without fabricating durable evidence.
 
         For example, a metadata-only CLI result leaves the session unresolved.
 
         """
-        projection = await resolve_activity(self.store, self.activity, session_id)
+        projection = await resolve_activity(
+            self.store,
+            self.activity,
+            session_id,
+            include_known=req.get_param_as_bool("includeKnown") is True,
+        )
         resp.media = {
             "workspaceId": self.store.workspace_id,
             "session": public_session(projection) if projection is not None else None,
@@ -43,7 +48,11 @@ class SessionActivityResource:
 
 
 async def resolve_activity(
-    store: Store, activity: LazyActivity, session_id: str
+    store: Store,
+    activity: LazyActivity,
+    session_id: str,
+    *,
+    include_known: bool = False,
 ) -> dict[str, object] | None:
     """Resolve one unknown session using cache and revision-safe observation.
 
@@ -64,6 +73,8 @@ async def resolve_activity(
     if previous is None:
         raise falcon.HTTPNotFound
     if previous.get("state") != "unknown":
+        if include_known:
+            return (await store.restore_activity([previous]))[0]
         return None
 
     cached = await restore_cached_activities(store, [previous])

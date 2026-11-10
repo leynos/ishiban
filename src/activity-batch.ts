@@ -3,7 +3,7 @@ import {Schema} from 'effect';
 import {SessionActivityFrameSchema, type SessionActivityFrame} from './contracts';
 
 const MAX_FRAME_CHARS = 1_048_576;
-const MAX_RESPONSE_BYTES = 8_388_608;
+export const MAX_ACTIVITY_RESPONSE_BYTES = 8_388_608;
 const MAX_RESULTS = 8;
 
 /** Reject a malformed member without discarding other completed lookups. */
@@ -27,7 +27,7 @@ class ActivityFrames {
   /** Accumulate complete lines while bounding the response and unfinished frame. */
   feed(chunk: Uint8Array): void {
     this.bytes += chunk.byteLength;
-    if (this.bytes > MAX_RESPONSE_BYTES) throw new Error('Activity batch exceeds its byte limit');
+    if (this.bytes > MAX_ACTIVITY_RESPONSE_BYTES) throw new Error('Activity batch exceeds its byte limit');
     this.buffer += this.decoder.decode(chunk, {stream: true});
     const lines = this.buffer.split('\n');
     this.buffer = lines.pop() ?? '';

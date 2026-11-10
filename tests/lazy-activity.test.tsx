@@ -1,5 +1,5 @@
 /** @file Verify visibility-gated activity reads and revision-safe local merges. */
-import {afterEach, expect, it, spyOn} from 'bun:test';
+import {afterEach, expect, it} from 'bun:test';
 import fc from 'fast-check';
 import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
 import {useSyncExternalStore} from 'react';
@@ -9,13 +9,9 @@ import {createBoardStore, type BoardStore} from '../src/client';
 import {createDemoSnapshot} from '../src/demo';
 import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
-import {deferred, type Deferred} from './deferred';
+import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
+import type {Deferred} from './deferred';
 import {ControlledIntersectionObserver} from './controlled-intersection-observer';
-interface ActivityRequest {
-  readonly url: string;
-  readonly init: NonNullable<Parameters<typeof fetch>[1]>;
-  readonly response: Deferred<Response>;
-}
 type ActivitySessionSpec = readonly [number, string, string, Session['source'], Session['state'], number];
 interface ActivityMergeScenario {
   readonly cursor: number;
@@ -122,24 +118,9 @@ function currentObserver(): ControlledIntersectionObserver {
 }
 /** Record batch requests and hold their responses for deterministic ordering. */
 function installFetch() {
-  const requests: ActivityRequest[] = [];
-  const started = Array.from({length: 8}, () => deferred<void>());
-  const implementation = Object.assign(
-    (...args: Parameters<typeof fetch>) => {
-      const [input, options] = args;
-      const response = deferred<Response>();
-      const init = options ?? {};
-      const request: ActivityRequest = {url: String(input), init, response};
-      const index = requests.push(request) - 1;
-      started[index]?.resolve();
-      init.signal?.addEventListener('abort', () => response.resolve(new Response(null, {status: 499})), {once: true});
-      return response.promise;
-    },
-    {preconnect: () => null}
-  );
-  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(implementation);
-  restoreFetch = () => fetchSpy.mockRestore();
-  return {requests, started};
+  const fixture = installActivityFetch();
+  restoreFetch = fixture.restore;
+  return fixture;
 }
 /** Find the actual rendered session mark by its accessible title. */
 function markFor(title: string): HTMLElement {
@@ -150,13 +131,13 @@ function revealSessions(observer: ControlledIntersectionObserver, sessions: read
   for (const session of sessions) observer.setVisibility(markFor(session.title), true);
 }
 /** Guard an expected pending request before controlling its response. */
-function requestAt(requests: readonly ActivityRequest[], index: number): ActivityRequest {
+function requestAt(requests: readonly ActivityFetchRequest[], index: number): ActivityFetchRequest {
   const request = requests[index];
   if (!request) throw new Error('The expected visible activity request did not start.');
   return request;
 }
 /** Check the shared POST contract; for example, browser batches contain four IDs or fewer. */
-function expectBatchPost(request: ActivityRequest, sessionIds: readonly string[]): void {
+function expectBatchPost(request: ActivityFetchRequest, sessionIds: readonly string[]): void {
   expect(request.url).toBe('/api/v1/sessions/activity');
   expect(request.init.method).toBe('POST');
   expect(JSON.parse(String(request.init.body))).toEqual({sessionIds});
@@ -171,7 +152,7 @@ async function waitForActivity(store: BoardStore, sessionId: string, expectedSta
   });
 }
 /** Assert the batch limits and that queued identities are distinct. */
-function expectBoundedPipeline(requests: readonly ActivityRequest[], count: number): void {
+function expectBoundedPipeline(requests: readonly ActivityFetchRequest[], count: number): void {
   expect(requests).toHaveLength(2);
   const requestedIds = requests.flatMap((request) => JSON.parse(String(request.init.body)).sessionIds);
   expect(requestedIds).toHaveLength(count);
@@ -183,7 +164,7 @@ function expectBoundedPipeline(requests: readonly ActivityRequest[], count: numb
   }
 }
 /** Return a stream that exposes one frame before the batch completes. */
-function earlyActivityResponse(request: ActivityRequest, frame: SessionActivityFrame): Response {
+function earlyActivityResponse(request: ActivityFetchRequest, frame: SessionActivityFrame): Response {
   return new Response(
     new ReadableStream({
       start(controller) {
@@ -198,7 +179,7 @@ function activityFrame(workspaceId: string, session: Session): SessionActivityFr
   return {workspaceId, sessionId: session.sessionId, session};
 }
 /** Complete a streaming batch using independently validated NDJSON frames. */
-function resolveBatch(request: ActivityRequest, frames: readonly SessionActivityFrame[]): void {
+function resolveBatch(request: ActivityFetchRequest, frames: readonly SessionActivityFrame[]): void {
   const body = `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`;
   request.response.resolve(new Response(body, {headers: {'content-type': 'application/x-ndjson'}}));
 }

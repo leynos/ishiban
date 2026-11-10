@@ -91,9 +91,12 @@ async def test_known_and_missing_sessions_do_not_open_observers(
             envelope(
                 1,
                 options=EventOptions(
-                    session=observed_session(
+                    session=ObservedSession(
+                        session_id="s1",
+                        title="t" * 1_100_000,
                         state="idle",
                         source="persisted",
+                        freshness="synced",
                     )
                 ),
             ),
@@ -101,7 +104,16 @@ async def test_known_and_missing_sessions_do_not_open_observers(
         )
         async with testing.ASGIConductor(create_app(store)) as conductor:
             known = await conductor.simulate_get("/api/v1/sessions/s1/activity")
+            fallback = await conductor.simulate_get(
+                "/api/v1/sessions/s1/activity?includeKnown=true"
+            )
             missing = await conductor.simulate_get("/api/v1/sessions/absent/activity")
         assert known.json["session"] is None, "Known activity needs no enrichment."
+        assert fallback.json["session"]["state"] == "idle", (
+            "The explicit fallback must return current known evidence without Lody."
+        )
+        assert len(fallback.json["session"]["title"]) == 1_100_000, (
+            "A known session too large for a batch frame must retain its title."
+        )
         assert missing.status_code == 404, "Unknown identities must not reach Lody."
         lookup.assert_not_awaited()

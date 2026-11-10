@@ -119,6 +119,16 @@ previous PR facts may be cached and stale.
 - `GET /api/v1/events?after=N` replays committed projections after cursor `N`
   and then follows new commits. Browser reconnect uses `Last-Event-ID` in
   preference to the original URL cursor.
+- `POST /api/v1/sessions/activity` accepts up to eight session IDs and streams
+  one result per ID. Each newline-delimited frame is at most 1,048,576 UTF-8
+  bytes. A valid result too large for one frame yields a `response_too_large`
+  marker for that member; later members still arrive. The interface fetches the
+  marked session through
+  `GET /api/v1/sessions/{session_id}/activity?includeKnown=true` under its
+  existing response bound. The opt-in also returns current known activity
+  without a new Lody read; the default route still resolves unknown activity
+  only. An identity too large even for a marker returns HTTP 413 before any
+  stream starts.
 - `GET /health` checks API process liveness. `GET /ready` checks the local
   database. Neither endpoint claims the Lody source is connected.
 
@@ -334,6 +344,11 @@ its neighbours. Up to four Lody reads run concurrently across browser windows;
 cached results can appear immediately. The installed Lody CLI still requires an
 individual observation per uncached session, so a cold workspace can take time
 to resolve.
+
+If an activity response exceeds its transfer limit, the inspector shows a quiet
+activity notice and retains known session facts and the Lody link. The notice
+survives metadata-only refresh, clears on successful recovery or newer
+execution, and does not pulse the task. It is not a session error.
 
 Restarting the collector establishes a fresh pulse baseline. Replayed metadata,
 unchanged runtime facts and on-demand enrichment do not pulse. Meaningful task

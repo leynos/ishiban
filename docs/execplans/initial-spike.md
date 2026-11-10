@@ -704,3 +704,26 @@ working-set bound is claimed;
 [ADR 006](../adr-006-public-turn-previews-and-cursors.md) records the boundary
 and trade-off. Local red tests reproduced both unbounded behaviours; integrated
 gates and hosted reassessment remain pending.
+
+### Batched activity transport bound, 10 November 2026
+
+**Progress and decision.** A hosted assessment found that a valid Lody
+observation plus a catalogue title can make a 100-turn public preview exceed
+the browser's one-MiB NDJSON frame limit. Preserve accepted private facts and
+the browser's transport bounds. Pre-encode each batch member and substitute a
+typed `response_too_large` marker for one oversized frame; continue its
+siblings. Reject an identity too large for its marker with HTTP 413 before
+streaming. The browser performs one owned bounded single-session fallback,
+including a current known projection if the batch raced a metadata update.
+Unrecoverable transport results display a quiet activity notice, not a turn
+error. [ADR 005](../adr-005-batched-activity-and-update-cues.md) records the
+boundary and [ADR 006](../adr-006-public-turn-previews-and-cursors.md) retains
+the private working-set trade-off.
+
+**Verification and outcome.** A real ASGI-to-CmdMox regression first failed
+because a near-limit accepted observation and long catalogue title produced a
+frame above 1,048,576 bytes. It now checks that the marker precedes a valid
+small sibling, the single-session fallback retains the full result, and the
+journal and cache remain intact. Focused Python activity tests pass; integrated
+frontend, lint, type, documentation, browser, and review gates remain pending
+for this repair.

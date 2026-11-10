@@ -110,6 +110,30 @@ it('explains a truncated active-turn preview and keeps the Lody session link', (
   );
 });
 
+it('shows a quiet transport notice beside activity without replacing turn errors', () => {
+  const session = {
+    ...firstSession(createBoardSnapshot()),
+    activityNotice: 'Activity details exceed the transfer limit. Open the session in Lody.',
+    latestTurn: {userTurnId: 'turn-1', state: 'failed', error: 'Earlier Lody error'}
+  };
+  render(
+    <SessionInspector
+      session={session}
+      currentGeneration={1}
+      onClose={() => {}}
+      workspaceId="workspace-1"
+      workspaceSlug="leynos"
+    />
+  );
+
+  const notice = screen.getByText(session.activityNotice);
+  expect(notice.getAttribute('role')).toBe('status');
+  expect(screen.getByRole('region', {name: 'Last turn error'}).textContent).toContain('Earlier Lody error');
+  expect(notice.compareDocumentPosition(screen.getByText('Active turns')) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING
+  );
+});
+
 it('does not display failure text on a successful turn', () => {
   const session = {
     ...firstSession(createBoardSnapshot()),

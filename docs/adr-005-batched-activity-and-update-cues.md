@@ -23,6 +23,20 @@ pending member also produce a null result; unrelated programming errors
 propagate. Disconnecting cancels request waiters; the shared service retains
 ownership of subprocess work.
 
+Encode each public frame before streaming and include its newline in a
+1,048,576-byte UTF-8 limit. If a valid result exceeds that limit, send
+`{workspaceId, sessionId, outcome: "response_too_large"}` for that member
+without a `session` key, then continue other members. Reject an identity whose
+marker itself cannot fit with HTTP 413 before opening the stream. The browser
+keeps its frame, body, and concurrency limits, and fetches one marked member
+through the existing single-session activity route under the batch request's
+deadline and cancellation owner. The fallback can read a complete public
+response up to the existing eight-MiB body limit. Its `includeKnown=true`
+option also returns current known evidence if the session changed after batch
+preparation, without starting another CLI observation. If recovery fails or
+exceeds its bound, show a quiet activity transport notice, retaining known
+runtime facts and the Lody session link.
+
 The browser coalesces visible marks into batches of four with at most two
 streams active. It validates each frame independently, bounds stream size and
 accepts results only against the current workspace, identity and revision. It
@@ -56,6 +70,10 @@ remains bounded, with shared work across tabs. Cold reads retain CLI startup
 cost, and overload or unavailable observations can leave activity unknown. The
 durable journal retains restart observations and exact stream/sequence
 deduplication; pulse suppression belongs to the browser presentation.
+
+The transport notice describes delivery failure, not a Lody turn error. A
+single-session result over eight MiB remains unavailable through this fallback;
+the accepted private observation and cache entry are not trimmed.
 
 Batch verification includes a real ASGI-to-subprocess path using CmdMox's
 command shims. The dev-only dependency removes ordinary command-fixture setup;

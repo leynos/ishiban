@@ -143,6 +143,22 @@ function latestTurnLabel(session: Session): string {
   return `${session.latestTurn.state}${failedContext} · ${session.latestTurn.userTurnId}`;
 }
 
+/** Keep transport diagnostics beside activity rather than turn-error evidence. */
+function ActivityValue({session}: {readonly session: Session}): ReactElement {
+  const activity = activityOf(session.state);
+  const label = activity === 'waiting' ? `${activity} (blocked)` : activity;
+  return (
+    <>
+      {label}
+      {session.activityNotice ? (
+        <p className="text-base-content/70" role="status">
+          {session.activityNotice}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /** Render the selected session's current facts; for example, show unknown activity explicitly. */
 function SessionFacts({
   session,
@@ -153,8 +169,6 @@ function SessionFacts({
 }): ReactElement {
   const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
   const stage = STAGE_LABELS[session.stage];
-  const activity = activityOf(session.state);
-  const activityLabel = activity === 'waiting' ? `${activity} (blocked)` : activity;
   const activeTurnSummary =
     session.activeTurns.length === 0
       ? 'None supplied'
@@ -172,7 +186,9 @@ function SessionFacts({
       <dt>Stage reason</dt>
       <dd>{session.stageReason}</dd>
       <dt>Activity</dt>
-      <dd>{activityLabel}</dd>
+      <dd>
+        <ActivityValue session={session} />
+      </dd>
       <dt>Evidence</dt>
       <dd>{evidenceLabel(session, currentGeneration)}</dd>
       <dt>Source</dt>

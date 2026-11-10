@@ -27,6 +27,7 @@ export const SessionSchema = Schema.Struct({
   source: Schema.Literals(['metadata', 'persisted', 'demo']),
   freshness: Schema.Literals(['synced', 'unavailable', 'illustrative']),
   activitySource: Schema.optional(Schema.Literal('lazy')),
+  activityNotice: Schema.optional(Schema.String),
   repoFullName: Schema.NullOr(Schema.String),
   branchName: Schema.NullOr(Schema.String),
   stage: Schema.Literals(['planning', 'ready', 'building', 'refine', 'merged', 'closed', 'unclassified']),
@@ -66,9 +67,23 @@ export const SnapshotSchema = Schema.Struct({
 export type Session = typeof SessionSchema.Type;
 export type Snapshot = typeof SnapshotSchema.Type;
 export type Collector = typeof CollectorSchema.Type;
-export const SessionActivityFrameSchema = Schema.Struct({
+export const SessionActivitySuccessFrameSchema = Schema.Struct({
   workspaceId: Schema.String,
   sessionId: Schema.String,
   session: Schema.NullOr(SessionSchema)
 });
+export const SessionActivityOversizeFrameSchema = Schema.Struct({
+  workspaceId: Schema.String,
+  sessionId: Schema.String,
+  outcome: Schema.Literal('response_too_large')
+});
+export const SessionActivityFrameSchema = Schema.Union([
+  SessionActivitySuccessFrameSchema,
+  SessionActivityOversizeFrameSchema
+]);
 export type SessionActivityFrame = typeof SessionActivityFrameSchema.Type;
+export const SessionActivityResponseSchema = Schema.Struct({
+  workspaceId: Schema.String,
+  session: Schema.NullOr(SessionSchema)
+});
+export type SessionActivityResponse = typeof SessionActivityResponseSchema.Type;

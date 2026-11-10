@@ -4,6 +4,7 @@ import asyncio
 import json
 import typing as typ
 
+import msgspec
 import pytest
 from batch_activity_support import remember_idle_activity, seed_unknown_sessions
 from falcon import testing
@@ -11,7 +12,13 @@ from storage_support import opened_store
 
 from ishiban import domain, lazy_activity
 from ishiban.api import create_app
-from ishiban.batch_activity_api import BatchSessionActivityResource
+from ishiban.batch_activity_api import (
+    MAX_ACTIVITY_FRAME_BYTES,
+    BatchSessionActivityResource,
+    _encode_frame,
+)
+from ishiban.public_projection import public_session
+from ishiban.storage import Store
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -195,6 +202,56 @@ async def test_batch_rejects_invalid_or_oversized_request(
         )
     assert response.status_code == status_code, (
         "Invalid activity batch input must be rejected before observation."
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_rejects_unrepresentable_identity_before_stream(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A workspace identity too large for its marker fails before streaming."""
+    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'ishiban.sqlite3'}", "界" * 400_000)
+    await store.initialize()
+    try:
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            response = await conductor.simulate_post(
+                "/api/v1/sessions/activity",
+                body=json.dumps({"sessionIds": ["s1"]}),
+                headers={"content-type": "application/json"},
+            )
+    finally:
+        await store.close()
+    assert response.status_code == 413, (
+        "An unrepresentable common identity must fail before opening NDJSON."
+    )
+    assert len(response.content) < 8_192, (
+        "The preflight error must be bounded and contain no workspace identity."
+    )
+
+
+def test_batch_frame_limit_counts_utf8_bytes_and_newline() -> None:
+    """An exact-byte frame fits; one additional UTF-8 character yields a marker."""
+    base: dict[str, object] = {"activeTurns": [], "title": ""}
+    base_size = len(
+        msgspec.json.encode({
+            "workspaceId": "w1",
+            "sessionId": "s1",
+            "session": public_session(base),
+        })
+        + b"\n"
+    )
+    title = "a" * (MAX_ACTIVITY_FRAME_BYTES - base_size)
+    exact = {**base, "title": title}
+    encoded = _encode_frame("w1", "s1", exact)
+    assert len(encoded) == MAX_ACTIVITY_FRAME_BYTES, (
+        "The newline is included in the allowed UTF-8 frame budget."
+    )
+    oversized = _encode_frame("w1", "s1", {**exact, "title": title + "é"})
+    assert json.loads(oversized)["outcome"] == "response_too_large", (
+        "A multibyte character over the limit must yield a typed marker."
+    )
+    assert len(oversized) < MAX_ACTIVITY_FRAME_BYTES, (
+        "The replacement marker must itself remain bounded."
     )
 
 

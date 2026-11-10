@@ -482,9 +482,25 @@ eight-MiB response limit. These helpers are specific to activity reads and are
 not generic transport APIs. The browser pipelines two four-member batches; the
 shared reader permits four children and 64 pending observations with a
 45-second total lifetime. Metadata replay preserves in-flight identity
-ownership and execution-watermark reuse. The dead-code configuration records
-the batch handler's exact bounded decoders and msgspec request type as runtime
-entry points; Falcon dispatch is not propagated by Skylos.
+ownership and execution-watermark reuse.
+
+The server pre-encodes each public batch frame, including its newline, against
+the browser's 1,048,576-byte UTF-8 limit. An oversized member becomes a typed
+`response_too_large` marker; a marker whose identity cannot fit causes a
+pre-stream HTTP 413. The browser keeps reading smaller siblings while one owned
+single-session GET recovers the marked member under the same batch deadline.
+That GET uses `includeKnown=true` so a session that became known between batch
+preparation and fallback returns its current projection without another Lody
+read. The GET's eight-MiB body bound, abort signal, and revision guard remain
+local to activity transport. The fixed activity diagnostic is quiet, survives
+metadata-only refresh while the execution watermark is unchanged, and never
+changes a turn's error or the journal. This boundary does not cap private
+projection decoding or cache memory; see
+[ADR 006](adr-006-public-turn-previews-and-cursors.md).
+
+The dead-code configuration records the batch handler's exact bounded decoders
+and msgspec request type as runtime entry points; Falcon dispatch is not
+propagated by Skylos.
 
 The batch decoder and preference endpoint share
 `request_body.read_bounded_body`, which accumulates HTTP bodies only. Each
@@ -495,6 +511,11 @@ mutation, with a single unchanged-object fast path before comparison.
 Queue-bound tests share their fake-service setup; browser batch tests share
 controlled board setup. Batch API tests reuse session seeding and cache setup
 from `tests/batch_activity_support.py` and retain independent assertions.
+`tests/activity-fetch-fixture.ts` shares only deterministic fetch request
+recording between browser activity suites.
+`tests/lazy-activity-fallback-fixture.ts` keeps response variants and their
+semantic expectations beside the fallback suite; neither helper is a production
+transport abstraction.
 
 Command-response fixtures use the dev-only `cmd-mox` 0.2.0 dependency and the
 plugin registered in `tests/conftest.py`. The exact `pytest_plugins` runtime

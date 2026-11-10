@@ -25,6 +25,14 @@ export interface BoardStore {
   readonly session: (cursor: number, projection: Session) => void;
   readonly collector: (cursor: number, projection: typeof CollectorSchema.Type) => void;
   readonly activity: (workspaceId: string, session: Session) => void;
+  readonly activityNotice: (workspaceId: string, sessionId: string, revision: number, message: string) => void;
+}
+
+interface ActivityNoticeUpdate {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly revision: number;
+  readonly message: string;
 }
 
 /**
@@ -66,6 +74,10 @@ export function createBoardStore(schedule: (notify: () => void) => void = queueM
     activity: (workspaceId, session) => {
       const snapshot = withActivity(current.snapshot, workspaceId, session);
       if (snapshot) publish({...current, snapshot});
+    },
+    activityNotice: (workspaceId, sessionId, revision, message) => {
+      const snapshot = withActivityNotice(current.snapshot, {workspaceId, sessionId, revision, message});
+      if (snapshot) publish({...current, snapshot});
     }
   };
 }
@@ -82,19 +94,49 @@ function withActivity(snapshot: Snapshot | undefined, workspaceId: string, sessi
   return {...snapshot, sessions: replaceSession(snapshot.sessions, {...session, activitySource: 'lazy'})};
 }
 
+/** Attach a local transfer notice only to the unresolved revision that requested it. */
+function withActivityNotice(snapshot: Snapshot | undefined, update: ActivityNoticeUpdate): Snapshot | undefined {
+  if (!snapshot) return undefined;
+  if (snapshot.workspaceId !== update.workspaceId) return undefined;
+  const session = snapshot.sessions.find((item) => item.sessionId === update.sessionId);
+  if (!session) return undefined;
+  if (session.state !== 'unknown') return undefined;
+  if (session.lastEventId !== update.revision) return undefined;
+  return {
+    ...snapshot,
+    sessions: replaceSession(snapshot.sessions, {...session, activityNotice: update.message})
+  };
+}
+
 /** Decide whether an unknown real refresh may inherit local activity; e.g., reject a newer execution watermark. */
 function shouldCarryActivity(previous: Session | undefined, next: Session): previous is Session {
   if (!previous) return false;
   if (previous.activitySource !== 'lazy') return false;
+  return isContinuingUnknownActivity(previous, next);
+}
+
+/** Share the execution boundary used by runtime evidence and transfer notices. */
+function isContinuingUnknownActivity(previous: Session, next: Session): boolean {
   if (next.state !== 'unknown') return false;
   if (next.removed) return false;
   if (next.source === 'demo') return false;
   return (next.lastActivityEventId ?? 0) <= (previous.lastActivityEventId ?? 0);
 }
 
+/** Keep a transfer notice through metadata-only refreshes; an execution watermark clears it. */
+function retainedActivityNotice(previous: Session | undefined, next: Session): string | undefined {
+  const message = previous?.activityNotice;
+  if (!message) return undefined;
+  if (!isContinuingUnknownActivity(previous, next)) return undefined;
+  return message;
+}
+
 /** Preserve last-read activity through real unknowns; for example, keep a failed mark on reconnect. */
 function carryActivity(previous: Session | undefined, next: Session): Session {
-  if (!shouldCarryActivity(previous, next)) return next;
+  if (!shouldCarryActivity(previous, next)) {
+    const message = retainedActivityNotice(previous, next);
+    return message === undefined ? next : {...next, activityNotice: message};
+  }
   return {
     ...next,
     state: previous.state,
