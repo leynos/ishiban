@@ -100,6 +100,10 @@ button.session-mark:not(.session-mark--empty):hover {
   transition: none;
 }
 
+.ishiban-board[data-density="compact"] .session-mark > small {
+  display: none;
+}
+
 .session-mark[data-last-turn-failed="true"]:not([data-blocked="true"]) {
   background: var(--color-oxide);
   border-color: color-mix(in oklab, var(--color-oxide) 68%, var(--color-paper));
@@ -150,6 +154,12 @@ button.session-mark:not(.session-mark--empty):hover {
   border-inline-start: 4px solid var(--color-oxide);
 }
 
+/* List pulses must use their task, rather than the scrollport, as their bounds. */
+.session-list-item {
+  overflow: clip;
+  position: relative;
+}
+
 .session-list-item--blocked {
   background-image: repeating-linear-gradient(
     135deg,
@@ -189,7 +199,7 @@ button.session-mark:not(.session-mark--empty):hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ishiban-board .session-mark > .session-update-pulse {
+  .ishiban-board :is(.session-mark, .session-list-item) > .session-update-pulse {
     animation: none;
     display: none;
   }

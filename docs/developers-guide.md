@@ -51,6 +51,21 @@ agent-browser for keyboard/inspector/filter/reconnect checks and accessibility
 audits; use css-view to verify computed semantic tokens and five-column mark
 grids rather than assuming CSS source declarations took effect.
 
+The opt-in Chromium geometry suite requires `agent-browser` and a built bundle:
+
+```sh
+make build-web
+ISHIBAN_BROWSER_TESTS=1 bun test tests/board-layout.browser.test.ts
+```
+
+Scope that environment flag to this file. The suite restores Bun's native HTTP
+globals after the Happy DOM preload, serves built assets with synthetic
+snapshots and real SSE, and closes its own server and browser. Its fixture
+helpers belong only to these browser layout scenarios. Default unit-test runs
+skip the browser cases. Geometry checks cover the pane's horizontal overflow
+with and without the inspector, compact evidence visibility, and task-bounded
+list pulses with reduced-motion support.
+
 ## Local workflow
 
 The public entrypoint for formatting, linting, typechecking, tests, and

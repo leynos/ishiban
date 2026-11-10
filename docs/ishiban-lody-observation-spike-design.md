@@ -387,6 +387,12 @@ Keep the repository column `12rem` wide at every density, allowing horizontal
 scrolling when bank widths exceed the viewport. Preserve the 6/10/13-item
 wrapping behaviour and avoid truncation.
 
+Compact hides evidence glyphs while preserving activity glyphs and complete
+accessible labels. Constrain the main area to its grid track so table overflow
+belongs to the scroll pane rather than widening the document. Every pulse has a
+positioned task owner; list buttons clip their pulse to prevent pane-sized
+overlays. Reduced-motion preferences apply to both table and list pulses.
+
 The inspector is an initially hidden, nonmodal right-hand dock. Selecting a
 task opens it while the board remains interactive. Its reserved space must
 leave a horizontal scroll viewport through which every table column can be

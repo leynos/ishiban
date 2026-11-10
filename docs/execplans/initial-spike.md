@@ -313,3 +313,19 @@ confirmed the same single documented protocol advisory, with no new concerns.
 The implementation and follow-up commits pass the required quality gates. The
 final documentation-only commit updates this acceptance record and design
 status; its Markdown, spelling, formatting and Mermaid gates pass separately.
+
+## Run-feedback corrections, 10 November 2026
+
+A subsequent live run exposed three CSS boundary failures. Compact evidence and
+activity glyphs overlapped. Automatic inline margins allowed the main grid item
+to exceed its track, so the table pane had no horizontal overflow despite the
+document becoming wider than the window. List task buttons were not positioned
+ancestors, allowing their absolutely positioned pulses to cover the scroll pane.
+
+Three real Chromium regressions failed before the fixes and passed afterwards.
+Compact now hides the evidence glyph while retaining its accessible label. An
+explicit main width keeps horizontal overflow inside the pane, with and without
+the docked inspector. Positioned list buttons clip their pulse locally, and
+reduced-motion preferences suppress list pulses as well as table pulses. The
+opt-in browser suite serves synthetic snapshots and real SSE from Bun; it does
+not modify Lody data or depend on the authenticated catalogue.

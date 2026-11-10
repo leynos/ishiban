@@ -53,7 +53,10 @@ per-stage truncation. Archived and removed sessions are hidden by default; the
 archive control includes them for historical inspection. The first table column
 remains `12rem` wide in every density. Mark density offers Overview, Compact,
 Balanced, Roomy, and Comfortable sizes; the board scrolls horizontally when its
-content is wider than the available space.
+content is wider than the available space. Compact hides the small evidence
+glyph to keep activity legible; the task's accessible label and inspector
+retain the evidence description. Table views scroll within their own pane,
+including while the inspector is open.
 
 Select a mark or a session in List view to open the right-hand inspector. The
 inspector is hidden initially, docks beside the board, and leaves the board
@@ -67,8 +70,9 @@ A solid oxide square with a tonal border marks a failed latest turn. The
 oxide/amber candy cane marks blocked activity, corresponding to Lody's
 `waiting` state. Labels retain the observed activity and workflow stage. A
 brief halo indicates a newly received session update, independently of outcome.
-Initial hydration, duplicate replay, and view changes do not trigger a pulse;
-reduced-motion preferences disable the animation. Empty placeholders are inert.
+List-view pulses stay within the updated task's button. Initial hydration,
+duplicate replay, and view changes do not trigger a pulse; reduced-motion
+preferences disable the animation. Empty placeholders are inert.
 
 | PR association evidence                                   | Workflow stage |
 | --------------------------------------------------------- | -------------- |
