@@ -19,6 +19,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from ishiban.domain import PullRequest
+from ishiban.cache_entries import fresh_cache_entry
 
 MAX_REQUESTED_PR_URLS = 5
 MAX_CACHE_ENTRIES = 256
@@ -99,16 +100,12 @@ class PullRequestTitles:
         titles: dict[str, str] = {}
         missing: list[str] = []
         for url in urls:
-            entry = self._cache.get(url)
+            entry = fresh_cache_entry(self._cache, url, now=now)
             if entry is None:
                 missing.append(url)
-            elif entry.expires_at <= now:
-                del self._cache[url]
-                missing.append(url)
-            else:
-                self._cache.move_to_end(url)
-                if entry.title is not None:
-                    titles[url] = entry.title
+                continue
+            if entry.title is not None:
+                titles[url] = entry.title
         return titles, missing
 
     async def _lookup_missing(self, urls: list[str]) -> dict[str, PullRequest]:

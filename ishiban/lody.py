@@ -6,6 +6,7 @@ one complete validated response instead of waiting for transport teardown.
 
 import asyncio
 import contextlib
+import dataclasses
 import re
 import typing as typ
 from itertools import starmap
@@ -88,23 +89,10 @@ async def read_json_object(
             message = "CLI stdout is unavailable."
             raise ProtocolError(message)
         data = bytearray()
-        prelude = bytearray()
         framer = CatalogueFramer()
-        started = not allow_transport_logs
-        received = 0
-        while chunk := await process.stdout.read(65_536):
-            received += len(chunk)
-            if received > max_bytes:
-                message = "CLI response exceeds its safety bound."
-                raise ProtocolError(message)
-            if not started:
-                prelude.extend(chunk)
-                candidate = _json_after_transport(prelude)
-                if candidate is None:
-                    continue
-                chunk = candidate
-                prelude.clear()
-                started = True
+        async for chunk in _bounded_json_chunks(
+            process.stdout, max_bytes, allow_transport_logs=allow_transport_logs
+        ):
             data.extend(chunk)
             if framer.feed(chunk):
                 end = framer.consumed_bytes if allow_transport_logs else len(data)
@@ -113,34 +101,105 @@ async def read_json_object(
     raise ProtocolError(message)
 
 
-@contextlib.asynccontextmanager
-async def child(
-    command: tuple[str, ...],
-) -> cabc.AsyncIterator[asyncio.subprocess.Process]:
+async def _bounded_json_chunks(
+    stdout: asyncio.StreamReader, max_bytes: int, *, allow_transport_logs: bool
+) -> cabc.AsyncIterator[bytes]:
+    """Remove known Lody chatter from bounded transport before JSON framing.
+
+    For example, an incomplete transport line waits for the next pipe chunk.
+
+    Yields
+    ------
+    bytes
+        Transport chunks beginning at the JSON object.
+    """
+    prelude = bytearray()
+    async for chunk in _bounded_chunks(stdout, max_bytes):
+        if not allow_transport_logs:
+            yield chunk
+            continue
+        prelude.extend(chunk)
+        candidate = _json_after_transport(prelude)
+        if candidate is None:
+            continue
+        allow_transport_logs = False
+        yield candidate
+
+
+async def _bounded_chunks(
+    stdout: asyncio.StreamReader, max_bytes: int
+) -> cabc.AsyncIterator[bytes]:
+    """Count raw pipe bytes before parsing; for example, chatter uses the bound.
+
+    Yields
+    ------
+    bytes
+        Raw chunks while the configured bound is respected.
+
+    Raises
+    ------
+    ProtocolError
+        If the subprocess emits more than the allowed raw bytes.
+    """
+    received = 0
+    while chunk := await stdout.read(65_536):
+        received += len(chunk)
+        if received > max_bytes:
+            message = "CLI response exceeds its safety bound."
+            raise ProtocolError(message)
+        yield chunk
+
+
+@dataclasses.dataclass(slots=True)
+class _OwnedChild:
+    """Keep subprocess creation and cleanup in one async context boundary."""
+
+    command: tuple[str, ...]
+    process: asyncio.subprocess.Process = dataclasses.field(init=False)
+    drainer: asyncio.Task[None] = dataclasses.field(init=False)
+
+    async def __aenter__(self) -> asyncio.subprocess.Process:
+        """Spawn a bounded child and drain stderr without retaining secrets.
+
+        Returns
+        -------
+        asyncio.subprocess.Process
+            The owned child process.
+        """
+        self.process = await asyncio.create_subprocess_exec(
+            *self.command,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=1_048_577,
+        )
+        self.drainer = asyncio.create_task(_discard_stderr(self.process))
+        return self.process
+
+    async def __aexit__(self, *_error: object) -> None:
+        """Reap the child before cancelling its stderr consumer."""
+        await _terminate(self.process)
+        await _stop_drainer(self.drainer)
+
+
+def child(command: tuple[str, ...]) -> _OwnedChild:
     """Own a subprocess and stderr drainer without invoking a shell.
 
     For example, leaving the context cancels an observer and reaps its child.
 
-    Yields
-    ------
-    asyncio.subprocess.Process
-        Owned read-only CLI process with bounded pipe buffers.
+    Returns
+    -------
+    _OwnedChild
+        An async context that yields a bounded read-only CLI process.
     """
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        limit=1_048_577,
-    )
-    drainer = asyncio.create_task(_discard_stderr(process))
-    try:
-        yield process
-    finally:
-        await _terminate(process)
-        drainer.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await drainer
+    return _OwnedChild(command)
+
+
+async def _stop_drainer(drainer: asyncio.Task[None]) -> None:
+    """Cancel and reap stderr consumption after the owned child has stopped."""
+    drainer.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await drainer
 
 
 async def _discard_stderr(process: asyncio.subprocess.Process) -> None:

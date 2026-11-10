@@ -9,9 +9,11 @@ import typing as typ
 
 import msgspec
 
-from ishiban.domain import Envelope
+from ishiban.domain import Envelope, Turn
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from ishiban.domain import ObservedSession
 
 SESSION_STATES = frozenset({"idle", "pending", "running", "waiting", "unknown"})
@@ -92,11 +94,24 @@ def decode_catalogue(data: bytes) -> Catalogue:
     if not catalogue.ok or not catalogue.workspace_id:
         message = "Catalogue response is not a successful workspace snapshot."
         raise ProtocolError(message)
+    _validate_catalogue_identities(catalogue)
+    return catalogue
+
+
+def _validate_catalogue_identities(catalogue: Catalogue) -> None:
+    """Reject missing or repeated identities in one complete catalogue.
+
+    For example, duplicate rows cannot be mistaken for independent sessions.
+
+    Raises
+    ------
+    ProtocolError
+        If any catalogue identity is empty or repeated.
+    """
     identities = {session.id for session in catalogue.sessions}
     if "" in identities or len(identities) != len(catalogue.sessions):
         message = "Catalogue has missing or duplicate session identities."
         raise ProtocolError(message)
-    return catalogue
 
 
 def decode_event(data: bytes, workspace_id: str, position: StreamPosition) -> Envelope:
@@ -109,24 +124,38 @@ def decode_event(data: bytes, workspace_id: str, position: StreamPosition) -> En
     Envelope
         The validated event with the position advanced.
 
-    Raises
-    ------
-    ProtocolError
-        If identity, sequence, schema, or payload is invalid.
     """
-    if len(data) > MAX_LINE_BYTES:
-        message = "Observer record exceeds the one-megabyte limit."
-        raise ProtocolError(message)
-    try:
-        event = msgspec.json.decode(data, type=Envelope)
-    except msgspec.DecodeError as error:
-        message = "Observer record is not a valid v1 envelope."
-        raise ProtocolError(message) from error
+    event = _decode_envelope(data)
     _validate_identity(event, workspace_id, position)
     _validate_payload(event)
     position.stream_id = event.stream_id
     position.sequence = event.sequence
     return event
+
+
+def _decode_envelope(data: bytes) -> Envelope:
+    """Bound and decode one observer transport record before semantic checks.
+
+    For example, oversized or malformed lines never advance stream position.
+
+    Returns
+    -------
+    Envelope
+        Decoded observer record ready for semantic validation.
+
+    Raises
+    ------
+    ProtocolError
+        If the record exceeds its size bound or is not valid JSON.
+    """
+    if len(data) > MAX_LINE_BYTES:
+        message = "Observer record exceeds the one-megabyte limit."
+        raise ProtocolError(message)
+    try:
+        return msgspec.json.decode(data, type=Envelope)
+    except msgspec.DecodeError as error:
+        message = "Observer record is not a valid v1 envelope."
+        raise ProtocolError(message) from error
 
 
 def _validate_identity(
@@ -137,9 +166,9 @@ def _validate_identity(
     Raises
     ------
     ProtocolError
-        If version, workspace, stream identity, or sequence is invalid.
+        If version, workspace or timestamp is invalid.
     """
-    if event.version != 1 or event.workspace_id != workspace:
+    if (event.version, event.workspace_id) != (1, workspace):
         message = "Unknown version or foreign workspace in observer stream."
         raise ProtocolError(message)
     _validate_stream_position(event, position)
@@ -153,17 +182,17 @@ def _validate_stream_position(event: Envelope, position: StreamPosition) -> None
 
     For example, reconnecting starts a new position rather than reusing one.
 
-    Raises
-    ------
-    ProtocolError
-        If the stream is absent, changed, or not contiguous.
+    Invalid stream or sequence facts raise ``ProtocolError``.
     """
-    if not event.stream_id or event.sequence != position.sequence + 1:
-        message = "Observer sequence is missing, duplicated, or out of order."
-        raise ProtocolError(message)
-    if position.stream_id is not None and event.stream_id != position.stream_id:
-        message = "Observer stream identity changed within one child process."
-        raise ProtocolError(message)
+    sequence_error = "Observer sequence is missing, duplicated, or out of order."
+    _require_rules((
+        (bool(event.stream_id), sequence_error),
+        (event.sequence == position.sequence + 1, sequence_error),
+        (
+            position.stream_id is None or event.stream_id == position.stream_id,
+            "Observer stream identity changed within one child process.",
+        ),
+    ))
 
 
 def _validate_payload(event: Envelope) -> None:
@@ -182,10 +211,9 @@ def _validate_payload(event: Envelope) -> None:
     if not event.session_id:
         message = "Session event is missing its stable identity."
         raise ProtocolError(message)
-    if event.type in {"snapshot", "session.changed"}:
-        _validate_session(event)
-    if event.type in {"turn.started", "turn.finished"}:
-        _validate_turn_event(event)
+    validator = _EVENT_VALIDATORS.get(event.type)
+    if validator is not None:
+        validator(event)
 
 
 def _validate_turn_event(event: Envelope) -> None:
@@ -193,21 +221,16 @@ def _validate_turn_event(event: Envelope) -> None:
 
     For example, a started turn requires identity but has no terminal outcome.
 
-    Raises
-    ------
-    ProtocolError
-        If the turn identity or completion outcome is absent or invalid.
+    Invalid turn identity or outcome raises ``ProtocolError``.
     """
-    if not event.user_turn_id:
-        message = "Turn event is missing the user turn identity."
-        raise ProtocolError(message)
-    if event.type == "turn.finished" and event.outcome not in {
-        "completed",
-        "failed",
-        "canceled",
-    }:
-        message = "Turn completion has an unknown outcome."
-        raise ProtocolError(message)
+    _require_rules((
+        (bool(event.user_turn_id), "Turn event is missing the user turn identity."),
+        (
+            event.type != "turn.finished"
+            or event.outcome in {"completed", "failed", "canceled"},
+            "Turn completion has an unknown outcome.",
+        ),
+    ))
 
 
 def _validate_session(event: Envelope) -> None:
@@ -231,20 +254,37 @@ def _validate_session_evidence(session: ObservedSession) -> None:
 
     For example, an arbitrary source label cannot become durable evidence.
 
+    Unknown state, source or freshness raises ``ProtocolError``.
+    """
+    rules = (
+        (session.state, SESSION_STATES, "Session state or evidence source is unknown."),
+        (
+            session.source,
+            {"metadata", "persisted"},
+            "Session state or evidence source is unknown.",
+        ),
+        (
+            session.freshness,
+            {"synced", "unavailable"},
+            "Session evidence freshness is unknown.",
+        ),
+    )
+    _require_rules((value in allowed, message) for value, allowed, message in rules)
+
+
+def _require_rules(rules: cabc.Iterable[tuple[bool, str]]) -> None:
+    """Apply ordered protocol checks without obscuring their error provenance.
+
+    For example, the first invalid field stops validation with its own message.
+
     Raises
     ------
     ProtocolError
-        If a session activity or evidence enum is unknown.
+        If any rule fails in the supplied order.
     """
-    if session.state not in SESSION_STATES or session.source not in {
-        "metadata",
-        "persisted",
-    }:
-        message = "Session state or evidence source is unknown."
-        raise ProtocolError(message)
-    if session.freshness not in {"synced", "unavailable"}:
-        message = "Session evidence freshness is unknown."
-        raise ProtocolError(message)
+    for is_valid, message in rules:
+        if not is_valid:
+            raise ProtocolError(message)
 
 
 def _validate_session_turns(session: ObservedSession) -> None:
@@ -257,9 +297,28 @@ def _validate_session_turns(session: ObservedSession) -> None:
     ProtocolError
         If any supplied turn has an unknown state or empty identity.
     """
-    turns = [*session.active_turns]
-    if session.latest_turn is not None:
-        turns.append(session.latest_turn)
-    if any(turn.state not in TURN_STATES or not turn.user_turn_id for turn in turns):
+    turns = (*session.active_turns, session.latest_turn)
+    if any(turn is not None and _has_invalid_turn(turn) for turn in turns):
         message = "Turn projection has an invalid state or identity."
         raise ProtocolError(message)
+
+
+def _has_invalid_turn(turn: Turn) -> bool:
+    """Check one active/latest turn against the shared protocol vocabulary.
+
+    For example, a turn with an empty ``user_turn_id`` is invalid.
+
+    Returns
+    -------
+    bool
+        Whether the turn has an unsupported state or empty identity.
+    """
+    return turn.state not in TURN_STATES or not turn.user_turn_id
+
+
+_EVENT_VALIDATORS = {
+    "snapshot": _validate_session,
+    "session.changed": _validate_session,
+    "turn.started": _validate_turn_event,
+    "turn.finished": _validate_turn_event,
+}

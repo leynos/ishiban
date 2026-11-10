@@ -15,7 +15,9 @@ This page locates the proof of concept's runtime components and verification.
 - `ishiban/lazy_activity.py` bounds and caches per-session activity reads.
 - `ishiban/activity_api.py` collects cached activity without journal writes.
 - `ishiban/storage/activity_cache.py` persists runtime observations in a
-  separate SQLite sidecar and restores them onto current API views.
+  separate SQLite sidecar and owns its initialization, reads and writes.
+- `ishiban/storage/activity_projection.py` validates cached runtime fields and
+  restores them onto current metadata without database access.
 - `ishiban/api.py` exposes Falcon snapshots, session detail, health, and SSE.
 - `ishiban/cli.py` supplies the `ishiban collect` and `ishiban serve` commands.
 - `migrations/` and `alembic.ini` define the local database schema history.

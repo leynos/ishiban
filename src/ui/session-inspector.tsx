@@ -13,6 +13,8 @@ interface SessionInspectorProps {
   readonly workspaceSlug?: string | undefined;
 }
 
+const WEB_PROTOCOLS = new Set(['http:', 'https:']);
+
 /** Link real sessions only; for example, an unknown slug uses Lody's native URI. */
 function SessionLink({session, workspaceId, workspaceSlug}: SessionInspectorProps): ReactElement {
   if (session.source === 'demo') return <p>Synthetic demo session</p>;
@@ -47,8 +49,7 @@ function TurnError({session}: {readonly session: Session}): ReactElement | null 
 /** Allow pull-request links only when they use HTTP or HTTPS. */
 function isWebUrl(value: string): boolean {
   try {
-    const protocol = new URL(value).protocol;
-    return protocol === 'https:' || protocol === 'http:';
+    return WEB_PROTOCOLS.has(new URL(value).protocol);
   } catch {
     return false;
   }
@@ -92,27 +93,32 @@ function PullRequestDetails({session}: {readonly session: Session}): ReactElemen
         <p>None supplied.</p>
       ) : (
         <ul>
-          {session.pullRequests.map((pullRequest) => {
-            const hasWebUrl = isWebUrl(pullRequest.url);
-            const fallback = hasWebUrl ? 'Open pull request' : 'Pull request URL unavailable';
-            const title = pullRequest.title?.trim() || fallback;
-            return (
-              <li key={pullRequest.url}>
-                {hasWebUrl ? (
-                  <a className="link link-hover" href={pullRequest.url} rel="noreferrer" target="_blank">
-                    {title}
-                  </a>
-                ) : (
-                  <span>{title}</span>
-                )}
-                <PullRequestNumber url={pullRequest.url} />
-                <small>{pullRequest.status.replaceAll('-', ' ')}</small>
-              </li>
-            );
-          })}
+          {session.pullRequests.map((pullRequest) => (
+            <PullRequestRow key={pullRequest.url} pullRequest={pullRequest} />
+          ))}
         </ul>
       )}
     </section>
+  );
+}
+
+/** Render one safe PR link with its status; for example, show a fallback for a blank title. */
+function PullRequestRow({pullRequest}: {readonly pullRequest: Session['pullRequests'][number]}): ReactElement {
+  const hasWebUrl = isWebUrl(pullRequest.url);
+  const fallback = hasWebUrl ? 'Open pull request' : 'Pull request URL unavailable';
+  const title = pullRequest.title?.trim() || fallback;
+  return (
+    <li>
+      {hasWebUrl ? (
+        <a className="link link-hover" href={pullRequest.url} rel="noreferrer" target="_blank">
+          {title}
+        </a>
+      ) : (
+        <span>{title}</span>
+      )}
+      <PullRequestNumber url={pullRequest.url} />
+      <small>{pullRequest.status.replaceAll('-', ' ')}</small>
+    </li>
   );
 }
 
@@ -137,6 +143,50 @@ function latestTurnLabel(session: Session): string {
   return `${session.latestTurn.state}${failedContext} · ${session.latestTurn.userTurnId}`;
 }
 
+/** Render the selected session's current facts; for example, show unknown activity explicitly. */
+function SessionFacts({
+  session,
+  currentGeneration
+}: {
+  readonly session: Session;
+  readonly currentGeneration: number;
+}): ReactElement {
+  const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
+  const stage = STAGE_LABELS[session.stage];
+  const activity = activityOf(session.state);
+  const activityLabel = activity === 'waiting' ? `${activity} (blocked)` : activity;
+  const activeTurnSummary =
+    session.activeTurns.length === 0
+      ? 'None supplied'
+      : session.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
+  return (
+    <dl className="inspector-facts">
+      <dt>Repository</dt>
+      <dd>{repository}</dd>
+      <dt>Branch</dt>
+      <dd>{session.branchName ?? 'Not supplied'}</dd>
+      <dt>Workflow stage</dt>
+      <dd>{stage}</dd>
+      <dt>Stage reason</dt>
+      <dd>{session.stageReason}</dd>
+      <dt>Activity</dt>
+      <dd>{activityLabel}</dd>
+      <dt>Evidence</dt>
+      <dd>{evidenceLabel(session, currentGeneration)}</dd>
+      <dt>Source</dt>
+      <dd>
+        {session.source} · {session.freshness}
+      </dd>
+      <dt>Last known turn</dt>
+      <dd>{latestTurnLabel(session)}</dd>
+      <dt>Active turns</dt>
+      <dd>{activeTurnSummary}</dd>
+      <dt>Observed</dt>
+      <dd>{observedAtLabel(session.lastObservedAt)}</dd>
+    </dl>
+  );
+}
+
 /**
  * Render session provenance, workflow reasoning, runtime evidence, and PR metadata.
  * @param props Selected backend session and the snapshot generation for comparison.
@@ -145,15 +195,6 @@ function latestTurnLabel(session: Session): string {
 export function SessionInspector(props: SessionInspectorProps): ReactElement {
   const {currentGeneration, onClose} = props;
   const session = usePullRequestTitles(props.session, props.workspaceId);
-  const repository = session.repoFullName ?? REPOSITORY_UNAVAILABLE;
-  const stage = STAGE_LABELS[session.stage];
-  const latestTurn = latestTurnLabel(session);
-  const activity = activityOf(session.state);
-  const activityLabel = activity === 'waiting' ? `${activity} (blocked)` : activity;
-  const activeTurnSummary =
-    session.activeTurns.length === 0
-      ? 'None supplied'
-      : session.activeTurns.map((turn) => `${turn.userTurnId} (${turn.state})`).join(', ');
   return (
     <aside aria-labelledby="session-inspector-heading" className="session-inspector" id="session-inspector">
       <header className="session-inspector__header">
@@ -174,30 +215,7 @@ export function SessionInspector(props: SessionInspectorProps): ReactElement {
       <p className="session-inspector__description" id="inspector-description">
         {session.stageReason}
       </p>
-      <dl className="inspector-facts">
-        <dt>Repository</dt>
-        <dd>{repository}</dd>
-        <dt>Branch</dt>
-        <dd>{session.branchName ?? 'Not supplied'}</dd>
-        <dt>Workflow stage</dt>
-        <dd>{stage}</dd>
-        <dt>Stage reason</dt>
-        <dd>{session.stageReason}</dd>
-        <dt>Activity</dt>
-        <dd>{activityLabel}</dd>
-        <dt>Evidence</dt>
-        <dd>{evidenceLabel(session, currentGeneration)}</dd>
-        <dt>Source</dt>
-        <dd>
-          {session.source} · {session.freshness}
-        </dd>
-        <dt>Last known turn</dt>
-        <dd>{latestTurn}</dd>
-        <dt>Active turns</dt>
-        <dd>{activeTurnSummary}</dd>
-        <dt>Observed</dt>
-        <dd>{observedAtLabel(session.lastObservedAt)}</dd>
-      </dl>
+      <SessionFacts session={session} currentGeneration={currentGeneration} />
       <AgentDetails
         key={session.sessionId}
         workspaceId={props.workspaceId}

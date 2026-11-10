@@ -179,6 +179,64 @@ function visitMarks(node: Node, visit: (element: Element) => void): void {
   for (const mark of node.querySelectorAll(MARKS)) visit(mark);
 }
 
+/** Track real marks that are visible and rediscoverable after leaving the viewport. */
+class ActivityVisibility {
+  private readonly visible = new Set<Element>();
+  private observer: IntersectionObserver | undefined;
+  private mutation: MutationObserver | undefined;
+
+  /** Start observing existing and newly rendered marks; for example, watch a mounted board. */
+  start(enqueue: (element: Element) => void): void {
+    this.observer = new IntersectionObserver((entries) => this.update(entries, enqueue));
+    this.mutation = new MutationObserver((records) => this.applyMutations(records));
+    document.querySelectorAll(MARKS).forEach((mark) => this.observer?.observe(mark));
+    this.mutation.observe(document.body, {childList: true, subtree: true});
+  }
+
+  /** Answer whether a session still has a visible mark; for example, retain visible retries. */
+  hasSession(sessionId: string): boolean {
+    for (const mark of this.visible) {
+      if (mark.getAttribute('data-session-id') === sessionId) return true;
+    }
+    return false;
+  }
+
+  /** Revisit visible marks after metadata changes; for example, retry newly unknown sessions. */
+  revisit(enqueue: (element: Element) => void): void {
+    for (const mark of this.visible) enqueue(mark);
+  }
+
+  /** Release observers and visible marks; for example, close on a board unmount. */
+  close(): void {
+    this.mutation?.disconnect();
+    this.observer?.disconnect();
+    this.visible.clear();
+  }
+
+  private update(entries: readonly IntersectionObserverEntry[], enqueue: (element: Element) => void): void {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        this.visible.add(entry.target);
+        enqueue(entry.target);
+      } else this.visible.delete(entry.target);
+    }
+  }
+
+  private applyMutations(records: readonly MutationRecord[]): void {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        visitMarks(node, (mark) => this.observer?.observe(mark));
+      }
+      for (const node of record.removedNodes) {
+        visitMarks(node, (mark) => {
+          this.observer?.unobserve(mark);
+          this.visible.delete(mark);
+        });
+      }
+    }
+  }
+}
+
 /**
  * Resolve activity only as real marks enter the viewport.
  * @param store Live browser projection, with revision-checked ephemeral updates.
@@ -188,43 +246,17 @@ function visitMarks(node: Node, visit: (element: Element) => void): void {
  */
 export function startLazyActivity(store: BoardStore): () => void {
   if (typeof IntersectionObserver === 'undefined') return () => {};
-  const visible = new Set<Element>();
-  const requests = new ActivityRequests(store, (id) => {
-    for (const mark of visible) if (mark.getAttribute('data-session-id') === id) return true;
-    return false;
-  });
-  const enqueue = (element: Element) => {
+  const visibility = new ActivityVisibility();
+  const requests = new ActivityRequests(store, (id) => visibility.hasSession(id));
+  const enqueue = (element: Element): void => {
     const id = element.getAttribute('data-session-id');
     if (id) requests.enqueue(id);
   };
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        visible.add(entry.target);
-        enqueue(entry.target);
-      } else visible.delete(entry.target);
-    }
-  });
-  const mutation = new MutationObserver((records) => {
-    for (const record of records) {
-      for (const node of record.addedNodes) visitMarks(node, (mark) => observer.observe(mark));
-      for (const node of record.removedNodes)
-        visitMarks(node, (mark) => {
-          observer.unobserve(mark);
-          visible.delete(mark);
-        });
-    }
-  });
-  for (const mark of document.querySelectorAll(MARKS)) observer.observe(mark);
-  mutation.observe(document.body, {childList: true, subtree: true});
-  const unsubscribe = store.subscribe(() => {
-    for (const mark of visible) enqueue(mark);
-  });
+  visibility.start(enqueue);
+  const unsubscribe = store.subscribe(() => visibility.revisit(enqueue));
   return () => {
-    mutation.disconnect();
-    observer.disconnect();
     unsubscribe();
     requests.close();
-    visible.clear();
+    visibility.close();
   };
 }

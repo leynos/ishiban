@@ -8,6 +8,7 @@ import time
 import msgspec
 
 from ishiban import domain
+from ishiban.cache_entries import fresh_cache_entry
 from ishiban.lody import read_json_object
 from ishiban.protocol import SESSION_STATES, TURN_STATES, ProtocolError
 
@@ -70,7 +71,18 @@ def _is_persisted_activity(session: domain.ObservedSession, session_id: str) -> 
         return False
     if session.freshness not in {"synced", "unavailable"}:
         return False
-    turns = list(session.active_turns)
+    return _has_valid_turns(session)
+
+
+def _has_valid_turns(session: domain.ObservedSession) -> bool:
+    """Validate supplied turns; for example, metadata may omit every turn.
+
+    Returns
+    -------
+    bool
+        Whether every supplied turn has a known state and identity.
+    """
+    turns = [*session.active_turns]
     if session.latest_turn is not None:
         turns.append(session.latest_turn)
     return all(turn.state in TURN_STATES and bool(turn.user_turn_id) for turn in turns)
@@ -137,12 +149,9 @@ class LazyActivity:
             return None
         key = (session_id, revision)
         now = _monotonic_time()
-        entry = self._cache.get(key)
-        if entry is not None:
-            if entry.expires_at > now:
-                self._cache.move_to_end(key)
-                return entry.value
-            del self._cache[key]
+        is_cached, cached = self._cached(key, now)
+        if is_cached:
+            return cached
 
         task = self._inflight.get(key)
         if task is None:
@@ -153,6 +162,23 @@ class LazyActivity:
         # One cancelled request must not cancel a shared observer needed by
         # other waiters; close() owns cancellation of the shared task itself.
         return await asyncio.shield(task)
+
+    def _cached(
+        self, key: _SessionKey, now: float
+    ) -> tuple[bool, domain.ObservedSession | None]:
+        """Read a fresh cache entry while distinguishing cached unavailability.
+
+        For example, a cached ``None`` suppresses another CLI read until expiry.
+
+        Returns
+        -------
+        tuple[bool, ObservedSession or None]
+            A cache-hit flag and its optional known observation.
+        """
+        entry = fresh_cache_entry(self._cache, key, now=now)
+        if entry is None:
+            return False, None
+        return True, entry.value
 
     async def close(self) -> None:
         """Cancel and reap every observer owned by this service.

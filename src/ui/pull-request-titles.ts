@@ -26,6 +26,32 @@ async function readTitles(workspaceId: string, sessionId: string, signal: AbortS
   return result.titles;
 }
 
+/** Own timeout and cancellation; for example, the returned stop() aborts an unfinished lookup. */
+function startTitleLookup(
+  workspaceId: string,
+  session: Session,
+  onTitles: (values: Readonly<Record<string, string>>) => void
+): () => void {
+  const controller = new AbortController();
+  let isCurrent = true;
+  const timeout = setTimeout(() => controller.abort(), 45_000);
+  void readTitles(workspaceId, session.sessionId, controller.signal)
+    .then(
+      (values) => {
+        if (isCurrent) onTitles(values);
+      },
+      () => {
+        /* Keep explicit unavailable labels when title enrichment fails. */
+      }
+    )
+    .finally(() => clearTimeout(timeout));
+  return () => {
+    isCurrent = false;
+    clearTimeout(timeout);
+    controller.abort();
+  };
+}
+
 /**
  * Fill only missing PR names; for example, merged PRs may have no catalogue title.
  * @param session Selected immutable source projection.
@@ -41,24 +67,7 @@ export function usePullRequestTitles(session: Session, workspaceId: string): Ses
   const urls = session.pullRequests.map((pr) => pr.url).join('\n');
   useEffect(() => {
     if (session.source === 'demo' || !hasMissing) return;
-    const controller = new AbortController();
-    let isCurrent = true;
-    const timeout = setTimeout(() => controller.abort(), 45_000);
-    void readTitles(workspaceId, session.sessionId, controller.signal)
-      .then(
-        (values) => {
-          if (isCurrent) setCached({scope, values});
-        },
-        () => {
-          /* Keep explicit unavailable labels when title enrichment fails. */
-        }
-      )
-      .finally(() => clearTimeout(timeout));
-    return () => {
-      isCurrent = false;
-      clearTimeout(timeout);
-      controller.abort();
-    };
+    return startTitleLookup(workspaceId, session, (values) => setCached({scope, values}));
   }, [workspaceId, session.sessionId, session.source, hasMissing, urls, scope]);
   if (cached.scope !== scope) return session;
   return {

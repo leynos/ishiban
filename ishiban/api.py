@@ -178,15 +178,7 @@ class EventsResource:
             return
         idle = 0
         while True:
-            rows = await self.store.events(cursor, limit=100)
-            session_rows = [row for row in rows if "sessionId" in row]
-            projections = [
-                msgspec.convert(row["projection"], type=dict[str, object])
-                for row in session_rows
-            ]
-            views = await self.store.restore_activity(projections)
-            for row, view in zip(session_rows, views, strict=True):
-                row["projection"] = view
+            rows = await self._current_views(cursor)
             for row in rows:
                 cursor = int(str(row["cursor"]))
                 category = "source" if row["source"] == "collector" else "observation"
@@ -199,6 +191,28 @@ class EventsResource:
                 yield asgi.SSEvent(comment="heartbeat")
                 idle = 0
             await asyncio.sleep(0.25)
+
+    async def _current_views(self, cursor: int) -> list[dict[str, object]]:
+        """Overlay sidecar activity on one committed replay batch.
+
+        For example, a restored failure changes the emitted view, not the
+        journal row or its durable cursor.
+
+        Returns
+        -------
+        list[dict[str, object]]
+            Replay rows with current cached activity overlaid.
+        """
+        rows = await self.store.events(cursor, limit=100)
+        session_rows = [row for row in rows if "sessionId" in row]
+        projections = [
+            msgspec.convert(row["projection"], type=dict[str, object])
+            for row in session_rows
+        ]
+        views = await self.store.restore_activity(projections)
+        for row, view in zip(session_rows, views, strict=True):
+            row["projection"] = view
+        return rows
 
 
 class HealthResource:

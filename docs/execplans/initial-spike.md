@@ -1,9 +1,11 @@
 # Ishiban initial observation proof of concept
 
-Status: implementation and persistent on-demand observations are complete and
-validated through `6d0ddd5`, with the final fixture and acceptance record
-below. The full implementation review starts at `bbb1bee`. No remote
-publication or Lody writes are authorized.
+Status: implementation and its local acceptance are complete. Draft PR #9 is
+published, and hosted CI, full-PR CodeScene cleanup and review convergence are
+in progress under the user's subsequent `pr-babysitting` assignment. The
+original implementation's publication restriction is superseded by the user's
+PR creation and babysitting requests. Lody writes remain forbidden; no merge
+has been authorized.
 
 ## Purpose
 
@@ -79,7 +81,9 @@ wrapping and keyboard/mobile behaviour with tests and the actual browser.
 M4: validate `leynos`, record resource and replay observations, run all quality
 gates, local CodeRabbit and local CodeScene, remediate consequential findings,
 and commit the result. User/developer guides must contain executable run steps
-and honest limitations. No PR or remote publication is part of this assignment.
+and honest limitations. PR publication was outside the original implementation
+milestone; subsequent user instructions authorize publication and review
+convergence.
 
 M5: incorporate the user's follow-up interface requirements. Provide Overview,
 Compact, Balanced, Roomy, and Comfortable mark sizes. Empty placeholders have
@@ -604,3 +608,40 @@ advisory: the mixed batch route test is 79 lines against a 70-line threshold.
 Its cached, fresh, unavailable and missing-member assertions remain together as
 one request contract; shared setup is already extracted. Production batch mean
 complexity improves from 4.75 to 4.43. No CodeScene rules are weakened.
+
+## Hosted delivery follow-up
+
+The first published candidate passes its local gates, but hosted CI exposes
+additional obligations. Act Validation needs the same pinned Bun runtime as the
+browser tests. The existing coverage ratchet combines application and test
+modules, counts cold assertion messages, and restores a cache identified only
+by Python minor version. SlipCover 1.1.0 also cannot pre-instrument pytest 9.2
+rewrites, and its xdist workers miss dynamic Alembic migration execution.
+
+CodeRabbit investigation comment `6771868675` independently identifies those
+limits; AST inspection and upstream research were available, codegraph was not.
+Isolated measurements confirm that pytest 9.1 removes the compatibility warning
+but does not repair the unscoped line-coverage decrease. With identical
+production scope and serial instrumentation, base coverage is 97.37% and the
+published head is 91.51%. All expected production files must remain measured;
+the one-percentage-point ratchet tolerance must remain intact. Any substantial
+coverage-infrastructure repair belongs in a prerequisite beneath this feature.
+
+The full base-to-head CodeScene inventory has 24 diagnostics across 14 files.
+The babysitting follow-up replaces previously retained advisories with cohesive
+refactors and integrated validation. New CLI tests expose and repair missing
+command context in startup validation errors. Collector recovery tests check
+safe failure diagnostics, increasing backoff, cancellation and refresh health
+without writing to Lody or changing the user's running service.
+
+The user subsequently directs a reset of the cached Python baseline to zero.
+That explicit policy decision supersedes the proposed baseline-migration
+prerequisite. Both historical Python ratchet caches are removed; the next
+coverage run bootstraps zero through the existing action. The ratchet remains
+enabled with a tolerance of one percentage point, and a successful main
+publisher will establish the new measured baseline. Measurement scope remains
+unchanged. Coverage lanes use the verified compatible pytest 9.1.0/SlipCover
+1.1.0 tuple and serial instrumentation so dynamic migration hits are retained.
+New workflow contracts keep the PR and main publishers aligned. The unused
+prerequisite worktree remains clean and unpublished; no stack rewrite is
+required.

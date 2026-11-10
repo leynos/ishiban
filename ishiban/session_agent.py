@@ -73,6 +73,31 @@ def _monotonic_time() -> float:
     return time.monotonic()
 
 
+async def _read_show[T](
+    command: tuple[str, ...],
+    response_type: type[T],
+    deadline_seconds: float,
+    *,
+    allow_transport_logs: bool = False,
+) -> T:
+    """Decode a bounded Lody show envelope without relaxing caller identity checks.
+
+    For example, configuration reads may permit known transport chatter while
+    both callers validate the returned workspace and requested object ID.
+
+    Returns
+    -------
+    T
+        The typed Lody envelope for caller-specific identity validation.
+    """
+    data = await lody.read_json_object(
+        command,
+        deadline_seconds=deadline_seconds,
+        allow_transport_logs=allow_transport_logs,
+    )
+    return msgspec.json.decode(data, type=response_type)
+
+
 class SessionAgentDetails:
     """Read a session's agent labels with one serialized CLI pipeline.
 
@@ -209,11 +234,9 @@ class SessionAgentDetails:
             self._selector,
             "--json",
         )
-        data = await lody.read_json_object(
-            command,
-            deadline_seconds=SESSION_TIMEOUT_SECONDS,
+        response = await _read_show(
+            command, _SessionShowResponse, SESSION_TIMEOUT_SECONDS
         )
-        response = msgspec.json.decode(data, type=_SessionShowResponse)
         if response.ok is not True:
             return None
         if response.workspace.id != self._workspace_id:
@@ -239,12 +262,12 @@ class SessionAgentDetails:
             self._selector,
             "--json",
         )
-        data = await lody.read_json_object(
+        response = await _read_show(
             command,
-            deadline_seconds=CONFIG_TIMEOUT_SECONDS,
+            _AgentConfigShowResponse,
+            CONFIG_TIMEOUT_SECONDS,
             allow_transport_logs=True,
         )
-        response = msgspec.json.decode(data, type=_AgentConfigShowResponse)
         if response.ok is not True:
             return None
         if response.workspace_id != self._workspace_id:

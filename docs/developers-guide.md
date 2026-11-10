@@ -491,3 +491,48 @@ shim subprocesses, without writing a private executable or parsing call logs.
 Keep dedicated real process fixtures for tests of transport chunking, delayed
 EOF, timeout and cancellation behaviour that command-response mocks do not
 model.
+
+Code-health cleanup separates the CLI reader into bounded raw chunks, the
+optional recognized transport prelude, and `CatalogueFramer` completion.
+`_OwnedChild` owns subprocess termination and stderr-drainer cleanup. These
+seams belong to the read-only CLI adapter; other process callers retain their
+existing lifetimes. Protocol validation uses ordered feature-local rules so
+first-error selection stays stable across decoding and evidence checks.
+
+`storage.activity_projection` owns pure cached-runtime validation and overlay;
+`storage.activity_cache` retains SQLite lifecycle and transaction ownership.
+The pure helpers are confined to this derived-runtime feature.
+
+The batch API partitions current projections once before cache restoration and
+pending observations. Browser `ActivityVisibility` owns mark discovery and DOM
+observer cleanup, while the PR-title lookup owns its timeout and cancellation.
+Inspector PR rows and session facts remain presentational. These helpers are
+scoped to their existing features and preserve journal and browser contracts.
+
+### Coverage instrumentation
+
+PR and main coverage use `.github/coverage-constraints.txt` for the action's
+separate dependency installation. The verified pytest 9.1.0/SlipCover 1.1.0
+combination avoids the unsupported pytest assertion-cache hook. Coverage runs
+serially because the current xdist instrumentation misses dynamically loaded
+Alembic migration hits; normal unit tests retain their parallel execution. The
+known instrumentation-activation warning is an error in coverage lanes. Revisit
+the pytest pin when upstream compatibility and serial/xdist migration checks
+both pass; the investigation is recorded in
+[the PR discussion](https://github.com/leynos/ishiban/pull/9#issuecomment-6771868675).
+
+The user authorizes a one-time reset of the historical cached Python baseline
+to zero during this delivery. This preserves measurement scope and the
+one-percentage-point ratchet tolerance. The next successful main publisher
+establishes a new measured baseline; future scope or tool changes still need
+comparable measurements or an explicit baseline policy decision.
+
+`cache_entries.fresh_cache_entry` shares only monotonic expiry and LRU touch
+behaviour between activity and PR-title lookups. Each adapter retains its own
+keys, entry payloads, clocks, positive/negative TTLs, capacity and async work.
+A cached unavailable payload remains distinct from a missing or expired entry;
+this helper is not a shared service lifecycle or persistence abstraction.
+
+Python Syrupy snapshots use `.ambr`; Bun snapshots use `.snap`. Pytest ignores
+the Bun extension during unused-snapshot discovery, while both runners retain
+their own snapshot assertions and unused Python snapshot checks.

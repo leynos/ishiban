@@ -5,13 +5,20 @@ import sqlite3
 import time
 import typing as typ
 
-import msgspec
 import sqlalchemy as sa
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from ishiban.protocol import SESSION_STATES
+from ishiban.storage.activity_projection import (
+    RUNTIME_FIELDS as RUNTIME_FIELDS,
+)
+from ishiban.storage.activity_projection import (
+    _cache_candidate_session_id,
+    _merge_projection,
+    _runtime_json,
+)
 from ishiban.storage.database import create_engine
 
 if typ.TYPE_CHECKING:
@@ -19,14 +26,6 @@ if typ.TYPE_CHECKING:
 
 MAX_ROWS_PER_WORKSPACE = 10_000
 INITIALIZE_ATTEMPTS = 5
-RUNTIME_FIELDS = (
-    "state",
-    "latestTurn",
-    "activeTurns",
-    "lastObservedAt",
-    "source",
-    "freshness",
-)
 
 _METADATA = sa.MetaData()
 _KNOWN_STATES = SESSION_STATES - {"unknown"}
@@ -92,40 +91,79 @@ def _projection_revision(projection: dict[str, object]) -> int:
             raise TypeError
 
 
-def _activity_revision(projection: dict[str, object]) -> int | None:
-    """Parse the optional activity-event revision, defaulting a missing value to zero.
+def _is_retryable_open(error: OperationalError, attempt: int) -> bool:
+    """Retry SQLite lock contention before the final attempt, never other errors.
+
+    For example, a busy sidecar during the first open yields to its writer.
 
     Returns
     -------
-    int or None
-        Parsed event revision, or ``None`` if the supplied value is invalid.
+    bool
+        Whether this SQLite lock error has a remaining retry.
     """
-    value = projection.get("lastActivityEventId", 0)
-    match value:
-        case None:
-            return 0
-        case bool():
-            return None
-        case int() if value >= 0:
-            return value
-        case str() if value.isdecimal():
-            return int(value)
-        case _:
-            return None
+    if attempt == INITIALIZE_ATTEMPTS - 1:
+        return False
+    if not isinstance(error.orig, sqlite3.OperationalError):
+        return False
+    return error.orig.sqlite_errorcode & 0xFF in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
 
 
-def _runtime_json(projection: dict[str, object]) -> str:
-    """Serialize only runtime fields, excluding durable metadata and identifiers.
+def _cache_values(projection: dict[str, object]) -> tuple[str, int, str]:
+    """Validate the identity and known runtime before preparing a sidecar write.
+
+    For example, an unknown source state is rejected before opening a transaction.
+
+    Returns
+    -------
+    tuple[str, int, str]
+        Validated identity, durable revision and encoded runtime fields.
+    """
+    session_id = _required_session_id(projection)
+    _require_known_state(projection)
+    return session_id, _projection_revision(projection), _runtime_json(projection)
+
+
+def _required_session_id(projection: dict[str, object]) -> str:
+    """Require a nonempty sidecar key; for example, reject a missing ID.
 
     Returns
     -------
     str
-        Compact JSON containing only known runtime projection fields.
+        The validated session identity.
+
+    Raises
+    ------
+    TypeError
+        If the identity is not a string.
+    ValueError
+        If the identity is empty.
     """
-    runtime = {
-        field: projection[field] for field in RUNTIME_FIELDS if field in projection
-    }
-    return msgspec.json.encode(runtime).decode("utf-8")
+    session_id = projection.get("sessionId")
+    if not isinstance(session_id, str):
+        raise TypeError
+    if not session_id:
+        raise ValueError
+    return session_id
+
+
+def _require_known_state(projection: dict[str, object]) -> None:
+    """Restrict sidecar writes to concrete runtime outcomes.
+
+    Raises
+    ------
+    TypeError
+        If the state is not a string.
+    ValueError
+        If the state is not a known runtime outcome.
+    """
+    state = projection.get("state")
+    if not isinstance(state, str):
+        raise TypeError
+    if state not in _KNOWN_STATES:
+        raise ValueError
 
 
 class ActivityCache:
@@ -163,21 +201,9 @@ class ActivityCache:
             return
         for attempt in range(INITIALIZE_ATTEMPTS):
             try:
-                async with self._engine.begin() as connection:
-                    await connection.execute(
-                        sa.schema.CreateTable(_RUNTIME_CACHE, if_not_exists=True)
-                    )
+                await self._create_table()
             except OperationalError as error:
-                if not isinstance(error.orig, sqlite3.OperationalError):
-                    raise
-                if (
-                    error.orig.sqlite_errorcode & 0xFF
-                    not in {
-                        sqlite3.SQLITE_BUSY,
-                        sqlite3.SQLITE_LOCKED,
-                    }
-                    or attempt == INITIALIZE_ATTEMPTS - 1
-                ):
+                if not _is_retryable_open(error, attempt):
                     raise
                 # WAL setup can contend before the idempotent DDL is reached.
                 # Yield so the other connection can finish its first open.
@@ -185,6 +211,13 @@ class ActivityCache:
             else:
                 self._initialized = True
                 return
+
+    async def _create_table(self) -> None:
+        """Create the sidecar table; for example, a concurrent open is idempotent."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                sa.schema.CreateTable(_RUNTIME_CACHE, if_not_exists=True)
+            )
 
     async def close(self) -> None:
         """Dispose the sidecar engine and allow a later initialize call."""
@@ -197,26 +230,10 @@ class ActivityCache:
         For example, a delayed revision 7 observation cannot replace cached
         runtime for revision 8.
 
-        Raises
-        ------
-        TypeError
-            If the session ID, state, or revision has an invalid type.
-        ValueError
-            If the identity is empty, revision is negative, or state is unknown.
+        Invalid identities, states and revisions fail before the SQL transaction.
         """
         self._require_initialized()
-        session_id = projection.get("sessionId")
-        if not isinstance(session_id, str):
-            raise TypeError
-        if not session_id:
-            raise ValueError
-        state = projection.get("state")
-        if not isinstance(state, str):
-            raise TypeError
-        if state not in _KNOWN_STATES:
-            raise ValueError
-        base_revision = _projection_revision(projection)
-        encoded_runtime = _runtime_json(projection)
+        session_id, base_revision, encoded_runtime = _cache_values(projection)
         saved_at_ns = time.time_ns()
         statement = sqlite_insert(_RUNTIME_CACHE).values(
             workspace_id=self.workspace_id,
@@ -335,55 +352,3 @@ class ActivityCache:
                 _RUNTIME_CACHE.c.session_id.in_(excess_rows),
             )
         )
-
-
-def _cache_candidate_session_id(projection: dict[str, object]) -> str | None:
-    """Return an unknown projection's identity when its overlay guard is valid.
-
-    Returns
-    -------
-    str or None
-        Eligible session ID, or ``None`` when the projection must stay unchanged.
-    """
-    if projection.get("state") != "unknown":
-        return None
-    if projection.get("removed", False) is not False:
-        return None
-    session_id = projection.get("sessionId")
-    if not isinstance(session_id, str) or not session_id:
-        return None
-    if _activity_revision(projection) is None:
-        return None
-    return session_id
-
-
-def _merge_projection(
-    projection: dict[str, object],
-    cache_record: tuple[int, str] | None,
-) -> dict[str, object]:
-    """Overlay cached runtime only when no newer activity event supersedes it.
-
-    Returns
-    -------
-    dict of str to object
-        A copy of the incoming projection with eligible cached runtime restored.
-    """
-    if projection.get("state") != "unknown":
-        return dict(projection)
-    if projection.get("removed", False) is not False:
-        return dict(projection)
-    if cache_record is None:
-        return dict(projection)
-    activity_revision = _activity_revision(projection)
-    if activity_revision is None or activity_revision > cache_record[0]:
-        return dict(projection)
-    try:
-        runtime = msgspec.json.decode(cache_record[1], type=dict[str, object])
-    except msgspec.DecodeError:
-        return dict(projection)
-    restored = dict(projection)
-    restored.update({
-        field: runtime[field] for field in RUNTIME_FIELDS if field in runtime
-    })
-    restored["activitySource"] = "lazy"
-    return restored

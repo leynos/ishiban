@@ -52,6 +52,46 @@ class _BlockingActivity(lazy_activity.LazyActivity):
         return None
 
 
+def assert_batch_response(response: testing.Result, calls: list[str]) -> None:
+    """Check streamed cache, fresh, unavailable and missing-member frames.
+
+    For example, the cached s1 frame must precede any cold Lody member.
+    """
+    assert response.status_code == 200, "The batch endpoint must be mounted."
+    assert response.headers.get("content-type", "").startswith(
+        "application/x-ndjson"
+    ), "Batch results must use NDJSON framing."
+    assert response.headers.get("x-accel-buffering") == "no", (
+        "Proxy buffering must be disabled so completed lookups can stream."
+    )
+    frames = [json.loads(line) for line in response.content.splitlines()]
+    assert frames[0]["sessionId"] == "s1", (
+        "Cached results must be streamed before fresh observer lookups."
+    )
+    assert {frame["sessionId"] for frame in frames} == {"missing", "s1", "s2", "s3"}, (
+        "Input duplicates must collapse while every unique identifier gets a frame."
+    )
+    assert all(frame["workspaceId"] == "w1" for frame in frames), (
+        "Each frame must carry the store's workspace identity."
+    )
+    by_session = {frame["sessionId"]: frame["session"] for frame in frames}
+    assert by_session["s1"]["state"] == "idle", (
+        "A valid cached projection must be returned as a successful frame."
+    )
+    assert by_session["s1"]["activitySource"] == "lazy", (
+        "Cached activity must retain its lazy provenance."
+    )
+    assert by_session["s2"]["state"] == "running", (
+        "Fresh Lody evidence must be returned for a successful batch member."
+    )
+    assert by_session["s2"]["activitySource"] == "lazy", (
+        "Fresh activity must be labelled as lazy evidence."
+    )
+    assert by_session["s3"] is None, "An unavailable member must not abort the batch."
+    assert by_session["missing"] is None, "A missing member must yield a null frame."
+    assert set(calls) == {"s2", "s3"}, "Cache hits and missing sessions must skip Lody."
+
+
 @pytest.mark.asyncio
 async def test_batch_route_returns_unique_frames_for_each_completed_lookup(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -98,42 +138,7 @@ async def test_batch_route_returns_unique_frames_for_each_completed_lookup(
             snapshot_after = await store.snapshot()
             journal_after = await store.events(0)
 
-    assert response.status_code == 200, "The batch endpoint must be mounted."
-    assert response.headers.get("content-type", "").startswith(
-        "application/x-ndjson"
-    ), "Batch results must use NDJSON framing."
-    assert response.headers.get("x-accel-buffering") == "no", (
-        "Proxy buffering must be disabled so completed lookups can stream."
-    )
-    frames = [json.loads(line) for line in response.content.splitlines()]
-    assert frames[0]["sessionId"] == "s1", (
-        "Cached results must be streamed before fresh observer lookups."
-    )
-    assert {frame["sessionId"] for frame in frames} == {
-        "missing",
-        "s1",
-        "s2",
-        "s3",
-    }, "Input duplicates must collapse while every unique identifier gets a frame."
-    assert all(frame["workspaceId"] == "w1" for frame in frames), (
-        "Each frame must carry the store's workspace identity."
-    )
-    by_session = {frame["sessionId"]: frame["session"] for frame in frames}
-    assert by_session["s1"]["state"] == "idle", (
-        "A valid cached projection must be returned as a successful frame."
-    )
-    assert by_session["s1"]["activitySource"] == "lazy", (
-        "Cached activity must retain its lazy provenance."
-    )
-    assert by_session["s2"]["state"] == "running", (
-        "Fresh Lody evidence must be returned for a successful batch member."
-    )
-    assert by_session["s2"]["activitySource"] == "lazy", (
-        "Fresh activity must be labelled as lazy evidence."
-    )
-    assert by_session["s3"] is None, "An unavailable member must not abort the batch."
-    assert by_session["missing"] is None, "A missing member must yield a null frame."
-    assert set(calls) == {"s2", "s3"}, "Cache hits and missing sessions must skip Lody."
+    assert_batch_response(response, calls)
     assert snapshot_after == baseline, "Batch enrichment must not change journal state."
     assert journal_after == journal_before, "Batch enrichment must not append events."
 
@@ -161,23 +166,24 @@ async def test_duplicate_cached_ids_keep_their_first_request_order(
 
 
 @pytest.mark.parametrize(
-    "body",
+    ("body", "status_code"),
     [
-        b"{",
-        b"{}",
-        b'{"sessionIds":"s1"}',
-        b'{"sessionIds":[1]}',
-        json.dumps({"sessionIds": [f"s{index}" for index in range(9)]}).encode(),
-        b'{"sessionIds":[""]}',
-        json.dumps({"sessionIds": ["s" * 257]}).encode(),
-        b'{"sessionIds":["s\\u0000x"]}',
+        (b"{", 400),
+        (b"{}", 400),
+        (b'{"sessionIds":"s1"}', 400),
+        (b'{"sessionIds":[1]}', 400),
+        (json.dumps({"sessionIds": [f"s{index}" for index in range(9)]}).encode(), 400),
+        (b'{"sessionIds":[""]}', 400),
+        (json.dumps({"sessionIds": ["s" * 257]}).encode(), 400),
+        (b'{"sessionIds":["s\\u0000x"]}', 400),
+        (b" " * 8_193, 413),
     ],
 )
 @pytest.mark.asyncio
-async def test_batch_rejects_invalid_request_shapes_and_ids(
-    tmp_path: pathlib.Path, body: bytes
+async def test_batch_rejects_invalid_or_oversized_request(
+    tmp_path: pathlib.Path, body: bytes, status_code: int
 ) -> None:
-    """Malformed JSON, too many IDs and unsafe identifiers return HTTP 400."""
+    """Malformed shapes and IDs return 400; oversized bodies return 413."""
     async with (
         opened_store(tmp_path) as store,
         testing.ASGIConductor(create_app(store)) as conductor,
@@ -187,25 +193,8 @@ async def test_batch_rejects_invalid_request_shapes_and_ids(
             body=body,
             headers={"content-type": "application/json"},
         )
-    assert response.status_code == 400, (
+    assert response.status_code == status_code, (
         "Invalid activity batch input must be rejected before observation."
-    )
-
-
-@pytest.mark.asyncio
-async def test_batch_rejects_a_body_over_8192_bytes(tmp_path: pathlib.Path) -> None:
-    """The request body limit is enforced before JSON decoding."""
-    async with (
-        opened_store(tmp_path) as store,
-        testing.ASGIConductor(create_app(store)) as conductor,
-    ):
-        response = await conductor.simulate_post(
-            "/api/v1/sessions/activity",
-            body=b" " * 8_193,
-            headers={"content-type": "application/json"},
-        )
-    assert response.status_code == 413, (
-        "Oversized activity batches must fail with HTTP 413."
     )
 
 

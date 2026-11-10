@@ -344,8 +344,8 @@ reason = "InterfaceStateResource.on_post reads bounded bodies and maps validated
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
-full_name = ["ishiban.request_body.read_bounded_body", "ishiban.batch_activity_api._decode_session_ids"]
-reason = "BatchSessionActivityResource.on_post invokes these bounded decoders; Skylos does not propagate this Falcon handler dispatch path."
+full_name = ["ishiban.request_body.read_bounded_body", "ishiban.batch_activity_api._decode_session_ids", "ishiban.batch_activity_api._is_safe_session_id"]
+reason = "BatchSessionActivityResource.on_post invokes the bounded decoder and per-ID generator predicate; Skylos does not propagate this Falcon handler and generator reachability."
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "class"
@@ -380,6 +380,8 @@ also_copy = ["scripts/", ".github/", "Makefile", "pyproject.toml"]
 pytest_add_cli_args_test_selection = ["tests/"]
 
 [tool.pytest.ini_options]
+# Bun owns .snap files; Syrupy owns Python .ambr snapshots.
+addopts = "--snapshot-ignore-file-extensions=snap"
 asyncio_default_fixture_loop_scope = "function"
 # Tests automatically killed after seconds elapsed
 timeout = 30

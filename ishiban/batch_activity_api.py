@@ -99,29 +99,22 @@ class BatchSessionActivityResource:
             await self.store.session_projection(session_id)
             for session_id in session_ids
         ]
-        cache_indexes: list[int] = []
-        cache_candidates: list[dict[str, object]] = []
-        for index, projection in enumerate(previous):
-            if projection is not None and projection.get("state") == "unknown":
-                cache_indexes.append(index)
-                cache_candidates.append(projection)
-        cached_values = await restore_cached_activities(self.store, cache_candidates)
-
-        cached: list[tuple[str, dict[str, object]]] = []
-        cached_ids: set[str] = set()
-        for index, projection in zip(cache_indexes, cached_values, strict=True):
-            if projection is not None:
-                session_id = session_ids[index]
-                cached.append((session_id, projection))
-                cached_ids.add(session_id)
-
-        immediate_ids: list[str] = []
-        pending_ids: list[str] = []
-        for session_id, projection in zip(session_ids, previous, strict=True):
-            if projection is None or projection.get("state") != "unknown":
-                immediate_ids.append(session_id)
-            elif session_id not in cached_ids:
-                pending_ids.append(session_id)
+        unknown = _unknown_projections(session_ids, previous)
+        restored = await restore_cached_activities(self.store, list(unknown.values()))
+        cached = [
+            (session_id, projection)
+            for session_id, projection in zip(unknown, restored, strict=True)
+            if projection is not None
+        ]
+        cached_ids = {session_id for session_id, _ in cached}
+        immediate_ids = [
+            session_id for session_id in session_ids if session_id not in unknown
+        ]
+        pending_ids = [
+            session_id
+            for session_id in session_ids
+            if session_id in unknown and session_id not in cached_ids
+        ]
         return cached, immediate_ids, pending_ids
 
     async def _resolve_one(
@@ -140,6 +133,25 @@ class BatchSessionActivityResource:
             )
         except falcon.HTTPNotFound, OperationalError:
             return session_id, None
+
+
+def _unknown_projections(
+    session_ids: list[str], projections: list[dict[str, object] | None]
+) -> dict[str, dict[str, object]]:
+    """Select current unknown records eligible for cache or CLI activity reads.
+
+    For example, a known or missing member receives an immediate null frame.
+
+    Returns
+    -------
+    dict[str, dict[str, object]]
+        Unknown projections keyed by their requested session identity.
+    """
+    return {
+        session_id: projection
+        for session_id, projection in zip(session_ids, projections, strict=True)
+        if projection is not None and projection.get("state") == "unknown"
+    }
 
 
 def _decode_session_ids(body: bytes) -> list[str]:
@@ -166,15 +178,27 @@ def _decode_session_ids(body: bytes) -> list[str]:
     if len(request.session_ids) > MAX_BATCH_SESSIONS:
         message = "A batch may contain at most eight session IDs."
         raise falcon.HTTPBadRequest(description=message)
-    if any(
-        not session_id or len(session_id) > MAX_SESSION_ID_CHARS or "\0" in session_id
-        for session_id in request.session_ids
-    ):
+    if any(not _is_safe_session_id(session_id) for session_id in request.session_ids):
         message = (
             "Session IDs must be nonempty, at most 256 characters, and contain no NUL."
         )
         raise falcon.HTTPBadRequest(description=message)
     return list(dict.fromkeys(request.session_ids))
+
+
+def _is_safe_session_id(session_id: str) -> bool:
+    """Check the public identity bound; for example, reject an embedded NUL.
+
+    Returns
+    -------
+    bool
+        Whether the identifier is safe to pass to the observer.
+    """
+    return (
+        bool(session_id)
+        and len(session_id) <= MAX_SESSION_ID_CHARS
+        and "\0" not in session_id
+    )
 
 
 def _encode_frame(

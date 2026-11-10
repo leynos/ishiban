@@ -188,32 +188,20 @@ it('does not carry an older failure past a higher execution watermark', () => {
   expect(session?.activitySource).toBeUndefined();
 });
 
-it('does not retain real activity inside an illustrative demo projection', () => {
+it.each([
+  {caseName: 'an illustrative demo projection', overrides: {source: 'demo', freshness: 'illustrative'} as const},
+  {caseName: 'a removed session', overrides: {removed: true} as const}
+])('does not restore real activity onto $caseName', ({overrides}) => {
   const scenario = createLazyScenario();
   const incoming: Session = {
     ...metadataRefresh(scenario.session, scenario.session.lastEventId + 1),
-    source: 'demo',
-    freshness: 'illustrative'
+    ...overrides
   };
 
   scenario.store.session(scenario.snapshot.cursor + 1, incoming);
 
   const session = scenario.store.getSnapshot().snapshot?.sessions.find((item) => item.sessionId === incoming.sessionId);
-  expect(session).toMatchObject({state: 'unknown', source: 'demo', latestTurn: null});
-  expect(session?.activitySource).toBeUndefined();
-});
-
-it('does not restore cached activity onto a removed session', () => {
-  const scenario = createLazyScenario();
-  const incoming: Session = {
-    ...metadataRefresh(scenario.session, scenario.session.lastEventId + 1),
-    removed: true
-  };
-
-  scenario.store.session(scenario.snapshot.cursor + 1, incoming);
-
-  const session = scenario.store.getSnapshot().snapshot?.sessions.find((item) => item.sessionId === incoming.sessionId);
-  expect(session).toMatchObject({state: 'unknown', removed: true, latestTurn: null});
+  expect(session).toMatchObject({state: 'unknown', ...overrides, latestTurn: null});
   expect(session?.activitySource).toBeUndefined();
 });
 

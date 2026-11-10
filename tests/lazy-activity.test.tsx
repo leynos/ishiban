@@ -155,6 +155,44 @@ function requestAt(requests: readonly ActivityRequest[], index: number): Activit
   if (!request) throw new Error('The expected visible activity request did not start.');
   return request;
 }
+/** Check the shared POST contract; for example, browser batches contain four IDs or fewer. */
+function expectBatchPost(request: ActivityRequest, sessionIds: readonly string[]): void {
+  expect(request.url).toBe('/api/v1/sessions/activity');
+  expect(request.init.method).toBe('POST');
+  expect(JSON.parse(String(request.init.body))).toEqual({sessionIds});
+  expect(request.init.cache).toBe('no-store');
+  expect(request.init.signal?.aborted).toBe(false);
+}
+/** Wait for one ephemeral state without changing its journal cursor. */
+async function waitForActivity(store: BoardStore, sessionId: string, expectedState: Session['state']): Promise<void> {
+  await waitFor(() => {
+    const current = store.getSnapshot().snapshot?.sessions.find((item) => item.sessionId === sessionId);
+    expect(current?.state).toBe(expectedState);
+  });
+}
+/** Assert the batch limits and that queued identities are distinct. */
+function expectBoundedPipeline(requests: readonly ActivityRequest[], count: number): void {
+  expect(requests).toHaveLength(2);
+  const requestedIds = requests.flatMap((request) => JSON.parse(String(request.init.body)).sessionIds);
+  expect(requestedIds).toHaveLength(count);
+  expect(new Set(requestedIds).size).toBe(count);
+  for (const request of requests) {
+    const ids: string[] = JSON.parse(String(request.init.body)).sessionIds;
+    expect(ids.length).toBeLessThanOrEqual(4);
+    expectBatchPost(request, ids);
+  }
+}
+/** Return a stream that exposes one frame before the batch completes. */
+function earlyActivityResponse(request: ActivityRequest, frame: SessionActivityFrame): Response {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${JSON.stringify(frame)}\n`));
+        request.init.signal?.addEventListener('abort', () => controller.close(), {once: true});
+      }
+    })
+  );
+}
 /** Encode a completed member while preserving its explicit request identity. */
 function activityFrame(workspaceId: string, session: Session): SessionActivityFrame {
   return {workspaceId, sessionId: session.sessionId, session};
@@ -219,28 +257,17 @@ it('batches visible unknown activity and allows immediate rediscovery after drop
   await waitForRequest(started, 0);
   expect(requests).toHaveLength(1);
   const firstRequest = requestAt(requests, 0);
-  expect(firstRequest.url).toBe('/api/v1/sessions/activity');
-  expect(firstRequest.init.method).toBe('POST');
-  expect(JSON.parse(String(firstRequest.init.body))).toEqual({
-    sessionIds: [UNKNOWN_REAL_ONE.sessionId, UNKNOWN_REAL_TWO.sessionId]
-  });
-  expect(firstRequest.init.cache).toBe('no-store');
-  expect(firstRequest.init.signal?.aborted).toBe(false);
+  expectBatchPost(firstRequest, [UNKNOWN_REAL_ONE.sessionId, UNKNOWN_REAL_TWO.sessionId]);
   resolveBatch(firstRequest, [
     activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_ONE, state: 'running', activitySource: 'lazy'}),
     {workspaceId: snapshot.workspaceId, sessionId: UNKNOWN_REAL_TWO.sessionId, session: null}
   ]);
-  await waitFor(() => {
-    const enrichedSession = store
-      .getSnapshot()
-      .snapshot?.sessions.find((session) => session.sessionId === UNKNOWN_REAL_ONE.sessionId);
-    expect(enrichedSession?.state).toBe('running');
-  });
+  await waitForActivity(store, UNKNOWN_REAL_ONE.sessionId, 'running');
   observer.setVisibility(queuedMark, true);
   await waitForRequest(started, 1);
   expect(requests).toHaveLength(2);
   const secondRequest = requestAt(requests, 1);
-  expect(JSON.parse(String(secondRequest.init.body))).toEqual({sessionIds: [UNKNOWN_REAL_THREE.sessionId]});
+  expectBatchPost(secondRequest, [UNKNOWN_REAL_THREE.sessionId]);
   const current = store.getSnapshot().snapshot;
   expect(current?.cursor).toBe(snapshot.cursor);
   expect(current?.sessions[2]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
@@ -312,38 +339,19 @@ it('shares a pending lookup through metadata replay and accepts its current reba
 });
 
 it('pipelines two bounded batches and applies an early member before its stream ends', async () => {
-  installIntersectionObserver();
-  const {requests, started} = installFetch();
-  const sessions = Array.from(
-    {length: 9},
-    (_, index): Session => ({
-      ...UNKNOWN_REAL_ONE,
-      sessionId: `pipeline-${index}`,
-      title: `Pipeline ${index}`,
-      lastEventId: 100 + index
-    })
+  const sessions = Array.from({length: 9}, (_, index) =>
+    activitySession([2, `pipeline-${index}`, `Pipeline ${index}`, 'persisted', 'unknown', 100 + index])
   );
-  const {snapshot, store, observer} = mountBoard(sessions);
+  const {requests, started, snapshot, store, observer} = activityBoard(sessions);
   revealSessions(observer, sessions);
   await waitForRequest(started, 1);
-  expect(requests).toHaveLength(2);
-  const requestedIds = requests.flatMap((request) => JSON.parse(String(request.init.body)).sessionIds);
-  expect(requestedIds).toHaveLength(8);
-  expect(new Set(requestedIds).size).toBe(8);
-  for (const request of requests)
-    expect(JSON.parse(String(request.init.body)).sessionIds.length).toBeLessThanOrEqual(4);
+  expectBoundedPipeline(requests, 8);
   const first = sessions[0];
   if (!first) throw new Error('The pipeline fixture needs its first session.');
   const request = requestAt(requests, 0);
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const result = activityFrame(snapshot.workspaceId, {...first, state: 'running', activitySource: 'lazy'});
-      controller.enqueue(new TextEncoder().encode(`${JSON.stringify(result)}\n`));
-      request.init.signal?.addEventListener('abort', () => controller.close(), {once: true});
-    }
-  });
-  request.response.resolve(new Response(stream));
-  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
+  const frame = activityFrame(snapshot.workspaceId, {...first, state: 'running', activitySource: 'lazy'});
+  request.response.resolve(earlyActivityResponse(request, frame));
+  await waitForActivity(store, first.sessionId, 'running');
   expect(store.getSnapshot().snapshot?.sessions[1]?.state).toBe('unknown');
   expect(requests).toHaveLength(2);
   stopActivity();
