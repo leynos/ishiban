@@ -6,10 +6,19 @@ using the returned cursor. Every replay item retains its original projection.
 
 import asyncio
 import re
+import secrets
 import typing as typ
 
 import falcon
+import msgspec
 from falcon import asgi
+
+from ishiban.activity_api import SessionActivityResource
+from ishiban.inspector_api import AgentDetailsResource, PullRequestDetailsResource
+from ishiban.interface_state import InterfaceStateCookies, InterfaceStateResource
+from ishiban.lazy_activity import LazyActivity
+from ishiban.pull_request_details import PullRequestTitles
+from ishiban.session_agent import SessionAgentDetails
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -54,9 +63,10 @@ def parse_cursor(header: str | None, query: str | None) -> int:
 class Lifecycle:
     """Keep the database connection lifetime inside Falcon's event loop."""
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, activity: LazyActivity) -> None:
         """Retain the store; for example, dispose it at ASGI shutdown."""
         self.store = store
+        self.activity = activity
 
     async def process_startup(
         self, scope: cabc.Mapping[str, object], event: cabc.Mapping[str, object]
@@ -70,6 +80,7 @@ class Lifecycle:
     ) -> None:
         """Release SQLAlchemy connections when the server exits."""
         _ = scope, event
+        await self.activity.close()
         await self.store.close()
 
     async def process_response(  # ruff: ignore[no-self-use] - Falcon callback; see developer guide.
@@ -91,13 +102,21 @@ class Lifecycle:
 class SnapshotResource:
     """Return one transactionally consistent snapshot and its replay cursor."""
 
-    def __init__(self, store: Store) -> None:
+    def __init__(
+        self, store: Store, workspace_slug: str | None, cookies: InterfaceStateCookies
+    ) -> None:
         """Retain the reader; for example, serialize its immutable snapshot."""
         self.store = store
+        self.workspace_slug = workspace_slug
+        self.cookies = cookies
 
-    async def on_get(self, _req: asgi.Request, resp: asgi.Response) -> None:
+    async def on_get(self, req: asgi.Request, resp: asgi.Response) -> None:
         """Serve the snapshot; for example, include explicit collector health."""
-        resp.media = await self.store.snapshot()
+        snapshot = await self.store.snapshot()
+        if self.workspace_slug is not None:
+            snapshot["workspaceSlug"] = self.workspace_slug
+        snapshot["interfaceState"] = msgspec.to_builtins(self.cookies.read(req))
+        resp.media = snapshot
 
 
 class SessionResource:
@@ -185,7 +204,13 @@ class HealthResource:
         resp.media = {"status": "ok"}
 
 
-def create_app(store: Store, assets: pathlib.Path | None = None) -> asgi.App:
+def create_app(
+    store: Store,
+    assets: pathlib.Path | None = None,
+    *,
+    workspace_slug: str | None = None,
+    cookie_secret: bytes | None = None,
+) -> asgi.App:
     """Build the read-only ASGI application and optional same-origin static UI.
 
     For example, ``create_app(store, Path('dist'))`` serves a Bun-built board.
@@ -195,9 +220,27 @@ def create_app(store: Store, assets: pathlib.Path | None = None) -> asgi.App:
     asgi.App
         Application with read-only API routes and optional static assets.
     """
-    app: asgi.App = asgi.App(middleware=[Lifecycle(store)])
-    app.add_route("/api/v1/snapshot", SnapshotResource(store))
+    activity = LazyActivity(store.workspace_id, workspace_slug or store.workspace_id)
+    agent_reader = SessionAgentDetails(
+        store.workspace_id, workspace_slug or store.workspace_id
+    )
+    title_reader = PullRequestTitles()
+    cookies = InterfaceStateCookies(cookie_secret or secrets.token_bytes(32))
+    app: asgi.App = asgi.App(middleware=[Lifecycle(store, activity)])
+    app.add_route("/api/v1/snapshot", SnapshotResource(store, workspace_slug, cookies))
     app.add_route("/api/v1/sessions/{session_id}", SessionResource(store))
+    app.add_route(
+        "/api/v1/sessions/{session_id}/activity",
+        SessionActivityResource(store, activity),
+    )
+    app.add_route(
+        "/api/v1/sessions/{session_id}/agent", AgentDetailsResource(store, agent_reader)
+    )
+    app.add_route(
+        "/api/v1/sessions/{session_id}/pull-requests",
+        PullRequestDetailsResource(store, title_reader),
+    )
+    app.add_route("/api/v1/interface-state", InterfaceStateResource(cookies))
     app.add_route("/api/v1/events", EventsResource(store))
     app.add_route("/health", HealthResource())
     app.add_route("/ready", HealthResource(store))

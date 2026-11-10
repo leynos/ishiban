@@ -32,6 +32,11 @@ function cuesForSnapshot(
   const cues = unexpiredCues(existing, now);
   for (const session of current.sessions) {
     const previousSession = previousSessions.get(session.sessionId);
+    const isUnchangedRevision = previousSession?.lastEventId === session.lastEventId;
+    if (session.activitySource === 'lazy' && isUnchangedRevision) {
+      cues.delete(session.sessionId);
+      continue;
+    }
     if (previousSession === undefined || previousSession.lastEventId !== session.lastEventId) {
       cues.set(session.sessionId, {revision: session.lastEventId, expiresAt: now + PULSE_LIFETIME_MS});
     }

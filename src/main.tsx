@@ -2,6 +2,7 @@
 import {useEffect, useState, useSyncExternalStore} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createBoardStore, startLive} from './client';
+import {startLazyActivity} from './lazy-activity';
 import {createDemoSnapshot} from './demo';
 import {Board} from './ui/board';
 
@@ -14,7 +15,12 @@ function Application() {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   useEffect(() => {
     if (isDemo) return;
-    return startLive(store);
+    const stopLive = startLive(store);
+    const stopActivity = startLazyActivity(store);
+    return () => {
+      stopActivity();
+      stopLive();
+    };
   }, [isDemo]);
   const snapshot = isDemo ? demo : state.snapshot;
   const connection = isDemo ? 'Demo data — no live connections' : state.connection;

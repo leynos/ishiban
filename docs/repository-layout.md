@@ -11,6 +11,9 @@ This page locates the proof of concept's runtime components and verification.
 - `ishiban/collector.py` supervises observation and catalogue reconciliation.
 - `ishiban/storage/` contains SQLAlchemy models, transactional journal writing,
   snapshot reads, and projection reconciliation.
+- `ishiban/interface_state.py` signs and validates browser preference cookies.
+- `ishiban/lazy_activity.py` bounds and caches per-session activity reads.
+- `ishiban/activity_api.py` exposes ephemeral activity without journal writes.
 - `ishiban/api.py` exposes Falcon snapshots, session detail, health, and SSE.
 - `ishiban/cli.py` supplies the `ishiban collect` and `ishiban serve` commands.
 - `migrations/` and `alembic.ini` define the local database schema history.
@@ -18,6 +21,8 @@ This page locates the proof of concept's runtime components and verification.
 - `src/ui/` renders the board and accessible inspector; `src/styles.css` owns
   semantic Tailwind and daisyUI styling.
 - `src/ui/session-updates.ts` owns transient board update cues.
+- `src/lazy-activity.ts` resolves visible unknown marks without event pulses.
+- `src/ui/interface-state.ts` restores preferences and serializes cookie saves.
 - `src/demo.ts` supplies isolated synthetic presentation data.
 - `tests/` contains pytest, pytest-bdd, Hypothesis, and Bun verification.
 - `reference/ishiban-mockup.html` is the original visual reference.

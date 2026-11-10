@@ -10,6 +10,7 @@ class Turn(ms.Struct, rename="camel"):
     state: str
     assistant_turn_id: str | None = None
     duration_ms: int | None = None
+    error: str | None = None
 
 
 class ObservedSession(ms.Struct, rename="camel"):
@@ -41,6 +42,7 @@ class Envelope(ms.Struct, rename="camel"):
     assistant_turn_id: str | None = None
     outcome: str | None = None
     duration_ms: int | None = None
+    error: str | None = None
 
 
 class PullRequest(ms.Struct, rename="camel"):

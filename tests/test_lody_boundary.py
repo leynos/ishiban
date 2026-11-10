@@ -83,7 +83,7 @@ async def test_chunked_catalogue_is_decoded_once_when_its_root_is_complete(
 
         delivery = asyncio.create_task(deliver_chunks())
         try:
-            yield types.SimpleNamespace(stdout=pipe)
+            yield types.SimpleNamespace(stdout=pipe, stdin=None)
         finally:
             await delivery
 

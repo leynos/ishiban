@@ -108,6 +108,7 @@ export function densityOf(value: string): Density {
  * @returns An explicit evidence provenance label.
  */
 export function evidenceLabel(session: Session, currentGeneration: number): string {
+  if (session.activitySource === 'lazy') return 'Read on demand; not journaled';
   if (session.source === 'demo') {
     return 'Synthetic demo record';
   }

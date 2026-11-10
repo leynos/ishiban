@@ -21,6 +21,7 @@ class CatalogueFramer:
 
     def __init__(self) -> None:
         """Start fresh; for example, ``feed(b'{}')`` can consume one root object."""
+        self._consumed_bytes = 0
         self._depth = 0
         self._is_complete = False
         self._is_escaped = False
@@ -40,10 +41,24 @@ class CatalogueFramer:
         if self._is_complete:
             return True
         for byte in chunk:
+            self._consumed_bytes += 1
             self._consume(byte)
             if self._is_complete:
                 break
         return self._is_complete
+
+    @property
+    def consumed_bytes(self) -> int:
+        """The root object's boundary offset.
+
+        For example, a CLI adapter can discard trailing transport chatter.
+
+        Returns
+        -------
+        int
+            Bytes scanned through the root object's closing delimiter.
+        """
+        return self._consumed_bytes
 
     def _start(self, byte: int) -> None:
         """Skip whitespace; for example, spaces preserve state until ``{`` arrives.

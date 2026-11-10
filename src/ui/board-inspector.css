@@ -96,6 +96,16 @@
   @apply ml-2 text-neutral;
 }
 
+.session-inspector__error {
+  color: var(--color-oxide);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  max-height: 12rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 900px) {
   .ishiban-board[data-inspector-open="true"] {
     grid-template-areas:
@@ -153,4 +163,14 @@
   .session-inspector {
     max-height: 100%;
   }
+}
+
+.session-inspector__subtitle {
+  color: var(--color-neutral);
+  margin: -0.25rem 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.session-pr-number {
+  color: var(--color-neutral);
 }

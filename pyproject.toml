@@ -10,6 +10,7 @@ dependencies = [
     "alembic>=1.20.1",
     "cyclopts>=4.25.2",
     "falcon>=4,<5",
+    "itsdangerous>=2.2,<3",
     "msgspec>=0.22.0",
     "sqlalchemy[asyncio]>=2,<3",
     "uvicorn>=0.54.0",
@@ -328,6 +329,15 @@ type = "method"
 full_name = ["ishiban.api.Lifecycle.process_startup", "ishiban.api.Lifecycle.process_shutdown", "ishiban.api.Lifecycle.process_response"]
 reason = "Falcon invokes registered middleware methods dynamically at ASGI startup, shutdown, and response completion."
 
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = ["ishiban.interface_state.InterfaceStateCookies.read", "ishiban.interface_state.InterfaceStateCookies._set_cookie"]
+reason = "SnapshotResource.on_get and InterfaceStateResource.on_get/on_post call these signer methods through injected cookie objects; Skylos does not propagate this Falcon dispatch path."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = ["ishiban.interface_state._read_bounded_body", "ishiban.interface_state._state_mapping"]
+reason = "InterfaceStateResource.on_post reads bounded bodies and maps validated state; on_get and the signer also map state. Skylos does not propagate reachability through these Falcon handlers."
 
 
 
@@ -411,7 +421,7 @@ members = ["src/ui/board-layout.tsx::span", "reference/ishiban-mockup.html::span
 reason = "Keep labelled health and summary markup independent of the supplied static visual reference; wrapper tags contain different facts. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["tests/test_storage_journal.py", "tests/test_storage_projection.py"]
+members = ["tests/test_storage_journal.py", "tests/test_storage_projection.py", "tests/test_activity_api.py"]
 reason = "Keep explicit module imports and independent snapshot/replay boundary assertions visible in their tests; these fragments contain no shared calculation. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
@@ -419,7 +429,7 @@ members = ["tests/storage_support.py::as_snapshot", "tests/storage_support.py::a
 reason = "Preserve distinct static API contract casts; a generic cast wrapper would obscure the asserted snapshot, replay, or detail shape. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-unit = "ishiban/api.py::__init__"
+members = ["ishiban/api.py::__init__", "ishiban/activity_api.py::__init__", "ishiban/inspector_api.py::__init__"]
 reason = "Keep independent Falcon resource constructors explicit; inheritance solely for injected store assignment adds unrelated resource coupling. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
@@ -461,3 +471,35 @@ reason = "Keep Alembic offline and online configuration independent, including t
 [[tool.duplication_gate.allow]]
 members = ["ishiban/storage/store.py::snapshot", "ishiban/storage/store.py::current_cursor"]
 reason = "Keep distinct public snapshot and cursor-only read contracts explicit; their initialization and transaction wrappers match, while shared SQL is already extracted into read_cursor. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/storage/store.py::detail", "ishiban/storage/store.py::session_projection"]
+reason = "Keep transcript-bearing detail and projection-only read transactions explicit; they call existing distinct query helpers and must not add historical queries to lazy reads. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_activity_api.py"
+reason = "Keep unknown-activity journal immutability and known/missing-session eligibility assertions independently arranged; the shared fixture is already opened_store and their observations deliberately differ. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/agent-details.test.tsx"
+reason = "Keep clipboard success and rejection assertions independent; both own and restore their spy, but verify different observable outcomes. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["src/ui/pull-request-titles.ts", "src/ui/agent-details.tsx"]
+reason = "Keep title-map and agent-label trust boundaries independently decoded and scoped; only short HTTP identity guards overlap and the result schemas differ. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["ishiban/lazy_activity.py", "ishiban/session_agent.py"]
+reason = "Keep activity-observation and inspector metadata adapters separate; their short command/decoding failure returns preserve different result types, with shared process ownership already in read_json_object. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_lazy_activity.py", "tests/test_session_agent.py"]
+reason = "Keep observer activity and session-show wire fixtures independent: they have different workspace envelopes, evidence fields and identity validation. Shared executable creation and call-log polling are extracted. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_lazy_activity.py"
+reason = "Keep independent malformed-result caching, waiter cancellation and service shutdown scenarios explicit; only brief fake-command setup and read assertions overlap after process plumbing extraction. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_session_agent.py"
+reason = "Keep missing or invalid configuration identities, failed configuration retries and unverified configuration envelopes separately asserted; identical partial labels have different cache and command-eligibility contracts. See docs/developers-guide.md#duplication-review."

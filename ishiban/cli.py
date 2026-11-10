@@ -12,6 +12,7 @@ import uvicorn
 
 from ishiban.api import create_app
 from ishiban.collector import Collector, collector_lock
+from ishiban.interface_state import load_signing_key
 from ishiban.lody import read_catalogue
 from ishiban.storage import Store
 
@@ -91,7 +92,12 @@ def serve(
         raise cyclopts.ValidationError(message)
     store = Store(database_url(state_directory), config.workspace_id)
     uvicorn.run(
-        create_app(store, assets),
+        create_app(
+            store,
+            assets,
+            workspace_slug=config.selector,
+            cookie_secret=load_signing_key(state_directory),
+        ),
         host="127.0.0.1",
         port=port,
         workers=1,

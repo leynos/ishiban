@@ -15,6 +15,7 @@ export interface BoardViewState {
   readonly density: Density;
   readonly presentation: Presentation;
   readonly selectedSessionId: string | null;
+  readonly saveStatus: string;
   readonly onQueryChange: (value: string) => void;
   readonly onActivityChange: (value: ActivityFilter) => void;
   readonly onArchivedChange: (value: boolean) => void;
@@ -231,10 +232,14 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
             sessions
           </span>
           <span>Select a mark to inspect its source evidence.</span>
+          <span>A cookie saves interface state: density and presentation.</span>
+          <span role="status">{viewState.saveStatus}</span>
         </footer>
       </main>
       {inspectorSession === null ? null : (
         <SessionInspector
+          workspaceId={snapshot.workspaceId}
+          workspaceSlug={snapshot.workspaceSlug}
           currentGeneration={snapshot.collector.generation}
           onClose={onClose}
           session={inspectorSession}

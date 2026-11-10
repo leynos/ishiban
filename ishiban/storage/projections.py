@@ -2,8 +2,10 @@
 
 import typing as typ
 
+from ishiban.domain import Turn
+
 if typ.TYPE_CHECKING:
-    from ishiban.domain import CatalogueEntry, Envelope, ObservedSession, Turn
+    from ishiban.domain import CatalogueEntry, Envelope, ObservedSession
 
 type SessionProjection = dict[str, object]
 
@@ -181,9 +183,7 @@ def _turn_projection(turn: Turn | None) -> dict[str, object] | None:
     """
     if turn is None:
         return None
-    return _turn_fields(
-        turn.user_turn_id, turn.state, turn.assistant_turn_id, turn.duration_ms
-    )
+    return _turn_fields(turn)
 
 
 def _event_turn(envelope: Envelope) -> dict[str, object]:
@@ -198,19 +198,17 @@ def _event_turn(envelope: Envelope) -> dict[str, object]:
         "running" if envelope.type == "turn.started" else envelope.outcome or "unknown"
     )
     return _turn_fields(
-        envelope.user_turn_id or "",
-        state,
-        envelope.assistant_turn_id,
-        envelope.duration_ms,
+        Turn(
+            user_turn_id=envelope.user_turn_id or "",
+            state=state,
+            assistant_turn_id=envelope.assistant_turn_id,
+            duration_ms=envelope.duration_ms,
+            error=envelope.error,
+        )
     )
 
 
-def _turn_fields(
-    user_turn_id: str,
-    state: str,
-    assistant_turn_id: str | None,
-    duration_ms: int | None,
-) -> dict[str, object]:
+def _turn_fields(turn: Turn) -> dict[str, object]:
     """Encode the shared turn shape for snapshots and incremental events.
 
     For example, absent duration and assistant identity omit those JSON keys.
@@ -220,11 +218,16 @@ def _turn_fields(
     dict[str, object]
         Required identity and state with only available optional fields.
     """
-    projection: dict[str, object] = {"userTurnId": user_turn_id, "state": state}
-    if assistant_turn_id is not None:
-        projection["assistantTurnId"] = assistant_turn_id
-    if duration_ms is not None:
-        projection["durationMs"] = duration_ms
+    projection: dict[str, object] = {
+        "userTurnId": turn.user_turn_id,
+        "state": turn.state,
+    }
+    if turn.assistant_turn_id is not None:
+        projection["assistantTurnId"] = turn.assistant_turn_id
+    if turn.duration_ms is not None:
+        projection["durationMs"] = turn.duration_ms
+    if turn.state == "failed" and turn.error:
+        projection["error"] = turn.error[:4096]
     return projection
 
 

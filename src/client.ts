@@ -24,6 +24,7 @@ export interface BoardStore {
   readonly status: (connection: string) => void;
   readonly session: (cursor: number, projection: Session) => void;
   readonly collector: (cursor: number, projection: typeof CollectorSchema.Type) => void;
+  readonly activity: (workspaceId: string, session: Session) => void;
 }
 
 /**
@@ -54,22 +55,62 @@ export function createBoardStore(schedule: (notify: () => void) => void = queueM
       return () => listeners.delete(listener);
     },
     getSnapshot: () => current,
-    replace: (snapshot) => publish({snapshot, connection: 'Connected'}),
+    replace: (snapshot) => publish({snapshot: retainActivity(current.snapshot, snapshot), connection: 'Connected'}),
     status: (connection) => publish({...current, connection}),
     session: (cursor, projection) =>
       update(cursor, (snapshot) => ({
         ...snapshot,
         sessions: replaceSession(snapshot.sessions, projection)
       })),
-    collector: (cursor, projection) => update(cursor, (snapshot) => ({...snapshot, collector: projection}))
+    collector: (cursor, projection) => update(cursor, (snapshot) => ({...snapshot, collector: projection})),
+    activity: (workspaceId, session) => {
+      const snapshot = withActivity(current.snapshot, workspaceId, session);
+      if (snapshot) publish({...current, snapshot});
+    }
   };
+}
+
+/** Apply ephemeral activity only to a matching unknown revision; for example, reject a late response. */
+function withActivity(snapshot: Snapshot | undefined, workspaceId: string, session: Session): Snapshot | undefined {
+  if (!snapshot) return undefined;
+  if (snapshot.workspaceId !== workspaceId) return undefined;
+  const previous = snapshot.sessions.find((item) => item.sessionId === session.sessionId);
+  if (!previous) return undefined;
+  if (previous.state !== 'unknown') return undefined;
+  if (previous.lastEventId !== session.lastEventId) return undefined;
+  if (session.state === 'unknown') return undefined;
+  return {...snapshot, sessions: replaceSession(snapshot.sessions, {...session, activitySource: 'lazy'})};
+}
+
+/** Preserve last-read activity through metadata-only unknowns; for example, keep a running mark on reconnect. */
+function carryActivity(previous: Session | undefined, next: Session): Session {
+  if (previous?.activitySource !== 'lazy') return next;
+  if (next.state !== 'unknown') return next;
+  if (next.source !== 'metadata') return next;
+  return {
+    ...next,
+    state: previous.state,
+    latestTurn: previous.latestTurn,
+    activeTurns: previous.activeTurns,
+    lastObservedAt: previous.lastObservedAt,
+    source: previous.source,
+    freshness: previous.freshness,
+    activitySource: 'lazy'
+  };
+}
+
+/** Retain browser-local reads in the same workspace; for example, a collector refresh is not new execution evidence. */
+function retainActivity(previous: Snapshot | undefined, next: Snapshot): Snapshot {
+  if (previous?.workspaceId !== next.workspaceId) return next;
+  const sessions = new Map(previous.sessions.map((session) => [session.sessionId, session]));
+  return {...next, sessions: next.sessions.map((session) => carryActivity(sessions.get(session.sessionId), session))};
 }
 
 /** Replace a projection by identity; for example, append a newly seen session. */
 function replaceSession(sessions: readonly Session[], next: Session): readonly Session[] {
   const existing = sessions.some((session) => session.sessionId === next.sessionId);
   if (!existing) return [...sessions, next];
-  return sessions.map((session) => (session.sessionId === next.sessionId ? next : session));
+  return sessions.map((session) => (session.sessionId === next.sessionId ? carryActivity(session, next) : session));
 }
 
 /** Fetch a validated snapshot; for example, reject an HTML proxy error page. */

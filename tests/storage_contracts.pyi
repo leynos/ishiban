@@ -9,6 +9,7 @@ class TurnProjection(typ.TypedDict, total=False):
     state: str
     assistantTurnId: str
     durationMs: int
+    error: str
     lastEventId: int
 
 class Projection(typ.TypedDict, total=False):

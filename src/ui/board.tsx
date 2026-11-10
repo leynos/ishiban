@@ -9,9 +9,10 @@ import {
   type ReactElement,
   type RefObject
 } from 'react';
-import type {Session, Snapshot} from '../contracts';
+import type {InterfaceState, Session, Snapshot} from '../contracts';
 import {BoardLayout, type BoardViewState} from './board-layout';
-import {filterSessions, type ActivityFilter, type Density, type Presentation} from './board-model';
+import {filterSessions, type ActivityFilter, type Presentation} from './board-model';
+import {useInterfaceState} from './interface-state';
 import {useSessionUpdates} from './session-updates';
 
 interface BoardProps {
@@ -33,26 +34,26 @@ interface BoardFocusRestorationProps {
 }
 
 /** Keep filters, density, mode, and selection local to the board view. */
-function useBoardViewState(): BoardViewState {
+function useBoardViewState(initial?: InterfaceState): BoardViewState {
   const [query, setQuery] = useState('');
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [density, setDensity] = useState<Density>('overview');
-  const [presentation, setPresentation] = useState<Presentation>('panorama');
+  const preferences = useInterfaceState(initial);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const onClose = useCallback((): void => setSelectedSessionId(null), []);
   return {
     query,
     activityFilter,
     includeArchived,
-    density,
-    presentation,
+    density: preferences.density,
+    presentation: preferences.presentation,
+    saveStatus: preferences.saveStatus,
     selectedSessionId,
     onQueryChange: setQuery,
     onActivityChange: setActivityFilter,
     onArchivedChange: setIncludeArchived,
-    onDensityChange: setDensity,
-    onPresentationChange: setPresentation,
+    onDensityChange: preferences.onDensityChange,
+    onPresentationChange: preferences.onPresentationChange,
     onReset: () => {
       setQuery('');
       setActivityFilter('all');
@@ -126,7 +127,7 @@ function focusedSessionId(target: EventTarget): string | null {
  */
 export function Board(props: BoardProps): ReactElement {
   const {snapshot, connection} = props;
-  const viewState = useBoardViewState();
+  const viewState = useBoardViewState(snapshot.interfaceState);
   const pulseRevisions = useSessionUpdates(snapshot);
   const initiatingTriggerRef = useRef<HTMLButtonElement | null>(null);
   const boardFallbackRef = useRef<HTMLElement | null>(null);

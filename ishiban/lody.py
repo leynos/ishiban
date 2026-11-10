@@ -26,6 +26,93 @@ MAX_GITHUB_BYTES = 2_097_152
 MAX_CATALOGUE_BYTES = 32 * 1024 * 1024
 
 
+TRANSPORT_LINE = re.compile(
+    rb"\[[A-Za-z0-9_-]+\] Remote Streams transport (?:attached|detached)"
+)
+
+
+def _json_after_transport(buffer: bytearray) -> bytes | None:
+    """Skip only Lody's known transport prelude.
+
+    For example, configuration reads need not retain transport log text.
+
+    Returns
+    -------
+    bytes or None
+        The JSON start, or None while a prelude line is incomplete.
+
+    Raises
+    ------
+    ProtocolError
+        If a complete non-JSON line is not recognized transport chatter.
+    """
+    while buffer:
+        data = bytes(buffer).lstrip()
+        if data.startswith(b"{"):
+            return data
+        line, separator, rest = data.partition(b"\n")
+        if not separator:
+            return None
+        if line and TRANSPORT_LINE.fullmatch(line.rstrip(b"\r")) is None:
+            message = "Unexpected CLI output before JSON."
+            raise ProtocolError(message)
+        buffer[:] = rest
+    return None
+
+
+async def read_json_object(
+    command: tuple[str, ...],
+    *,
+    max_bytes: int = 1_048_576,
+    deadline_seconds: float = 20,
+    allow_transport_logs: bool = False,
+) -> bytes:
+    """Read one bounded CLI JSON object before transport EOF.
+
+    For example, configuration reads may opt into known Lody transport chatter.
+
+    Returns
+    -------
+    bytes
+        The object, ready for the caller's typed decoder.
+
+    Raises
+    ------
+    ProtocolError
+        If stdout is unavailable, too large, or incomplete.
+    """
+    async with asyncio.timeout(deadline_seconds), child(command) as process:
+        if process.stdin is not None:
+            process.stdin.close()
+        if process.stdout is None:
+            message = "CLI stdout is unavailable."
+            raise ProtocolError(message)
+        data = bytearray()
+        prelude = bytearray()
+        framer = CatalogueFramer()
+        started = not allow_transport_logs
+        received = 0
+        while chunk := await process.stdout.read(65_536):
+            received += len(chunk)
+            if received > max_bytes:
+                message = "CLI response exceeds its safety bound."
+                raise ProtocolError(message)
+            if not started:
+                prelude.extend(chunk)
+                candidate = _json_after_transport(prelude)
+                if candidate is None:
+                    continue
+                chunk = candidate
+                prelude.clear()
+                started = True
+            data.extend(chunk)
+            if framer.feed(chunk):
+                end = framer.consumed_bytes if allow_transport_logs else len(data)
+                return bytes(data[:end])
+    message = "CLI ended without a complete JSON object."
+    raise ProtocolError(message)
+
+
 @contextlib.asynccontextmanager
 async def child(
     command: tuple[str, ...],
@@ -90,10 +177,6 @@ async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:
     Catalogue
         A complete, successful workspace catalogue.
 
-    Raises
-    ------
-    ProtocolError
-        If output exceeds its bound or ends without a workspace snapshot.
     """
     command = (
         executable,
@@ -104,21 +187,10 @@ async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:
         "--all",
         "--json",
     )
-    async with asyncio.timeout(60), child(command) as process:
-        if process.stdout is None:
-            message = "Catalogue stdout is unavailable."
-            raise ProtocolError(message)
-        data = bytearray()
-        framer = CatalogueFramer()
-        while chunk := await process.stdout.read(65_536):
-            data.extend(chunk)
-            if len(data) > MAX_CATALOGUE_BYTES:
-                message = "Catalogue exceeds the configured safety bound."
-                raise ProtocolError(message)
-            if framer.feed(chunk):
-                return decode_catalogue(bytes(data))
-    message = "Catalogue ended without a complete successful response."
-    raise ProtocolError(message)
+    data = await read_json_object(
+        command, max_bytes=MAX_CATALOGUE_BYTES, deadline_seconds=60
+    )
+    return decode_catalogue(data)
 
 
 class GitHubPR(msgspec.Struct, rename="camel"):

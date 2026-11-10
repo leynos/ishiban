@@ -551,3 +551,41 @@ identifiers and provenance. That is a follow-on design, not part of this spike.
 published library APIs. **Proposed contracts** such as `/api/v1/events`, the
 SQLite tables, `Unclassified sessions`, cursor handling and test plan are
 Ishiban design choices, not features Lody already provides.
+
+## Inspector session links and error details
+
+The inspector links real sessions to their originating Lody workspace. Snapshot
+navigation metadata may include the configured `workspaceSlug`; absent a usable
+slug, the workspace-qualified native session URI remains available. Demo
+sessions must not generate links to fictitious Lody sessions.
+
+An optional source-supplied turn `error` is retained in bounded public turn
+JSON for failed outcomes and rendered as plain text in the inspector. Missing
+error details are labelled explicitly. This extension is accepted on snapshots
+and turn-finish envelopes, but the installed observer does not currently emit
+the provider diagnostic. The CLI's visible transcript also omits it. Neither
+assistant text nor unrelated collector errors may substitute for the failed
+turn's actual diagnostic. Reopened turns clear stale errors.
+
+## Remembered controls and lazy activity
+
+[ADR 003](adr-003-interface-state-and-lazy-activity.md) defines signed
+MessagePack cookie storage for density/presentation and read-only lazy
+activity. The footer discloses the preference cookie. These mechanisms remain
+separate from the durable journal: lazy results preserve the local event
+cursor, do not claim a collector generation, and update frames without a pulse.
+Only visible real unknown sessions trigger bounded, deduplicated reads; stale
+responses cannot overwrite newer journal evidence.
+
+Task-cell feedback has its own stacking context beneath the sticky repository
+column. Selected marks and pulse overlays disappear behind that opaque column
+when scrolled underneath it. Panorama banks have zero horizontal padding so the
+sticky column does not jump when scrolling begins.
+
+The inspector copies the Lody CLI session ID and lazily resolves agent type and
+configuration display name through a bounded TTL cache. Provider ACP IDs are
+not the copy target. A known PR name is the linked primary heading; the session
+title remains a subtitle, and PR links show muted numbers. Missing names for
+terminal PRs are resolved on inspector demand. Metadata-only unknown updates
+must not erase browser-local on-demand activity; fresh execution evidence and
+workspace changes retain precedence.

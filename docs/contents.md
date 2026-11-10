@@ -5,6 +5,10 @@ reference material.
 
 ## Design and reference
 
+- [Interface state and lazy activity decision](adr-003-interface-state-and-lazy-activity.md)
+  separates signed MessagePack preferences and ephemeral activity reads from
+  the durable observation journal.
+
 - [Observation proof-of-concept plan](execplans/initial-spike.md) records the
   implementation milestones, validation evidence, and remaining limits.
 - [Workflow evidence decision](adr-002-workflow-evidence.md) defines the

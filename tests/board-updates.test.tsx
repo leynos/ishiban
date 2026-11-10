@@ -150,3 +150,16 @@ it('does not pulse the initial live snapshot after demo mode in the same workspa
 
   expect(getFirstMark().getAttribute('data-update-revision')).toBeNull();
 });
+
+it('removes an existing cue when unknown activity resolves lazily', () => {
+  const initial = createBoardSnapshot();
+  const first = firstSession(initial);
+  const updated = updateFirstSession(initial, {lastEventId: first.lastEventId + 100, state: 'unknown'});
+  const {rerender} = render(<Board connection="live" snapshot={initial} />);
+  rerender(<Board connection="live" snapshot={updated} />);
+  expect(getPulse(getFirstMark())).not.toBeNull();
+  const resolved = updateFirstSession(updated, {state: 'idle', activitySource: 'lazy'});
+  rerender(<Board connection="live" snapshot={resolved} />);
+  expect(getPulse(getFirstMark())).toBeNull();
+  expect(getFirstMark().getAttribute('data-update-revision')).toBeNull();
+});

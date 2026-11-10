@@ -197,3 +197,23 @@ async def test_future_cursor_emits_one_reset_and_ends_the_stream(
             await anext(stream)
     finally:
         await store.close()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_exposes_configured_workspace_slug_for_navigation(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The routing slug is public navigation metadata, separate from workspace ID."""
+    store = Store(
+        f"sqlite+aiosqlite:///{tmp_path / 'navigation.sqlite3'}", "workspace-id"
+    )
+    await store.initialize()
+    app = create_app(store, workspace_slug="leynos")
+    async with testing.ASGIConductor(app) as conductor:
+        response = await conductor.simulate_get("/api/v1/snapshot")
+        assert response.json["workspaceSlug"] == "leynos", (
+            "Navigation must use the configured workspace slug."
+        )
+        assert response.json["workspaceId"] == "workspace-id", (
+            "The durable workspace identity must remain independent of routing."
+        )

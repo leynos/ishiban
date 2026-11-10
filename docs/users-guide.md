@@ -265,3 +265,43 @@ suite runs unchanged.
 Run `make clean` to remove local build and cache outputs, including `.venv`,
 `.uv-cache`, `.uv-tools`, Python cache directories, coverage outputs, and Rust
 `target` output when the Rust extension is enabled.
+
+## Open the original session and inspect failures
+
+The inspector's **Open in Lody** link opens the selected real session in its
+configured workspace. A configured workspace slug supplies the web link; when
+only the opaque workspace ID is available, the canonical `lody://` session link
+opens the Lody app. Synthetic demo sessions have no external session link.
+
+Failed latest turns include a **Last turn error** section. Supplied error text
+is displayed as plain text, with long messages bounded and scrollable. If Lody
+omits the diagnostic, the inspector states: “Lody did not provide error details
+for this turn.” The installed CLI currently emits failed outcomes without the
+underlying provider error message; its visible-history command also omits that
+message. Ishiban does not infer errors from assistant prose or collector health.
+
+## Saved interface state and unknown activity
+
+A signed cookie saves density and presentation. New windows in the same browser
+profile restore the last saved choices; the footer explains the cookie's use
+and reports save failures. Search, selection and filters remain local to each
+window. Clearing the cookie returns the controls to Overview and Panorama.
+
+Real session marks with unknown activity are read lazily as they become
+visible. The frame updates without a pulse when the read succeeds. Evidence
+read this way is labelled “Read on demand; not journaled”. Existing event IDs
+are preserved, and newer journal events take precedence over late lookup
+responses. Unavailable or metadata-only reads remain unknown.
+
+The inspector prefers a known PR name as its linked heading, with the session
+title underneath. Missing PR names, including already merged PRs, are loaded on
+demand. PR links also show a muted `#123`-style number. Inspector links are
+underlined on hover.
+
+**Copy session ID** copies the Lody ID accepted by commands such as
+`lody session show <id>`. It does not copy the provider's ACP conversation ID.
+Agent type and configuration display name are collected when the inspector
+opens and cached for five minutes. Configuration secrets are never requested.
+Unavailable metadata is labelled explicitly; demo IDs are not offered for CLI
+copying. Resolved on-demand activity survives metadata-only collector refreshes
+and reconnect snapshots; newer execution evidence still replaces it.

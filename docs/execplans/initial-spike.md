@@ -1,9 +1,10 @@
 # Ishiban initial observation proof of concept
 
-Status: implementation and interface refinements are complete and validated
-locally. Authenticated review reassessment covers `ee829f9`; the full
-implementation review starts at `bbb1bee`. No remote publication or Lody writes
-are authorized.
+Status: the initial implementation is validated locally. Additional inspector,
+saved-control, lazy-activity and sticky-column refinements are implemented and
+undergoing final gates and authenticated local review. The earlier review
+reassessment covers `ee829f9`; the full implementation review starts at
+`bbb1bee`. No remote publication or Lody writes are authorized.
 
 ## Purpose
 
@@ -347,3 +348,72 @@ exact task and event revision after media preferences settle. All three browser
 regressions pass again with these stricter checks. The review service reported
 `completed_with_warnings` and “unverified findings”; the reported findings were
 checked against the implementation and addressed locally.
+
+## Inspector navigation and failure diagnostics, 10 November 2026
+
+The inspector now links real sessions to Lody and shows a named latest-turn
+error section. The web route was verified in the public app router as
+`/$workspaceName/sessions/$sessionId`; the CLI verifies the fallback native
+`lody://session/<id>?workspace=<id>` form. API navigation metadata retains the
+configured selector separately from the durable workspace ID.
+
+Read-only inspection of the installed observer and a failed `leynos` session
+confirmed an upstream limitation: failed outcomes are present, but provider
+error messages are omitted from both observer projections and visible CLI
+history. Ishiban therefore accepts and retains an optional source-supplied
+error, bounds it to 4,096 characters, and explains missing diagnostics rather
+than inventing them. Tests cover snapshot and incremental persistence/replay,
+reopened turns, plain-text rendering, web/native links and synthetic sessions.
+
+## Signed interface state and lazy activity, 10 November 2026
+
+The user's additional requirements extend the current work: persist density and
+presentation in one itsdangerous-signed cookie containing a MessagePack state
+dictionary, restore it in new windows, and disclose the cookie in the footer.
+Keep this state independent of the observation journal. Validate enum values,
+ignore invalid or expired signatures, serialize browser writes, and persist the
+signing key privately in the local state directory.
+
+Unknown activity should resolve lazily for visible real sessions. Limit
+concurrent read-only per-session CLI observations and deduplicate/cache them.
+Keep the API a journal reader: lazy results are browser-local enrichment, not
+fabricated durable events or a second journal writer. Match workspace, session
+and revision before applying enrichment; late responses must not overwrite a
+newer event. Preserve the event cursor so lazy resolution does not create a
+pulse. Metadata-only or failed lookups remain unknown rather than inventing
+activity. Validate these invariants with deterministic fakes and a real browser.
+
+The sticky-column feedback was reproduced in Chromium: a selected planning
+mark's stacking layer covered the repository label after horizontal scrolling.
+Task-cell stacking isolation keeps selection and pulse layers beneath the
+sticky column. Zero bank inline padding removes its initial horizontal jump.
+The browser regression checks the topmost painted element and stable heading
+position while scrolling.
+
+The inspector also needs the Lody CLI session ID, agent type and configuration
+display name. Live read-only metadata confirms `acpSessionId` is the provider
+conversation identity, distinct from the Lody session ID. Read session metadata
+and the referenced configuration only when the inspector opens, cache
+whitelisted results with a TTL, and never request configuration secrets. Copy
+the exact Lody session ID accepted by the CLI through the clipboard API, with
+accessible success/failure feedback. Missing IDs or names remain explicitly
+unavailable.
+
+Follow-up feedback clarified that the copyable identifier must be the Lody ID
+accepted by the CLI, not the provider's ACP ID. Agent metadata is collected
+only on inspector demand, with cached type/configuration labels and no
+configuration secret request. PR-first headings are linked, retain the session
+subtitle, and show grey numbers beside PR links. A separate title cache
+resolves missing names for merged/closed PRs without reclassifying them.
+
+A browser-store regression showed metadata-only unknown projections replacing
+cached on-demand state. Retention now carries those runtime facts through
+metadata events and same-workspace reconnect snapshots while preserving new
+metadata and cursor values. New durable evidence and foreign workspaces still
+replace the cache. Focused regressions cover these boundaries.
+
+Inspector links use daisyUI's hover-only underline styling. Desktop Chromium
+inspection confirms no underline at rest, an underline on the hovered link, and
+neutral grey PR numbers after their links. The browser uses an explicit
+mouse-hover capability for this check; touch emulation does not activate the
+hover media query.

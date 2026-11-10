@@ -286,6 +286,18 @@ wrappers; their shared cursor SQL is extracted. The transport tests share only
 fetch-spy and virtual-clock ownership, keeping each failure scenario's
 assertions independent.
 
+On-demand activity and inspector metadata retain distinct response schemas and
+failure results, while sharing bounded subprocess ownership. Projection-only
+and transcript-bearing reads use distinct existing queries under explicit
+transactions. Their short transaction wrappers, injected resource constructors,
+and independently arranged API/clipboard assertions are reviewed duplication
+exceptions rather than reasons to couple unrelated contracts. Title-cache TTL
+scenarios share one parametrized test for positive and negative expiry. Reader
+tests share process creation and call-log polling while preserving different
+observer/session-show envelopes. Brief setup and partial-result assertions
+remain independent where the tests distinguish cache expiry, identity
+validation, waiter cancellation, and service shutdown.
+
 Each exception in `pyproject.toml` records its participating units or exact
 files and its reason. Nose reports anonymous fragments without enclosing unit
 names; those exceptions require file paths rather than function names. Review
@@ -337,3 +349,86 @@ The inspector is a native complementary region with explicit close and focus
 restoration behaviour. Its desktop grid reserves a right-hand column; narrow
 viewports stack the panel. The board owns its scroll viewport, including while
 the inspector is open. The former modal-only Radix Dialog dependency is removed.
+
+## Inspector navigation and turn diagnostics
+
+`serve` passes the marker's configured workspace selector to the snapshot API
+as optional `workspaceSlug` navigation metadata. The inspector accepts a
+slug-shaped selector distinct from the opaque workspace ID for HTTPS links;
+otherwise it uses Lody's canonical workspace-qualified native session URI. Both
+URL formats were checked against the installed CLI and public Lody app router.
+IDs are encoded, the origin is fixed, and demo sessions omit the link. Restart
+the API after updating this routing metadata.
+
+Ishiban accepts an optional `error` string on a turn projection or turn-finish
+envelope. This is a forward-compatible extension, not a claim that the
+installed Lody observer emits the field. Failed-turn errors are capped at 4,096
+characters in the existing projection JSON and replay payloads. No relational
+schema migration is needed. The shared turn encoder takes a typed `Turn` so
+snapshot and incremental paths use the same optional-field policy. A restarted
+or successful turn does not inherit an earlier error. React renders diagnostics
+as text; source/transport errors remain independent collector health evidence.
+Older journals and missing error fields remain readable. The current CLI's
+observer and visible-history output omit the underlying provider diagnostic;
+there is no transcript scraping or additional history polling in the runtime.
+
+## Preference cookies and ephemeral activity
+
+[ADR 003](adr-003-interface-state-and-lazy-activity.md) defines the separation
+between the journal, browser preferences, and direct activity reads. The
+`interface-state` endpoint accepts only bounded, validated density/presentation
+updates. itsdangerous signs a msgspec MessagePack dictionary with a versioned
+salt; the private key in the state directory survives API restarts. Snapshot
+responses restore preferences from that cookie. The React preference hook owns
+ordered writes and save status; no initial-render write or localStorage cache
+is needed.
+
+The lazy activity service owns bounded read-only CLI observations, a two-child
+limit, revision-keyed caching and shared in-flight requests. The API's
+`session_projection` read reuses the existing projection query without loading
+transcripts. Lazy response projections are marked separately and do not create
+journal rows. The client activity merge is scoped to the live store and rejects
+foreign, stale, or already-resolved revisions. Intersection and mutation
+observers own visible-mark discovery and cleanup; requests that have not
+started are skipped when their mark leaves the viewport. Update-cue tracking
+suppresses lazy enrichment even if an earlier journal cue is still active.
+
+Inspector agent metadata uses a separate bounded reader and 128-entry TTL
+cache. The only exported fields are agent type, configuration ID and
+configuration name; configuration commands never use `--show-secrets`. The copy
+control uses the Lody projection's session ID directly, not `acpSessionId`.
+Clipboard failures are reported accessibly. Missing PR names are fetched only
+for the selected session and cached separately; this includes terminal PRs and
+cannot change workflow classification. The primary known PR name becomes a
+linked heading, with the original session title retained below it. PR numbers
+are parsed from the supplied URLs and rendered in the neutral text colour.
+
+The shared bounded JSON-object reader belongs only to read-only CLI adapters.
+Catalogue, activity and metadata readers supply their own limits and perform
+their own typed decoding. It closes stdin, detects a complete root object once,
+and reaps the child without waiting indefinitely for transport EOF.
+
+Browser-local lazy activity is retained across metadata-only unknown updates
+and same-workspace reconnect snapshots. Incoming metadata and event cursors
+still advance; actual execution evidence or a workspace change replaces that
+cache. This retention never manufactures journal events, and a direct lazy
+result still suppresses its own pulse.
+
+Configuration reads may opt into the installed CLI's known Remote Streams
+transport chatter. The shared reader discards only that recognized prelude and
+uses the exact root-object boundary; other readers retain strict whole-buffer
+JSON decoding. Unknown prelude text is rejected. Raw transport text and
+configuration environment values are not retained in the metadata cache.
+
+Skylos does not propagate reachability from the interface-state Falcon handlers
+through the injected signer or their body/mapping helpers. Four exact qualified
+symbols are recorded as runtime entry points, with their actual callers in the
+configuration reasons; no name-wide whitelist is used. API tests exercise these
+paths through real Falcon requests. Shared reader fixture option types in
+`tests/lody_reader_fixtures.py` belong only to the activity and agent reader
+tests; they are not application data contracts.
+
+`tests/lody_process_support.py` shares executable-script creation and call-log
+reading between those two reader suites. Each suite retains its own protocol
+fixtures and assertions. `tests/deferred.ts` supplies controlled asynchronous
+completion for browser-hook tests without production timing delays.
