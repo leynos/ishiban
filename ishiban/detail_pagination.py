@@ -2,15 +2,17 @@
 
 import base64
 import binascii
+import hashlib
 import re
 
 import msgspec
 
 TURN_PAGE_SIZE = 100
-MAX_TURN_CURSOR_LENGTH = 4096
+TURN_CURSOR_VERSION = 2
+MAX_TURN_CURSOR_LENGTH = 256
 MAX_EVENT_ID = 9_223_372_036_854_775_807
-MAX_TURN_ID_LENGTH = 255
-_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,4096}\Z")
+_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,256}\Z")
+_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class InvalidTurnCursorError(ValueError):
@@ -22,17 +24,29 @@ class InvalidTurnCursorError(ValueError):
 
 
 class TurnPageCursor(msgspec.Struct, rename="camel", frozen=True):
-    """Bind a turn position to its workspace and session identity."""
+    """Bind a fixed-size turn-group rank to its workspace and session."""
 
     version: int
-    workspace_id: str
-    session_id: str
+    scope_digest: str
     last_event_id: int
-    user_turn_id: str
+    rank: int
+
+
+def cursor_scope_digest(workspace_id: str, session_id: str) -> str:
+    """Hash a structured identity so different field splits stay distinct.
+
+    For example, ``('ab', 'c')`` differs from ``('a', 'bc')``.
+
+    Returns
+    -------
+    str
+        A fixed-width lowercase SHA256 digest of both identifiers.
+    """
+    return hashlib.sha256(msgspec.json.encode((workspace_id, session_id))).hexdigest()
 
 
 def encode_turn_cursor(cursor: TurnPageCursor) -> str:
-    """Encode a continuation; for example, ``u100`` follows ``u099``.
+    """Encode a continuation; for example, rank 100 follows rank 99.
 
     Returns
     -------
@@ -89,9 +103,11 @@ def _validate_cursor_identity(
     InvalidTurnCursorError
         If the version, workspace or session does not match.
     """
-    if cursor.version != 1 or cursor.workspace_id != workspace_id:
+    if cursor.version != TURN_CURSOR_VERSION:
         raise InvalidTurnCursorError
-    if cursor.session_id != session_id:
+    if cursor.scope_digest != cursor_scope_digest(workspace_id, session_id):
+        raise InvalidTurnCursorError
+    if _DIGEST.fullmatch(cursor.scope_digest) is None:
         raise InvalidTurnCursorError
 
 
@@ -105,9 +121,9 @@ def _validate_cursor_position(cursor: TurnPageCursor, token: str) -> None:
     InvalidTurnCursorError
         If the turn identity, event position or encoding is invalid.
     """
-    if not cursor.user_turn_id or len(cursor.user_turn_id) > MAX_TURN_ID_LENGTH:
-        raise InvalidTurnCursorError
     if not 0 < cursor.last_event_id <= MAX_EVENT_ID:
+        raise InvalidTurnCursorError
+    if not 0 < cursor.rank <= MAX_EVENT_ID:
         raise InvalidTurnCursorError
     if encode_turn_cursor(cursor) != token:
         raise InvalidTurnCursorError

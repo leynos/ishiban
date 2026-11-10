@@ -4,7 +4,13 @@ import typing as typ
 
 import sqlalchemy as sa
 
-from ishiban.detail_pagination import TURN_PAGE_SIZE, TurnPageCursor, encode_turn_cursor
+from ishiban.detail_pagination import (
+    TURN_CURSOR_VERSION,
+    TURN_PAGE_SIZE,
+    TurnPageCursor,
+    cursor_scope_digest,
+    encode_turn_cursor,
+)
 from ishiban.storage.models import collector_state, sessions, source_events, turns
 from ishiban.storage.projection_writer import load_session_projection
 from ishiban.storage.serialization import decode_object
@@ -155,17 +161,30 @@ async def _read_turn_page(
     )
     if after is not None:
         turn_query = turn_query.where(
-            sa.tuple_(turns.c.last_event_id, turns.c.user_turn_id)
-            > (after.last_event_id, after.user_turn_id)
-        )
+            turns.c.last_event_id >= after.last_event_id
+        ).offset(after.rank)
     turn_rows = (await connection.execute(turn_query)).all()
     page = turn_rows[:TURN_PAGE_SIZE]
     next_cursor = None
     if len(turn_rows) > TURN_PAGE_SIZE:
         last = page[-1]
+        rank = await connection.scalar(
+            sa
+            .select(sa.func.count())
+            .select_from(turns)
+            .where(
+                turns.c.workspace_id == workspace_id,
+                turns.c.session_id == session_id,
+                turns.c.last_event_id == last.last_event_id,
+                turns.c.user_turn_id <= last.user_turn_id,
+            )
+        )
         next_cursor = encode_turn_cursor(
             TurnPageCursor(
-                1, workspace_id, session_id, last.last_event_id, last.user_turn_id
+                TURN_CURSOR_VERSION,
+                cursor_scope_digest(workspace_id, session_id),
+                last.last_event_id,
+                int(rank or 0),
             )
         )
     return (
