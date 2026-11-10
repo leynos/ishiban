@@ -1,9 +1,8 @@
 # Ishiban initial observation proof of concept
 
-Status: the initial implementation is validated locally. Additional inspector,
-saved-control, lazy-activity and sticky-column refinements are implemented and
-undergoing final gates and authenticated local review. The earlier review
-reassessment covers `ee829f9`; the full implementation review starts at
+Status: implementation and interface refinements are complete and validated
+locally through `be2bd5e`. Authenticated local reviews are complete, with the
+advisory dispositions recorded below. The full implementation review starts at
 `bbb1bee`. No remote publication or Lody writes are authorized.
 
 ## Purpose
@@ -417,3 +416,45 @@ inspection confirms no underline at rest, an underline on the hovered link, and
 neutral grey PR numbers after their links. The browser uses an explicit
 mouse-hover capability for this check; touch emulation does not activate the
 hover media query.
+
+## Inspector refinement acceptance, 10 November 2026
+
+Commits `621c8ed`, `33ec4c5`, and `be2bd5e` deliver the sticky-column fix,
+signed interface preferences, lazy activity retention, and inspector
+navigation, metadata and diagnostics. PR links show grey numbers and underline
+on hover. Blank or whitespace-only PR titles retain accessible fallback labels.
+
+The complete candidate passes build, formatting, lint, type checking,
+dependency audit, Markdown/spelling, Mermaid and Makefile validation. Bun
+reports 71 passed, six skipped, and zero failed; pytest reports 154 passed. All
+four opt-in Chromium regressions pass separately. The size check covers 106
+source files; none exceeds 400 lines.
+
+Browser validation against an isolated Falcon journal confirms signed-cookie
+restoration in new tabs and after an API restart, quiet unknown-to-known
+activity enrichment, and retained runtime facts through metadata refreshes and
+reconnect snapshots. Inspector checks confirm linked PR headings and session
+subtitles, copied Lody identities, cached agent labels, plain-text errors,
+muted PR numbers, and hover-only underlines. A real read-only `leynos` metadata
+lookup returns Codex labels and a cached second lookup. Validation-owned API
+and browser processes are stopped; the user's API and private journal are
+preserved.
+
+CodeRabbit 0.9.4 completes the `9941a88..33ec4c5` review of 59 files with five
+minor findings. Follow-up regression tests reproduce blank PR link labels and
+delayed rediscovery of dropped queued work before their fixes. Commit `be2bd5e`
+also strengthens the enrichment wait and aligns British spelling. Its focused
+`33ec4c5..be2bd5e` review completes across all eight changed files with one
+trivial clock-injection suggestion. Both retry-time reads already use the same
+browser `Date.now()` timebase. That implementation is retained; dedicated clock
+injection can accompany future virtual-time retry-window tests.
+
+CodeScene 1.0.36 completes the full `9941a88..be2bd5e` delta and retains
+advisories in eight files. Threshold-level test, hook and validation
+complexity, subprocess ownership, cache guards and distinct metadata decoders
+remain explicit. The DOM observer owner has complexity 12 against threshold 9;
+keeping its observers, subscription and cleanup together preserves one
+lifetime. Its module mean falls from 5.88 to 5.20 against threshold 4. The
+inspector mean is 4.22 against threshold 4 after naming its fallback values.
+These advisories are accepted for this proof of concept. CodeScene thresholds
+and suppressions are unchanged.
