@@ -20,6 +20,7 @@ on:
 
 jobs:
   coverage-upload:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,6 +54,7 @@ jobs:
           artefact-name-suffix: ishiban
           publish-artefact: ${{ env.ACT != 'true' }}
           with-ratchet: 'true'
+          publish-baseline: 'always'
           # Serial coverage preserves dynamically imported Alembic migration hits.
           pytest-workers: ''
 
