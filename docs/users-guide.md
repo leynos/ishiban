@@ -289,7 +289,7 @@ window. Clearing the cookie returns the controls to Overview and Panorama.
 
 Real session marks with unknown activity are read lazily as they become
 visible. The frame updates without a pulse when the read succeeds. Evidence
-read this way is labelled “Read on demand; not journaled”. Existing event IDs
+read this way is labelled “Read on demand; not journalled”. Existing event IDs
 are preserved, and newer journal events take precedence over late lookup
 responses. Unavailable or metadata-only reads remain unknown.
 

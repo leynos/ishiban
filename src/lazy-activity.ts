@@ -7,13 +7,19 @@ interface Lookup {
   readonly workspaceId: string;
   readonly sessionId: string;
   readonly revision: number;
+  readonly retryKey: string;
+  readonly retryToken: symbol;
+}
+interface AttemptStamp {
+  readonly timestamp: number;
+  readonly token: symbol;
 }
 const MARKS = 'button[data-session-id]';
 
 /** Own two bounded browser lookups; for example, enqueue a visible unknown session. */
 class ActivityRequests {
   private readonly queue: Lookup[] = [];
-  private readonly attempted = new Map<string, number>();
+  private readonly attempted = new Map<string, AttemptStamp>();
   private readonly controllers = new Set<AbortController>();
   private running = 0;
   private isStopped = false;
@@ -32,18 +38,38 @@ class ActivityRequests {
     if (session.source === 'demo') return;
     if (this.queue.length >= 256) return;
     const key = `${snapshot.workspaceId}:${sessionId}:${session.lastEventId}`;
-    if (Date.now() - (this.attempted.get(key) ?? -Infinity) < 30_000) return;
-    this.remember(key);
-    this.queue.push({workspaceId: snapshot.workspaceId, sessionId, revision: session.lastEventId});
+    if (this.isRecentlyAttempted(key)) return;
+    const retryToken = Symbol(key);
+    this.remember(key, {timestamp: Date.now(), token: retryToken});
+    this.queue.push({
+      workspaceId: snapshot.workspaceId,
+      sessionId,
+      revision: session.lastEventId,
+      retryKey: key,
+      retryToken
+    });
     this.drain();
   }
 
   /** Bound retry bookkeeping; for example, discard the oldest of 513 revisions. */
-  private remember(key: string): void {
-    this.attempted.set(key, Date.now());
+  private remember(key: string, stamp: AttemptStamp): void {
+    this.attempted.set(key, stamp);
     if (this.attempted.size > 512) {
       const oldest = this.attempted.keys().next().value;
       if (oldest !== undefined) this.attempted.delete(oldest);
+    }
+  }
+
+  /** Check the retry window without weakening an active or replaced stamp. */
+  private isRecentlyAttempted(key: string): boolean {
+    const stamp = this.attempted.get(key);
+    return stamp !== undefined && Date.now() - stamp.timestamp < 30_000;
+  }
+
+  /** Forget a dropped queue entry only while its retry stamp is still its own. */
+  private forgetDropped(task: Lookup): void {
+    if (this.attempted.get(task.retryKey)?.token === task.retryToken) {
+      this.attempted.delete(task.retryKey);
     }
   }
 
@@ -69,7 +95,10 @@ class ActivityRequests {
     while (!this.isStopped && this.running < 2) {
       const task = this.queue.shift();
       if (!task) return;
-      if (!this.matches(task)) continue;
+      if (!this.matches(task)) {
+        this.forgetDropped(task);
+        continue;
+      }
       this.running += 1;
       void this.run(task);
     }

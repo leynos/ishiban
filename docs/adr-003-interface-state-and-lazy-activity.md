@@ -33,7 +33,7 @@ label. It does not append journal rows or invent an evidence generation.
 The browser applies lazy results only while the same session revision remains
 unknown in the same workspace. It preserves the journal cursor and mark
 revision, suppresses any pulse for the lazily enriched mark, and labels the
-information as read on demand rather than journaled. Subsequent durable events
+information as read on demand rather than journalled. Subsequent durable events
 replace this browser-local enrichment normally.
 
 ## Consequences

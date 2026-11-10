@@ -92,19 +92,24 @@ function PullRequestDetails({session}: {readonly session: Session}): ReactElemen
         <p>None supplied.</p>
       ) : (
         <ul>
-          {session.pullRequests.map((pullRequest) => (
-            <li key={pullRequest.url}>
-              {isWebUrl(pullRequest.url) ? (
-                <a className="link link-hover" href={pullRequest.url} rel="noreferrer" target="_blank">
-                  {pullRequest.title ?? 'Open pull request'}
-                </a>
-              ) : (
-                <span>{pullRequest.title ?? 'Pull request URL unavailable'}</span>
-              )}
-              <PullRequestNumber url={pullRequest.url} />
-              <small>{pullRequest.status.replaceAll('-', ' ')}</small>
-            </li>
-          ))}
+          {session.pullRequests.map((pullRequest) => {
+            const hasWebUrl = isWebUrl(pullRequest.url);
+            const fallback = hasWebUrl ? 'Open pull request' : 'Pull request URL unavailable';
+            const title = pullRequest.title?.trim() || fallback;
+            return (
+              <li key={pullRequest.url}>
+                {hasWebUrl ? (
+                  <a className="link link-hover" href={pullRequest.url} rel="noreferrer" target="_blank">
+                    {title}
+                  </a>
+                ) : (
+                  <span>{title}</span>
+                )}
+                <PullRequestNumber url={pullRequest.url} />
+                <small>{pullRequest.status.replaceAll('-', ' ')}</small>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

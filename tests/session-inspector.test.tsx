@@ -101,3 +101,14 @@ it('places a readable PR number after its link', () => {
   expect(number.className).toBe('session-pr-number');
   expect(number.previousElementSibling?.tagName).toBe('A');
 });
+
+it.each(['', '   '])('gives a blank PR title an accessible fallback: %j', (title) => {
+  const session = {
+    ...firstSession(createBoardSnapshot()),
+    pullRequests: [{url: 'https://github.com/example/project/pull/123', title, status: 'open'}]
+  };
+  render(<SessionInspector session={session} workspaceId="workspace-1" currentGeneration={1} onClose={() => {}} />);
+  expect(screen.getByRole('link', {name: 'Open pull request'}).getAttribute('href')).toBe(
+    'https://github.com/example/project/pull/123'
+  );
+});

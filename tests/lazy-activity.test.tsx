@@ -276,7 +276,18 @@ it('loads only visible unknown real activity and drops offscreen queued work', a
     state: 'running',
     activitySource: 'lazy'
   });
-  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
+  await waitFor(() => {
+    const enrichedSession = store
+      .getSnapshot()
+      .snapshot?.sessions.find((session) => session.sessionId === UNKNOWN_REAL_ONE.sessionId);
+    expect(enrichedSession?.state).toBe('running');
+  });
+
+  observer.setVisibility(queuedMark, true);
+  expect(requests).toHaveLength(3);
+  expect(requestAt(requests, 2).url).toBe(
+    `/api/v1/sessions/${encodeURIComponent(UNKNOWN_REAL_THREE.sessionId)}/activity`
+  );
 
   const current = store.getSnapshot().snapshot;
   expect(current?.cursor).toBe(snapshot.cursor);
@@ -288,7 +299,7 @@ it('loads only visible unknown real activity and drops offscreen queued work', a
   stopActivity();
   expect(observer.disconnected).toBe(true);
   expect(secondRequest.init.signal?.aborted).toBe(true);
-  expect(requests).toHaveLength(2);
+  expect(requests).toHaveLength(3);
 });
 
 it('rejects stale SSE revisions and foreign-workspace activity replies', async () => {

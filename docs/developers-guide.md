@@ -392,6 +392,8 @@ foreign, stale, or already-resolved revisions. Intersection and mutation
 observers own visible-mark discovery and cleanup; requests that have not
 started are skipped when their mark leaves the viewport. Update-cue tracking
 suppresses lazy enrichment even if an earlier journal cue is still active.
+Discarded queued work releases only its own retry marker, so a task revealed
+again can be read immediately without clearing a newer attempt's backoff.
 
 Inspector agent metadata uses a separate bounded reader and 128-entry TTL
 cache. The only exported fields are agent type, configuration ID and
