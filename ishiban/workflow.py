@@ -34,16 +34,34 @@ def classify(prs: list[PullRequest]) -> StageDecision:
     """
     if not prs:
         return StageDecision("planning", "Catalogue confirms no associated PR.")
+    if any(pr.status not in {"draft", "open", "merged", "closed"} for pr in prs):
+        return StageDecision(
+            "unclassified", "PR lifecycle metadata is incomplete or conflicting."
+        )
     live = [pr for pr in prs if pr.status in {"draft", "open"}]
     if len(live) == 1:
         return _classify_live(live[0])
     if live:
         return StageDecision("unclassified", "Multiple active PR associations.")
-    states = {pr.status for pr in prs}
-    if states == {"merged"}:
-        return StageDecision("merged", "All associated PRs are merged.")
-    if states == {"closed"}:
-        return StageDecision("closed", "Associated PRs are closed without merge.")
+    return _classify_terminal({pr.status for pr in prs})
+
+
+def _classify_terminal(states: set[str]) -> StageDecision:
+    """Classify completed PR evidence; for example, mixed exits stay unknown.
+
+    Returns
+    -------
+    StageDecision
+        Merged, closed, or unclassified for conflicting terminal lifecycles.
+    """
+    if len(states) == 1:
+        status = next(iter(states))
+        terminal_reasons = {
+            "merged": "All associated PRs are merged.",
+            "closed": "Associated PRs are closed without merge.",
+        }
+        if status in terminal_reasons:
+            return StageDecision(status, terminal_reasons[status])
     return StageDecision(
         "unclassified", "PR lifecycle metadata is incomplete or conflicting."
     )

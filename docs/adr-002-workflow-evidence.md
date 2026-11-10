@@ -33,10 +33,12 @@ workflow classification itself.
 
 Table 1: workflow classification from explicit PR evidence.
 
-Ignore historical terminal PRs when exactly one associated PR is active.
-Terminal lifecycle evidence takes precedence over a Plan-prefixed title. Treat
-Lody's absent optional `pullRequests` field as no association only inside a
-successful, validated complete catalogue response. A failed or partial
+Ignore historical terminal PRs when exactly one associated PR is active. An
+association with unknown lifecycle status may be another active PR, so it
+prevents a definite stage even when another association is a known draft or
+open PR. Terminal lifecycle evidence takes precedence over a Plan-prefixed
+title. Treat Lody's absent optional `pullRequests` field as no association only
+inside a successful, validated complete catalogue response. A failed or partial
 catalogue never deletes associations or classifies omitted sessions.
 
 Maintain workflow stage independently of activity, collector connectivity, and

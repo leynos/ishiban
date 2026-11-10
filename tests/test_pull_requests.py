@@ -82,6 +82,20 @@ def make_catalogue(urls: list[str], status: str = "open") -> Catalogue:
     )
 
 
+def _collector_with_cached_pr(request: PullRequest) -> tuple[RecordingStore, Collector]:
+    """Seed one cached PR; for example, test a later catalogue transition.
+
+    Returns
+    -------
+    tuple[RecordingStore, Collector]
+        A capture store and the collector seeded with that cached PR.
+    """
+    store = RecordingStore()
+    collector = Collector(typ.cast("Store", store), "workspace", github=False)
+    collector.pr_cache[request.url] = request
+    return store, collector
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("catalogue_status", "expected_stage"),
@@ -94,12 +108,8 @@ async def test_terminal_catalogue_status_replaces_cached_active_status(
     cached_status: str,
 ) -> None:
     """A fresh terminal catalogue status wins while the known title survives."""
-    store = RecordingStore()
-    collector = Collector(typ.cast("Store", store), "workspace", github=False)
-    collector.pr_cache[PR_URL] = PullRequest(
-        url=PR_URL,
-        status=cached_status,
-        title="Plan: keep this title",
+    store, collector = _collector_with_cached_pr(
+        PullRequest(url=PR_URL, status=cached_status, title="Plan: keep this title")
     )
 
     await collector.reconcile(make_catalogue([PR_URL], catalogue_status))
@@ -124,6 +134,37 @@ def test_invalid_pr_url_remains_unknown() -> None:
         url="",
         status="unknown",
     ), "Untrusted URLs must not gain a known lifecycle or an actionable link."
+
+
+@pytest.mark.asyncio
+async def test_invalid_association_prevents_stage_in_collector_projection() -> None:
+    """A valid draft cannot hide an invalid association during reconciliation."""
+    store, collector = _collector_with_cached_pr(
+        PullRequest(url=PR_URL, status="draft", title="Build")
+    )
+    catalogue = Catalogue(
+        ok=True,
+        workspace_id="workspace",
+        sessions=[
+            RawSession(
+                id="session-with-incomplete-prs",
+                pull_requests=[
+                    RawPR(url=PR_URL, status="draft"),
+                    RawPR(url="https://example.invalid/pull/2", status="open"),
+                ],
+            ),
+        ],
+    )
+
+    await collector.reconcile(catalogue)
+
+    entry = store.entries[0]
+    assert entry.stage == "unclassified", (
+        "A rejected URL must not allow the remaining draft to define a stage."
+    )
+    assert [pr.status for pr in entry.pull_requests] == ["draft", "unknown"], (
+        "The projected associations must retain the source uncertainty."
+    )
 
 
 @pytest.mark.asyncio

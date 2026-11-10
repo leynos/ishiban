@@ -62,3 +62,17 @@ def test_old_merged_pr_does_not_hide_the_live_association() -> None:
     assert classify(prs).stage == "building", (
         "A historical merged PR must not override the current draft."
     )
+
+
+@pytest.mark.parametrize("status", ["draft", "open"])
+def test_unknown_association_prevents_a_definite_active_stage(status: str) -> None:
+    """An unknown association may be a second active PR."""
+    prs = [
+        PullRequest(
+            url="https://github.com/leynos/ishiban/pull/1", status=status, title="Build"
+        ),
+        PullRequest(url="", status="unknown"),
+    ]
+    assert classify(prs).stage == "unclassified", (
+        "Unknown lifecycle evidence cannot justify a unique active PR stage."
+    )
