@@ -537,6 +537,11 @@ activity visibility observer also watches a visible mark's `data-session-id`
 attribute: a quiet tab selection can reuse the same button, so the new raw tab
 needs its own lazy lookup without a scroll event.
 
+A stored selected tab ID is also an alias for its current family. Resolve the
+alias after containment enrichment and derive the root used by marks and focus
+restoration; do not reset selection just because a catalogue parent link
+arrives after the observer's standalone record.
+
 `POST /api/v1/sessions/recency` reads latest history timestamps for up to eight
 session IDs in an 8,192-byte request. It returns independent NDJSON results,
 with successful empty history represented by `latestHistoryAt: null` and

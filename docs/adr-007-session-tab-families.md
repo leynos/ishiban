@@ -33,6 +33,11 @@ A family selection must remain stable across refreshes and reorderings; React
 keys and selection identity use the family root and actual member IDs, not
 array positions.
 
+Resolve a stored selection through current member aliases when parent metadata
+arrives later. A selected standalone child must keep its inspector open as it
+joins a root family; highlighting and focus restoration use the current root
+mark without copying derived family identity into selection state.
+
 Root archival is explicit intent to archive the logical task. Hide that family
 by default even if Lody retains an unarchived child tab; the existing include
 archived control reveals it. A catalogue `removed` marker is different: retain

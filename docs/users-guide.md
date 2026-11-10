@@ -342,6 +342,8 @@ matches member session IDs and titles. Board counts and PR-workflow filters
 count families. See [ADR 007](adr-007-session-tab-families.md) for recency and
 selection details.
 
+The inspector keeps your selection as the board discovers related tabs.
+
 Archiving the root hides the logical task, including any child tabs Lody leaves
 unarchived. **Include archived and removed** reveals those families. A removed
 root catalogue record does not hide a child that is still present.

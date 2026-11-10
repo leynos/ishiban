@@ -802,3 +802,14 @@ types, lint, and direct CodeScene checks clear for their scope. Hosted checks
 and assessments belong to the exact published candidate; the PR records their
 current status. Do not treat the previous baseline's hosted checks as evidence
 for this new scope.
+
+### Late containment discovery selection
+
+After publishing the family implementation, a focused review found that an
+already selected child could close its inspector when its parent link arrived
+from the catalogue. The failing regression selects the standalone child, then
+groups it under its root. Selection now resolves through member aliases while
+highlighting and focus use the current family root. Closing the inspector
+focuses the surviving root mark. Twenty focused board tests pass, with Bun
+types, lint, formatting, and direct CodeScene checks clear for both changed
+files. The change preserves raw journal and CLI identities.

@@ -92,7 +92,7 @@ function useBoardFocusRestoration(props: BoardFocusRestorationProps): void {
     if (focusedSessionId === null || document.activeElement !== document.body) {
       return;
     }
-    const movedMark = markNodesRef.current.get(focusedSessionId);
+    const movedMark = markForSelectedFamily(visibleSessions, focusedSessionId, markNodesRef.current);
     if (movedMark?.isConnected === true) {
       movedMark.focus();
       return;
@@ -136,6 +136,45 @@ function familyPulseRevisions(
   return cues;
 }
 
+/** Preserve selection during discovery; for example, a selected child now resolves to its parent family. */
+function selectedFamily(families: readonly SessionFamily[], selectedId: string | null): SessionFamily | null {
+  if (selectedId === null) return null;
+  return (
+    families.find(
+      (family) => family.rootId === selectedId || family.members.some((member) => member.sessionId === selectedId)
+    ) ?? null
+  );
+}
+
+/** Follow changed containment; for example, an old child ID locates the new root mark. */
+function markForSelectedFamily(
+  families: readonly SessionFamily[],
+  selectedId: string,
+  markNodes: ReadonlyMap<string, HTMLButtonElement>
+): HTMLButtonElement | undefined {
+  const rootId = selectedFamily(families, selectedId)?.rootId ?? selectedId;
+  return markNodes.get(rootId);
+}
+
+/** Keep focus on the task; for example, replace a detached child trigger with its current root mark. */
+function focusAfterInspectorClose(
+  initiatingTrigger: HTMLButtonElement | null,
+  selectedFamilyId: string | null,
+  markNodes: ReadonlyMap<string, HTMLButtonElement>,
+  boardFallback: HTMLElement | null
+): void {
+  const currentMark = selectedFamilyId === null ? undefined : markNodes.get(selectedFamilyId);
+  if (initiatingTrigger?.isConnected === true) {
+    initiatingTrigger.focus();
+    return;
+  }
+  if (currentMark?.isConnected === true) {
+    currentMark.focus();
+    return;
+  }
+  boardFallback?.focus();
+}
+
 /**
  * Render the filtered live or demonstration session board.
  * @param props Validated snapshot and client connection state.
@@ -158,7 +197,8 @@ export function Board(props: BoardProps): ReactElement {
     () => filterSessions(families, viewState.query, viewState.activityFilter, viewState.includeArchived),
     [families, viewState.query, viewState.activityFilter, viewState.includeArchived]
   );
-  const inspectorSession = families.find((family) => family.rootId === viewState.selectedSessionId) ?? null;
+  const inspectorSession = selectedFamily(families, viewState.selectedSessionId);
+  const selectedFamilyId = inspectorSession?.rootId ?? viewState.selectedSessionId;
 
   const onSelect = (sessionId: string, trigger?: HTMLButtonElement): void => {
     if (trigger instanceof HTMLButtonElement) {
@@ -169,18 +209,8 @@ export function Board(props: BoardProps): ReactElement {
   const onClose = (): void => {
     viewState.onClose();
     const initiatingTrigger = initiatingTriggerRef.current;
-    const currentSessionMark =
-      viewState.selectedSessionId === null ? undefined : markNodesRef.current.get(viewState.selectedSessionId);
     initiatingTriggerRef.current = null;
-    if (initiatingTrigger?.isConnected === true) {
-      initiatingTrigger.focus();
-      return;
-    }
-    if (currentSessionMark?.isConnected === true) {
-      currentSessionMark.focus();
-      return;
-    }
-    boardFallbackRef.current?.focus();
+    focusAfterInspectorClose(initiatingTrigger, selectedFamilyId, markNodesRef.current, boardFallbackRef.current);
   };
   const onMarkNode = useCallback((sessionId: string, node: HTMLButtonElement | null): void => {
     if (node === null) {
@@ -201,7 +231,7 @@ export function Board(props: BoardProps): ReactElement {
     markNodesRef,
     onClose: viewState.onClose,
     presentation: viewState.presentation,
-    selectedSessionId: viewState.selectedSessionId,
+    selectedSessionId: selectedFamilyId,
     snapshotSessions: snapshot.sessions,
     visibleSessions
   });
@@ -218,7 +248,7 @@ export function Board(props: BoardProps): ReactElement {
       pulseRevisions={familyPulses}
       snapshot={snapshot}
       totalFamilies={families.length}
-      viewState={viewState}
+      viewState={{...viewState, selectedSessionId: selectedFamilyId}}
       visibleSessions={visibleSessions}
     />
   );

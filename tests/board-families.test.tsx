@@ -79,6 +79,28 @@ it('hides an archived root family until archived entries are included', async ()
   expect(document.querySelector('.board-summary')?.textContent).toContain('1 visible sessions');
 });
 
+it('keeps a selected child open when its parent link arrives later', async () => {
+  const user = userEvent.setup();
+  const linked = createFamilySnapshot(1);
+  const unlinked = {
+    ...linked,
+    sessions: linked.sessions.map((session) =>
+      session.sessionId === 'child-0' ? {...session, parentSessionId: null} : session
+    )
+  };
+  const {rerender} = render(<Board connection="Connected" snapshot={unlinked} />);
+  await user.click(screen.getByRole('button', {name: /Child execution; Planning; running/u}));
+  expect(screen.getByRole('button', {name: 'Close session inspector'})).toBeTruthy();
+
+  act(() => rerender(<Board connection="Connected" snapshot={linked} />));
+  const rootMark = screen.getByRole('button', {name: /Root planning work; Refine; running/u});
+  expect(screen.getByRole('heading', {name: /Implement root work/u})).toBeTruthy();
+  expect(rootMark.getAttribute('aria-pressed')).toBe('true');
+
+  await user.click(screen.getByRole('button', {name: 'Close session inspector'}));
+  expect(document.activeElement).toBe(rootMark);
+});
+
 it('settles visible family recency quietly from two validated history frames', async () => {
   const snapshot = createFamilySnapshot(1);
   const live = {
