@@ -147,6 +147,32 @@ previous PR facts may be cached and stale.
   without a new Lody read; the default route still resolves unknown activity
   only. An identity too large even for a marker returns HTTP 413 before any
   stream starts.
+- `POST /api/v1/sessions/recency` accepts a JSON object such as
+  `{"sessionIds":["root","child"]}`. It accepts at most eight entries in an
+  8,192-byte body, deduplicates IDs and streams `application/x-ndjson` results
+  as members complete. Each ID must be nonempty, at most 256 characters and
+  contain no NUL; unknown fields or invalid IDs return HTTP 400. Oversized
+  bodies or preflighted frames return HTTP 413. Each frame is bounded to
+  1,048,576 UTF-8 bytes and includes `workspaceId`, `sessionId`, the execution
+  watermark `lastActivityEventId` and `outcome`. An `available` result includes
+  `latestHistoryAt`, either an ISO timestamp with a time zone or `null` for an
+  explicitly empty history. An `unavailable` result omits that field and
+  contains no guessed activity; missing sessions use watermark zero. Clients
+  must reject stale or foreign results. These reads do not advance the journal
+  cursor or pulse the board.
+- `GET /api/v1/interface-state` returns the browser's decoded density and
+  presentation, for example `{"density":"overview","presentation":"panorama"}`.
+  Missing, expired or invalid signed cookies return those defaults with HTTP
+  200. `POST /api/v1/interface-state` accepts `application/json`, returns the
+  validated pair and sets the signed MessagePack cookie. Send both fields to
+  retain both selections: an omitted field uses its default, rather than its
+  previous cookie value. Density accepts `overview`, `compact`, `balanced`,
+  `roomy` or `comfortable`; presentation accepts `panorama`, `matrix` or
+  `list`. Malformed bodies, unknown fields and unsupported values return HTTP
+  400; bodies over 1,024 bytes return HTTP 413, and other content types return
+  HTTP
+  415. The cookie is browser-local and does not modify journal data. Snapshots
+  also return the restored pair in `interfaceState`.
 - `GET /health` checks API process liveness. `GET /ready` checks the local
   database. Neither endpoint claims the Lody source is connected.
 

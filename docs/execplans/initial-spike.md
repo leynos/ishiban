@@ -1408,3 +1408,10 @@ storage permits, retains the initial quiet phase while retrying and resumes
 normal periodic reconciliation after success. Initial and periodic storage
 failure regressions reproduce the prior silent termination. Aggregate gates,
 publication and affected assessment confirmation remain separate steps.
+
+Documentation reconciliation now distinguishes handled source failures from
+retryable storage failures in the indexed design and developer guide. The
+users' API reference also records recency request bounds, streamed outcomes and
+execution watermarks, plus interface-state defaults, accepted values, signed
+cookie updates and error responses. This corrects documentation for existing
+behaviour without inventing a released-version migration path.

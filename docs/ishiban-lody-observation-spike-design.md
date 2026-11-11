@@ -212,12 +212,20 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
    readiness. Enrichment failure leaves the live observer attached and records
    stale-association health; observer teardown cancels and reaps its refresh
    task. Metadata reconciliation preserves newer execution evidence. Keep
-   `catalogue_ready` until the initial reconciliation attempt completes or
-   fails with a retained warning, then publish `following`. The board includes
-   this phase in its quiet startup baseline: live activity remains visible
-   during initial enrichment, without pulses. Journal order places the
-   `following` source record after all bootstrap catalogue records, so quiet
-   admission does not depend on browser batching.
+   `catalogue_ready` until initial reconciliation succeeds or a handled source
+   failure leaves a retained warning, then publish `following`. Retry SQLAlchemy
+   `OperationalError` from catalogue or health writes with exponential delays
+   from one second up to 30 seconds. Retain the initial catalogue and quiet
+   phase throughout these storage retries; periodic retries retain `following`.
+   Keep observation attached, publish a generic storage warning when writable
+   and use a fixed log diagnostic if that warning cannot be persisted. Clear
+   the warning and reset the five-minute cadence after successful
+   reconciliation. Cancellation interrupts retry waits through the existing
+   owned-task cleanup. The board includes this phase in its quiet startup
+   baseline: live activity remains visible during initial enrichment, without
+   pulses. Journal order places the `following` source record after all
+   bootstrap catalogue records, so quiet admission does not depend on browser
+   batching.
 7. On EOF, nonzero exit, parse failure or unrecoverable protocol error, record
    source health and last known valid event. Mark the collector disconnected;
    **do not** convert running turns to failed or idle. Restart with bounded

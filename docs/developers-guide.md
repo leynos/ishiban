@@ -368,14 +368,16 @@ local to `tests/test_collector_startup.py`. They hold enrichment behind a
 release event while asserting durable live ingestion, then verify that stale
 metadata preserves runtime state. Catalogue metadata may advance a session's
 local cursor after the observer event; the journal row retains its original
-post-event projection. Startup remains `catalogue_ready` until the first
-reconciliation attempt settles. The later `following` source record follows all
-initial catalogue records in durable order; the browser keeps that phase quiet
-while still applying live state. Later metadata and runtime changes retain
-their normal cues. The local subscription wrapper in
-`tests/board-startup-updates.test.tsx` connects the real board to sequential
-`BoardStore` updates, testing that same startup order without relying on React
-to batch frames. Keep that wrapper local to this regression.
+post-event projection. Startup remains `catalogue_ready` until initial
+reconciliation succeeds or a handled source failure records a warning; a
+retryable storage failure keeps that phase across attempts. The later
+`following` source record follows all initial catalogue records in durable
+order; the browser keeps that phase quiet while still applying live state.
+Later metadata and runtime changes retain their normal cues. The local
+subscription wrapper in `tests/board-startup-updates.test.tsx` connects the
+real board to sequential `BoardStore` updates, testing that same startup order
+without relying on React to batch frames. Keep that wrapper local to this
+regression.
 
 The owned catalogue refresher catches SQLAlchemy `OperationalError` and retries
 with exponential delays from one to 30 seconds, resetting after success.
