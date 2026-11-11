@@ -1164,3 +1164,33 @@ static journal during traversal; concurrent updates remain outside the
 pagination contract. No runtime behaviour changes. Candidate-specific gates and
 affected confirmation remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Installed migrations and process teardown, 11 November 2026
+
+Formal review identified two reproducible runtime defects. An isolated wheel
+install omitted the top-level migration scripts and searched `site-packages` as
+though it were a checkout. Wheel packaging now includes those canonical scripts
+beneath the package. Embedded initialization selects installed resources with
+an in-memory Alembic configuration, preserving the checkout fallback and
+synchronous migration bridge within async schema initialization. A real-wheel
+regression checks isolated imports, migration head and snapshot, then exercises
+the installed collector against a fake Lody stream and verifies durable
+ingestion and SIGINT shutdown.
+
+A TERM-resistant child can fill its stdout pipe while the caller has stopped
+reading, leaving `Process.wait` pending even after SIGKILL. Teardown now drains
+stdout without retaining payload and bounds both termination phases. The
+feature-local cleanup module owns a seven-second task independent of caller
+cancellation, then propagates cancellation after teardown. Native regressions
+cover repeated cancellation and already-exited children as well as pipe
+backpressure. A local review also identified cancellation/error precedence; a
+deterministic regression checks that cleanup failure remains the cause of
+cancellation rather than replacing it. Owned pipe tasks are cancelled and
+reaped on exit. The native-child regression exercises early JSON completion
+followed by excess output and checks actual SIGKILL, completed wait and drainer
+cleanup. These are dedicated lifecycle fixtures because ordinary command mocks
+cannot model pipe backpressure.
+
+Both regressions failed against the prior implementation. Candidate-specific
+quality gates, review replies and affected assessment remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).

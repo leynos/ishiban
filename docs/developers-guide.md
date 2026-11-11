@@ -779,10 +779,19 @@ model.
 
 Code-health cleanup separates the CLI reader into bounded raw chunks, the
 optional recognized transport prelude, and `CatalogueFramer` completion.
-`_OwnedChild` owns subprocess termination and stderr-drainer cleanup. These
-seams belong to the read-only CLI adapter; other process callers retain their
-existing lifetimes. Protocol validation uses ordered feature-local rules so
-first-error selection stays stable across decoding and evidence checks.
+`_OwnedChild` owns subprocess termination and pipe-drainer cleanup. After the
+caller stops reading, teardown discards stdout in fixed-size chunks so a paused
+pipe cannot hold `Process.wait` open after SIGKILL. TERM and post-KILL waits
+each have a three-second bound; output is not retained. The stderr drainer is
+cleaned up even if termination fails. `ishiban/lody_process_cleanup.py`
+confines these helpers to native CLI children, with a seven-second owned-task
+backstop. Caller cancellation, including repeated cancellation, waits for that
+task before propagating. If cleanup also fails, the cleanup exception is
+retained as the cancellation's cause; without cancellation it propagates
+directly. Generic task cancellation continues to use `task_ownership`; it does
+not supply process termination or pipe-error handling. Other process callers
+retain their existing lifetimes. Protocol validation uses ordered feature-local
+rules so first-error selection stays stable across decoding and evidence checks.
 
 `storage.activity_projection` owns pure cached-runtime validation and overlay;
 `storage.activity_cache` retains SQLite lifecycle and transaction ownership.

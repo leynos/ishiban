@@ -5,7 +5,6 @@ one complete validated response instead of waiting for transport teardown.
 """
 
 import asyncio
-import contextlib
 import dataclasses
 import re
 import typing as typ
@@ -15,6 +14,7 @@ import msgspec
 
 from ishiban.catalogue_framing import CatalogueFramer
 from ishiban.domain import PullRequest
+from ishiban.lody_process_cleanup import discard_pipe, reap_child
 from ishiban.protocol import Catalogue, ProtocolError, decode_catalogue
 
 if typ.TYPE_CHECKING:
@@ -173,13 +173,12 @@ class _OwnedChild:
             stderr=asyncio.subprocess.PIPE,
             limit=1_048_577,
         )
-        self.drainer = asyncio.create_task(_discard_stderr(self.process))
+        self.drainer = asyncio.create_task(discard_pipe(self.process.stderr))
         return self.process
 
     async def __aexit__(self, *_error: object) -> None:
         """Reap the child before cancelling its stderr consumer."""
-        await _terminate(self.process)
-        await _stop_drainer(self.drainer)
+        await reap_child(self.process, self.drainer)
 
 
 def child(command: tuple[str, ...]) -> _OwnedChild:
@@ -193,36 +192,6 @@ def child(command: tuple[str, ...]) -> _OwnedChild:
         An async context that yields a bounded read-only CLI process.
     """
     return _OwnedChild(command)
-
-
-async def _stop_drainer(drainer: asyncio.Task[None]) -> None:
-    """Cancel and reap stderr consumption after the owned child has stopped."""
-    drainer.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await drainer
-
-
-async def _discard_stderr(process: asyncio.subprocess.Process) -> None:
-    """Drain bounded chunks without retaining potentially credential-bearing text."""
-    if process.stderr is None:
-        return
-    while await process.stderr.read(8192):
-        pass
-
-
-async def _terminate(process: asyncio.subprocess.Process) -> None:
-    """Reap a CLI child; for example, kill it if graceful termination stalls."""
-    if process.returncode is not None:
-        return
-    with contextlib.suppress(ProcessLookupError):
-        process.terminate()
-    try:
-        async with asyncio.timeout(3):
-            await process.wait()
-    except TimeoutError:
-        with contextlib.suppress(ProcessLookupError):
-            process.kill()
-        await process.wait()
 
 
 async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:

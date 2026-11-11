@@ -214,6 +214,15 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
 8. On graceful shutdown, terminate the child, await cleanup, flush committed
    work and release the lock.
 
+Native CLI teardown owns stdout and stderr discard tasks after the caller stops
+reading. Draining stdout permits a killed process to finish transport cleanup
+when its pipe buffer is full. TERM and post-KILL waits each have a three-second
+bound within a seven-second owned cleanup task. Caller cancellation waits for
+that task before propagating, including repeated cancellation. A cleanup
+failure remains chained as the cause of caller cancellation. These helpers
+remain specific to the read-only CLI adapter; generic task cancellation does
+not own process signals or pipe consumption.
+
 For malformed JSON, oversized lines, foreign workspace IDs, invalid ordering or
 unexpected version changes, preserve a bounded redacted diagnostic, stop that
 observer generation and restart or fail closed according to error category.

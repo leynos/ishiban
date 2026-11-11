@@ -7,6 +7,8 @@ This page locates the proof of concept's runtime components and verification.
 - `ishiban/protocol.py` validates the read-only CLI boundary.
 - `ishiban/workflow.py` classifies explicit PR facts.
 - `ishiban/lody.py` owns bounded Lody and GitHub subprocess lifetimes.
+- `ishiban/lody_process_cleanup.py` drains and reaps native CLI children before
+  propagating caller cancellation.
 - `ishiban/catalogue_framing.py` locates complete catalogue objects
   incrementally, leaving validation to the protocol decoder.
 - `ishiban/collector.py` supervises observation and catalogue reconciliation.
