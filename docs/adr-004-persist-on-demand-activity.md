@@ -43,6 +43,14 @@ when it is unchanged; cache upserts cannot replace entries based on newer
 revisions. [ADR 005](adr-005-batched-activity-and-update-cues.md) defines this
 refinement and the batched transport.
 
+The shared activity resolver uses frozen internal resolution options for the
+known-result policy and optional epoch-nanosecond clock. It stamps successful
+observations after the read, flooring nanoseconds to milliseconds. Defaults use
+the same system wall clock; the reader's monotonic TTL clock remains separate.
+Both routes use this record without adding HTTP or preference fields. This
+boundary permits deterministic observation-time tests while preserving the
+journal, sidecar and watermark rules above.
+
 ## Consequences
 
 Refreshes and process restarts retain collected failures and supplied errors.

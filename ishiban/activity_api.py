@@ -4,6 +4,7 @@ For example, a visible metadata-only mark may resolve to idle without appending
 an observation event or changing the snapshot's replay cursor.
 """
 
+import dataclasses as dc
 import time
 import typing as typ
 
@@ -14,10 +15,38 @@ from ishiban.session_identity import is_safe_session_id
 from ishiban.storage.projections import apply_observation
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from falcon import asgi
 
     from ishiban.lazy_activity import LazyActivity
     from ishiban.storage import Store
+
+
+@dc.dataclass(frozen=True, slots=True)
+class ActivityResolutionOptions:
+    """Control one activity resolution without changing shared cache ownership.
+
+    For example, a test can supply an epoch nanosecond clock while production
+    routes use the current wall clock after a valid observer read.
+    """
+
+    include_known: bool = False
+    clock_ns: cabc.Callable[[], int] | None = None
+
+    def observed_at_ms(self) -> int:
+        """Stamp accepted evidence with whole epoch milliseconds.
+
+        Returns
+        -------
+        int
+            Epoch milliseconds, truncating any submillisecond remainder.
+        """
+        clock_ns = time.time_ns if self.clock_ns is None else self.clock_ns
+        return clock_ns() // 1_000_000
+
+
+_DEFAULT_ACTIVITY_RESOLUTION_OPTIONS = ActivityResolutionOptions()
 
 
 class SessionActivityResource:
@@ -54,7 +83,9 @@ class SessionActivityResource:
             self.store,
             self.activity,
             session_id,
-            include_known=req.get_param_as_bool("includeKnown") is True,
+            options=ActivityResolutionOptions(
+                include_known=req.get_param_as_bool("includeKnown") is True
+            ),
         )
         resp.media = {
             "workspaceId": self.store.workspace_id,
@@ -67,7 +98,7 @@ async def resolve_activity(
     activity: LazyActivity,
     session_id: str,
     *,
-    include_known: bool = False,
+    options: ActivityResolutionOptions = _DEFAULT_ACTIVITY_RESOLUTION_OPTIONS,
 ) -> dict[str, object] | None:
     """Resolve one unknown session using cache and revision-safe observation.
 
@@ -88,7 +119,7 @@ async def resolve_activity(
     if previous is None:
         raise falcon.HTTPNotFound
     if previous.get("state") != "unknown":
-        if include_known:
+        if options.include_known:
             return (await store.restore_activity([previous]))[0]
         return None
 
@@ -101,7 +132,7 @@ async def resolve_activity(
     if observed is None:
         return None
 
-    projection = apply_observation(previous, observed, 0, time.time_ns() // 1_000_000)
+    projection = apply_observation(previous, observed, 0, options.observed_at_ms())
     for key in (
         "machineId",
         "title",

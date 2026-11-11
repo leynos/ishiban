@@ -779,6 +779,15 @@ lookup deadline, positive and negative TTLs, partial-result diagnostics and
 successful sibling results remain owned by this reader. These Python
 dependencies are not new CLI or browser settings.
 
+`resolve_activity` takes frozen `ActivityResolutionOptions` for known-result
+retrieval and an optional `clock_ns` callback. The callback returns epoch
+nanoseconds, floored to integer milliseconds only after a valid activity read.
+Omitting it retains the call-time system wall clock, separate from the reader's
+monotonic TTL clock. The record keeps these per-resolution choices together
+within the function's argument bound; it belongs only to the shared single and
+batch activity resolver and is not a serialized request or general clock API.
+HTTP fields, journal ownership and cache expiry remain unchanged.
+
 ### Coverage instrumentation
 
 PR and main coverage use `.github/coverage-constraints.txt` for the action's

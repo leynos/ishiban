@@ -1108,3 +1108,21 @@ xdist tests from the serial CI coverage lane. These changes do not alter
 runtime source. A separate activity-clock injection refactor remains before the
 affected final assessment, as tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Activity observation clock, 11 November 2026
+
+Assessment 10 retained the activity wall-clock injection criterion separately
+from the PR-title constructor change. `resolve_activity` now accepts an
+optional epoch-nanosecond clock in frozen internal resolution options, called
+after a successful read and converted to integer milliseconds with the existing
+floor operation. Omitted callbacks retain call-time system wall clock
+behaviour. The monotonic TTL clock remains a separate reader dependency.
+
+Tests supply a fixed epoch value, verify the returned observation time and its
+sidecar persistence, and check default composition. Raw journal state and the
+durable cursor remain unchanged. Single and batch callers share the options
+record, keeping the function within its four-argument limit without a lint
+waiver. This is a separate testability refactor; no new request, response or
+preference fields are introduced. The spike report retains its original
+measured runtime scope. Candidate-specific gates and affected reassessment
+remain tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
