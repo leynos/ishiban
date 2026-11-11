@@ -14,7 +14,7 @@ import typing as typ
 import msgspec
 from sqlalchemy.exc import OperationalError
 
-from ishiban.domain import CatalogueEntry, PullRequest
+from ishiban.domain import CatalogueEntry, Envelope, PullRequest
 from ishiban.lody import PR_URL, child, read_catalogue, read_pull_requests
 from ishiban.protocol import Catalogue, ProtocolError, StreamPosition, decode_event
 from ishiban.task_ownership import cancel_and_reap
@@ -158,7 +158,10 @@ class Collector:
                 await asyncio.sleep(delay + secrets.randbelow(1000) / 1000)
                 delay = min(delay * 2, 30)
         finally:
-            await self.store.health("stopped", self.generation)
+            try:
+                await self.store.health("stopped", self.generation)
+            except OperationalError:
+                logger.warning("Collector stopped health could not be persisted.")
 
     async def _follow(self, initial: Catalogue | None = None) -> None:
         """Attach one workspace observer and a periodic catalogue refresher.
@@ -187,7 +190,7 @@ class Collector:
                 position = StreamPosition()
                 while line := await process.stdout.readline():
                     event = decode_event(line, self.store.workspace_id, position)
-                    await self.store.ingest(event, self.generation, raw=line)
+                    await self._ingest_with_retry(event, line)
                     if event.type == "ready" and refresh is None:
                         refresh = asyncio.create_task(
                             self._refresh(initial, start_immediately=True)
@@ -199,6 +202,26 @@ class Collector:
         finally:
             if refresh is not None:
                 await cancel_and_reap((refresh,))
+
+    async def _ingest_with_retry(self, event: Envelope, line: bytes) -> None:
+        """Retain one decoded observer record until its commit is acknowledged.
+
+        For example, a lost acknowledgement repeats the same stream identity
+        and sequence; journal deduplication preserves one committed event.
+        """
+        retry_delay = 1.0
+        while True:
+            try:
+                await self.store.ingest(event, self.generation, raw=line)
+            except OperationalError:
+                logger.warning(
+                    "Observer storage unavailable; retrying in %s seconds.",
+                    retry_delay,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30)
+            else:
+                return
 
     async def _refresh(
         self, initial: Catalogue | None = None, *, start_immediately: bool = False
