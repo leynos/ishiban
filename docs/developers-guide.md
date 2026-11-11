@@ -557,17 +557,23 @@ strict marker/fence contract, not general Markdown rendering. External setup
 tools are mocked; collect and serve use the real parser with isolated runtime
 edges. A Make dry-run checks the Act environment flag without running Act.
 `tests/interface-state.type-test.ts` supplies compile-only positive and
-negative assertions for public preference callbacks; it is never executed. The
-bounded-frame property exercises finite UTF-8 chunk partitions and malformed
-siblings, complementing the named limit tests without claiming a formal proof.
-The recency-packing property drives the real browser hook with distinct
-eligible Unicode IDs, including JSON escaping and length boundaries. It checks
-exact membership, count and encoded-byte limits over 50 generated cases and
-three fixed controls, retaining per-case cleanup and deadlines.
-`availableRecencyResponse` in `tests/family-browser-fixture.ts` supplies strict
-available-member frames for the transport and packing suites, using current
-workspace and execution watermarks. Tests with different per-member history
-retain their own response fixtures.
+negative assertions for public preference callbacks; it is never executed.
+PR-title identity tests wait for JSON consumption and a task tick before
+asserting that foreign workspace or session results are ignored; a matching
+identity remains the positive control. The turn-transition property checks 100
+generated histories of at most 30 events across four identities, comparing
+every prefix against an independent last-operation model. These checks also
+retain session/PR context and input immutability. The bounded-frame property
+exercises finite UTF-8 chunk partitions and malformed siblings, complementing
+the named limit tests without claiming a formal proof. The recency-packing
+property drives the real browser hook with distinct eligible Unicode IDs,
+including JSON escaping and length boundaries. It checks exact membership,
+count and encoded-byte limits over 50 generated cases and three fixed controls,
+retaining per-case cleanup and deadlines. `availableRecencyResponse` in
+`tests/family-browser-fixture.ts` supplies strict available-member frames for
+the transport and packing suites, using current workspace and execution
+watermarks. Tests with different per-member history retain their own response
+fixtures.
 
 `tests/bun_test_capture.py` owns the bounded Bun child lifecycle shared by the
 recency, inspector-request and observed-timestamp cross-runtime contracts. It

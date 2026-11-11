@@ -1071,3 +1071,20 @@ The measured spike report remains explicitly scoped to runtime `1011471`; its
 figures are not new measurements of this later refactor. Final candidate gates
 and assessment remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Foreign title results and turn histories, 11 November 2026
+
+The refreshed pre-merge checks identified two further coverage gaps. Separate
+PR-title cases now return a foreign workspace or foreign session, wait for the
+response to be consumed and React to settle, then check that the current title
+remains intact. Existing matching-identity coverage is the positive control.
+
+A bounded Hypothesis property generates interleaved turn starts and finishes
+across four identities. Every history prefix checks active identity uniqueness
+and membership against an independent last-operation model, latest outcomes,
+unchanged session/PR context and input immutability. Explicit cases retain
+unmatched finishes, repeated starts, reopening and interleaving. The suite runs
+100 generated histories of at most 30 events; this is finite evidence, not a
+formal proof. Runtime source remains unchanged from `34fdfbf`; final candidate
+validation and review remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
