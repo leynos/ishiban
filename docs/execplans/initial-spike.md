@@ -1148,3 +1148,19 @@ modules; no scenario or oracle algorithm is shared. The obsolete activity
 resource pair exception is removed because the clock refactor no longer matches
 it. Candidate-specific quality gates, negative controls and affected assessment
 remain recorded in [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Filter and pagination checks, 11 November 2026
+
+The saved test rows subsequently identified missing rendered filter/reset
+coverage and generated static turn-page traversal. Board tests now select
+activity and archive controls, then combine all filters and reset them through
+the visible button, checking both control values and real session marks.
+
+A bounded Hypothesis test seeds multiple event groups with varied turn counts,
+walks every public detail cursor and compares the concatenated pages against an
+independent event-ID/turn-ID ordering. It checks exact-once membership, page
+size and termination, with explicit boundary examples. This property assumes a
+static journal during traversal; concurrent updates remain outside the
+pagination contract. No runtime behaviour changes. Candidate-specific gates and
+affected confirmation remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
