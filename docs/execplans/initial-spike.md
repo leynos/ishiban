@@ -1381,3 +1381,30 @@ file-based, so future changes to either file require re-auditing it for
 executable duplication; no threshold changed. The native browser setup is
 shared for actual lifecycle ownership. Candidate-bound gates and assessment
 confirmation remain separate acceptance steps.
+
+### Mixed evidence and refresh recovery, 11 November 2026
+
+The affected assessment accepted the stack, preference, preview and process
+repairs, but identified a catalogue refresher that could silently terminate on
+a SQLAlchemy storage error. The saved testing checks also identified missing
+option-like activity IDs and mixed-source generated histories.
+
+The activity reader now places every option before `--`, followed by the exact
+session operand. Real child and query-route regressions failed before the fix
+and passed afterwards, including `-example` alongside dot, slash and percent
+identities. Existing batch fixtures follow the same argument contract.
+
+The mixed-runtime property drives the real store through 40 generated histories
+of at most 12 actions and two explicit examples, comparing every prefix with an
+independent model. Persisted observations, metadata, catalogue updates, turn
+transitions and generation restarts check runtime preservation, replacement and
+evidence watermarks together. Metadata state erasure and lost turn-generation
+mutations each fail their intended assertion; the production projection source
+was restored byte for byte. These remain finite tests.
+
+Catalogue refresh retries SQLAlchemy `OperationalError` with capped one-to-30
+second backoff under the existing owned task. It reports safe diagnostics when
+storage permits, retains the initial quiet phase while retrying and resumes
+normal periodic reconciliation after success. Initial and periodic storage
+failure regressions reproduce the prior silent termination. Aggregate gates,
+publication and affected assessment confirmation remain separate steps.

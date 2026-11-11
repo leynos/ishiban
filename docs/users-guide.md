@@ -169,6 +169,12 @@ collector attaches its observer before GitHub enrichment so a slow PR lookup
 does not delay observation. Failed enrichment can leave associations stale
 while live session updates continue.
 
+If catalogue refresh encounters a temporary SQLite storage error, it retries
+with delays from one second up to 30 seconds while observation continues. It
+reports a warning when storage accepts writes and clears it after successful
+reconciliation. Initial retries retain the quiet startup baseline, so recovery
+does not turn initial catalogue data into a flood of update pulses.
+
 During validation of the `leynos` workspace, the upstream Lody observer used
 approximately 4.4 GiB of resident memory after hydration; the collector and API
 used roughly 90 MiB each. These are single-run observations, rather than

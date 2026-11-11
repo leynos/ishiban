@@ -377,6 +377,28 @@ their normal cues. The local subscription wrapper in
 `BoardStore` updates, testing that same startup order without relying on React
 to batch frames. Keep that wrapper local to this regression.
 
+The owned catalogue refresher catches SQLAlchemy `OperationalError` and retries
+with exponential delays from one to 30 seconds, resetting after success.
+Cancellation interrupts the retry sleep and uses the existing task reaper.
+Initial retries retain their catalogue and `catalogue_ready` phase until the
+attempt settles; periodic retries retain `following`. A storage warning is
+persisted when possible, otherwise a fixed diagnostic is logged without raw
+exception details. `tests/test_collector_storage_recovery.py` keeps its fault
+injection and controlled retry helpers local to the real-store recovery tests.
+Both collector suites reuse `storage_support.observer_frame` to adapt committed
+observer fixtures to their isolated `w1` workspace; keep this helper scoped to
+those journal fixtures rather than general input rewriting.
+
+`tests/test_runtime_evidence_properties.py` drives the real store through 40
+generated histories of at most 12 actions, plus explicit mixed-source and
+restart examples. Its independent model checks every committed prefix across
+persisted observations, metadata, catalogue updates, turn events and generation
+changes. It checks runtime replacement and preservation, evidence generations,
+activity cursors and PR context. Mutating metadata to erase state or a turn to
+lose its evidence generation makes the corresponding assertion fail. The model
+and action builders belong to this suite; they are finite test evidence, not a
+formal proof or a second production policy implementation.
+
 The public-preview and turn-transition property modules keep their own explicit
 copy, typing and Hypothesis imports. Their exact file-pair exception covers a
 reviewed seven-line declaration fragment, with no scenario or oracle logic. Do
@@ -541,6 +563,13 @@ route. The inspector keeps web-root/tab-query construction in its private web
 link resolver and native URI construction in the target resolver. These helpers
 belong only to inspector navigation, not general URL rewriting. Copying the raw
 CLI identity remains supported.
+
+Both singular Lody readers place their options before `--` and pass the exact
+session identity as the final operand. This includes option-like identities
+such as `-example`; accepting an opaque ID at an HTTP boundary must not turn it
+into a CLI option. Query-route tests use `cmd-mox` to check the complete
+argument vector, while the activity reader's native-process regression retains
+its bounded transport and cleanup coverage.
 
 Metadata-cache warnings use fixed `capacity`, `deadline`, `protocol` and `cli`
 categories. Recency storage failures use `storage`; incomplete GitHub title
