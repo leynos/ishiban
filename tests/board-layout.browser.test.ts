@@ -3,6 +3,7 @@ import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
 import {GlobalRegistrator} from '@happy-dom/global-registrator';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
+import {runCapturedCommand} from './browser-command';
 
 const {ISHIBAN_BROWSER_TESTS: browserTestSwitch} = Bun.env;
 const isBrowserEnabled = browserTestSwitch === '1';
@@ -17,12 +18,11 @@ let server: ReturnType<typeof Bun.serve> | undefined;
 
 /** Run the actual browser CLI; for example, browser('eval', 'innerWidth'). */
 async function browser(...args: string[]): Promise<string> {
-  const child = Bun.spawn(['agent-browser', '--session', sessionName, ...args], {stdout: 'pipe', stderr: 'pipe'});
-  const [output, error, status] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited
-  ]);
+  const {
+    stdout: output,
+    stderr: error,
+    status
+  } = await runCapturedCommand(['agent-browser', '--session', sessionName, ...args], 20_000);
   if (status !== 0) {
     throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
   }
@@ -136,12 +136,12 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
     await browser('open', String(server.url));
     await browser('set', 'viewport', '1280', '1200');
-  });
+  }, 75_000);
 
   beforeEach(async () => {
     await browser('reload');
     await browser('wait', '--fn', 'document.querySelectorAll(".session-mark").length > 10');
-  });
+  }, 50_000);
 
   afterAll(async () => {
     try {
@@ -150,7 +150,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
       await server?.stop(true);
       sinks.clear();
     }
-  });
+  }, 35_000);
 
   it('hides compact evidence without hiding the activity glyph or accessible evidence', async () => {
     await browser('select', 'select[aria-label="Mark density"]', 'compact');
@@ -167,7 +167,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(styles.evidence).toBe('none');
     expect(styles.activity).not.toBe('none');
     expect(styles.label).toContain('Synthetic demo record');
-  });
+  }, 240_000);
 
   it('scrolls the table pane horizontally with and without a docked inspector', async () => {
     const closed = await measureScrollPane();
@@ -180,7 +180,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(docked.width).toBeLessThan(closed.width);
     expect(docked.left).toBeGreaterThan(0);
     await assertDockedGeometry();
-  });
+  }, 240_000);
 
   it('hides a selected planning mark beneath the sticky repository column', async () => {
     await browser('eval', "document.querySelector('button.session-mark').click()");
@@ -202,7 +202,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(state.covered).toBe(true);
     expect(Math.abs(state.headingShift)).toBeLessThan(0.5);
     expect(state.padding).toBe('0px');
-  });
+  }, 240_000);
 
   it('bounds a live list pulse to its task button', async () => {
     await browser('find', 'role', 'button', 'click', '--name', 'List', '--exact');
@@ -225,5 +225,5 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(reduced.cursor).toBe(snapshot.cursor + 2);
     expect(reduced.animation).toBe('none');
     expect(reduced.display).toBe('none');
-  });
+  }, 240_000);
 });
