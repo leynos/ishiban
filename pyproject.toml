@@ -471,10 +471,6 @@ members = ["ishiban/storage/session_events.py", "ishiban/storage/writer.py"]
 reason = "Keep explicit module imports and calls to the shared finish_event primitive at distinct transaction boundaries; shared timestamp and field logic has been extracted. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-unit = "tests/test_observation_behaviour.py"
-reason = "Keep the two explicit protocol envelopes in the restart scenario: persisted completion and next-generation metadata have different evidence contracts. See docs/developers-guide.md#duplication-review."
-
-[[tool.duplication_gate.allow]]
 members = ["ishiban/domain.py::Envelope", "ishiban/domain.py::CatalogueEntry", "ishiban/storage/journal_writer.py::JournalEvent"]
 reason = "Keep inbound observation, catalogue enrichment and normalized journal event contracts independent; repeated typed fields do not share validation, requirements or version boundaries. See docs/developers-guide.md#duplication-review."
 
