@@ -97,11 +97,45 @@ async function watchPulse(cursor: number): Promise<void> {
   );
 }
 
+/** Measure rendered board geometry; for example, await assertDockedGeometry(). */
+async function assertDockedGeometry(): Promise<void> {
+  const geometry = JSON.parse(
+    await browser(
+      'eval',
+      `(()=>{
+      const main=document.querySelector('.board-main').getBoundingClientRect();
+      const inspector=document.querySelector('.session-inspector').getBoundingClientRect();
+      const scroll=document.querySelector('.board-scroll');
+      return {mainHeight:main.height,inspectorHeight:inspector.height,
+        mainRight:main.right,inspectorLeft:inspector.left,
+        paddingRight:Number.parseFloat(getComputedStyle(scroll).paddingRight),
+        rootFontSize:Number.parseFloat(getComputedStyle(document.documentElement).fontSize)};
+    })()`
+    )
+  );
+  expect(Math.abs(geometry.inspectorHeight - geometry.mainHeight)).toBeLessThan(1);
+  expect(Math.abs(geometry.inspectorLeft - geometry.mainRight)).toBeLessThan(1);
+  expect(Math.abs(geometry.paddingRight - geometry.rootFontSize * 0.6)).toBeLessThan(0.1);
+}
+
+/** Measure the table pane; for example, await measureScrollPane(). */
+async function measureScrollPane() {
+  return JSON.parse(
+    await browser(
+      'eval',
+      `(()=>{const s=document.querySelector('.board-scroll');
+        s.scrollLeft=s.scrollWidth;
+        return {left:s.scrollLeft,width:s.clientWidth,content:s.scrollWidth,
+          page:document.documentElement.scrollWidth,viewport:innerWidth};})()`
+    )
+  );
+}
+
 describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   beforeAll(async () => {
     server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
     await browser('open', String(server.url));
-    await browser('set', 'viewport', '1280', '900');
+    await browser('set', 'viewport', '1280', '1200');
   });
 
   beforeEach(async () => {
@@ -136,19 +170,16 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   });
 
   it('scrolls the table pane horizontally with and without a docked inspector', async () => {
-    const measure = `(()=>{const s=document.querySelector('.board-scroll');
-      s.scrollLeft=s.scrollWidth;
-      return {left:s.scrollLeft,width:s.clientWidth,content:s.scrollWidth,
-        page:document.documentElement.scrollWidth,viewport:innerWidth};})()`;
-    const closed = JSON.parse(await browser('eval', measure));
+    const closed = await measureScrollPane();
     expect(closed.page).toBe(closed.viewport);
     expect(closed.content).toBeGreaterThan(closed.width);
     expect(closed.left).toBeGreaterThan(0);
     await browser('eval', "document.querySelector('button.session-mark').click()");
-    const docked = JSON.parse(await browser('eval', measure));
+    const docked = await measureScrollPane();
     expect(docked.page).toBe(docked.viewport);
     expect(docked.width).toBeLessThan(closed.width);
     expect(docked.left).toBeGreaterThan(0);
+    await assertDockedGeometry();
   });
 
   it('hides a selected planning mark beneath the sticky repository column', async () => {
