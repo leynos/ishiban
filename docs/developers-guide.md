@@ -46,8 +46,11 @@ URLs and issue bounded read-only GraphQL queries. No generic command-execution
 helper or public adapter is introduced by these private runtime modules.
 
 SQLite WAL, foreign keys, busy timeout, and explicit transaction isolation are
-configured by `ishiban/storage/`. Alembic applies the initial schema on
-startup. Wheels include the canonical `migrations/` tree at
+configured by `ishiban/storage/`. Collector startup applies Alembic migrations
+to the journal. API startup uses `Store.initialize(migrate=False)` to verify
+the existing Alembic head without upgrading the journal. API startup fails if
+the schema is missing or outdated; start the collector to apply migrations
+before starting the API. Wheels include the canonical `migrations/` tree at
 `ishiban/migrations/`; embedded initialization uses those installed scripts
 with an in-memory Alembic configuration. Source checkouts retain the top-level
 script tree and `alembic.ini` fallback. Embedded migrations preserve the
@@ -477,8 +480,19 @@ in the process suites.
 `tests/test_request_body_streaming.py` invokes the real ASGI route with
 separate request frames and no `Content-Length`. It checks valid JSON at the
 cumulative activity-body limit and rejection one byte above it before batch
-decoding. Keep its controlled sender and receiver local to this body-limit
-contract; ordinary HTTP cases use the existing Falcon test helpers.
+decoding. Both removing the cumulative guard and replacing it with a per-chunk
+check make this test fail. Keep its controlled sender and receiver local to
+this body-limit contract; ordinary HTTP cases use the existing Falcon test
+helpers.
+
+`tests/session-updates-property.test.ts` drives the real update-cue hook with
+two fixture sessions, controlled timers, and an independent operation-level
+map. It checks 50 generated histories of 1 to 14 operations from 18 actions,
+plus four explicit histories of up to 17 operations. Actions cover semantic and
+revision-only changes, lazy enrichment, staggered 900 ms expiry, workspace
+changes, and collector baseline resets. Each history owns its renderer and fake
+timers and restores both in `finally`. Keep its clock driver and oracle local
+to this cue contract; reuse the existing board snapshot fixture.
 
 The readiness tests in `tests/test_api.py` inject SQLAlchemy read failures at
 the bounded journal query: `/ready` must fail while `/health` remains live.

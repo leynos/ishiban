@@ -1569,3 +1569,31 @@ the test; the request-body source was restored byte for byte. Twenty-two
 focused streaming, batch API, and interface-state cases pass. The sidecar
 property description now distinguishes the durable cache's lack of expiry from
 the separate lazy-activity request-cache TTL.
+
+The separate per-chunk negative control replaces the cumulative comparison with
+a single-chunk comparison. The existing two-frame ASGI test then fails with
+HTTP 200 instead of 413, so Falcon does not hide the cumulative boundary in
+this case. The request-body source was restored exactly and the focused test
+passes; no additional direct-helper test is needed.
+
+The developer guide now distinguishes journal schema ownership explicitly: the
+collector applies migrations, while API startup verifies the existing Alembic
+head without upgrading it and fails when the journal schema is missing or
+outdated.
+
+### Generated update-cue histories, 11 November 2026
+
+The new update-cue property drives the real hook across two sessions with an
+independent operation-level oracle. Fifty generated histories contain 1 to 14
+operations from 18 actions; four explicit histories contain up to 17
+operations. The controls witness per-session isolation, revision-only changes
+that preserve an existing cue, lazy enrichment that clears only its own cue,
+staggered 900 ms expiry, and quiet workspace, generation, connecting, and
+catalogue-ready baselines.
+
+Every history owns fake timers and renderer cleanup in `finally`; the model
+reuses the board snapshot fixture without calling the production comparison
+helper. Changing per-session deletion to clearing the entire cue map makes the
+isolation witness lose the other session cue and fail. The runtime source was
+restored byte for byte. Aggregate gates, publication, and affected confirmation
+remain separate acceptance steps.
