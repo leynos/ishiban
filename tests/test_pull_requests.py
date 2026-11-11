@@ -9,7 +9,7 @@ import pytest
 
 from ishiban.collector import Collector
 from ishiban.domain import CatalogueEntry, PullRequest
-from ishiban.lody import read_pull_requests
+from ishiban.lody import GitHubStackFacts, read_pull_requests
 from ishiban.protocol import Catalogue, RawPR, RawSession
 
 if typ.TYPE_CHECKING:
@@ -203,7 +203,12 @@ async def test_nonzero_gh_exit_preserves_valid_partial_graphql_data(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Valid stdout remains useful when gh also reports GraphQL errors."""
+    """The full query is well formed and partial GraphQL data stays useful."""
+    expected_query = (
+        'query {p0:repository(owner:"example",name:"project")'
+        "{pullRequest(number:1){title state isDraft "
+        "baseRefName headRefName isCrossRepository mergedAt}}}"
+    )
     payload = {
         "data": {
             "p0": {
@@ -211,6 +216,10 @@ async def test_nonzero_gh_exit_preserves_valid_partial_graphql_data(
                     "title": "Plan: retain this record",
                     "state": "OPEN",
                     "isDraft": False,
+                    "baseRefName": "prerequisite-branch",
+                    "headRefName": "dependent-branch",
+                    "isCrossRepository": False,
+                    "mergedAt": None,
                 }
             }
         },
@@ -218,8 +227,9 @@ async def test_nonzero_gh_exit_preserves_valid_partial_graphql_data(
     }
     source = "\n".join([
         f"#!{sys.executable}",
+        "import json",
         "import sys",
-        "sys.stdin.read()",
+        f"assert json.load(sys.stdin) == {{'query': {expected_query!r}}}",
         f"print({json.dumps(payload)!r})",
         "raise SystemExit(1)",
         "",
@@ -235,6 +245,14 @@ async def test_nonzero_gh_exit_preserves_valid_partial_graphql_data(
         title="Plan: retain this record",
     ), "A nonzero CLI exit must preserve usable typed GraphQL records."
     assert result.is_partial is True, "The retained facts must carry a partial warning."
+    assert result.stack == {
+        PR_URL: GitHubStackFacts(
+            base_ref_name="prerequisite-branch",
+            head_ref_name="dependent-branch",
+            is_cross_repository=False,
+            merged_at=None,
+        )
+    }, "Partial GraphQL success must keep typed stack evidence."
     assert "private diagnostic must not escape" not in repr(result), (
         "Raw GraphQL diagnostics must not survive in the lookup result."
     )

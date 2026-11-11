@@ -3,6 +3,7 @@ import type {ReactElement} from 'react';
 import type {Session} from '../contracts';
 import {AgentDetails} from './agent-details';
 import {usePullRequestTitles} from './pull-request-titles';
+import {selectStackTop, type PrStackFacts} from './pr-stack-order';
 import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from './board-model';
 
 interface SessionInspectorProps {
@@ -97,13 +98,24 @@ function isWebUrl(value: string): boolean {
   }
 }
 
-/** Prefer the first supplied PR title; for example, keep the session name below it. */
-function InspectorTitle({session}: {readonly session: Session}): ReactElement {
-  const primary = session.pullRequests.find((pr) => pr.title?.trim());
+/** Link a heading only when its text is the actual PR title. */
+function canLinkPrTitle(title: string | undefined, href: string | undefined): boolean {
+  return Boolean(title) && href !== undefined && isWebUrl(href);
+}
+
+/** Choose a PR before checking titles, so late titles cannot replace its identity. */
+function InspectorTitle({
+  session,
+  stack
+}: {
+  readonly session: Session;
+  readonly stack: Readonly<Record<string, PrStackFacts>>;
+}): ReactElement {
+  const primary = selectStackTop(session.pullRequests, stack);
   const prTitle = primary?.title?.trim();
   const title = prTitle || session.title;
   const href = primary?.url;
-  const canLink = href !== undefined && isWebUrl(href);
+  const canLink = canLinkPrTitle(prTitle, href);
   return (
     <>
       <h3 className="session-inspector__title">
@@ -285,7 +297,7 @@ export function SessionInspector(props: SessionInspectorProps): ReactElement {
           Close
         </button>
       </header>
-      <InspectorTitle session={session} />
+      <InspectorTitle session={session} stack={session.inspectorStack ?? {}} />
       <SessionLink {...props} />
       <p className="session-inspector__description" id="inspector-description">
         {session.stageReason}

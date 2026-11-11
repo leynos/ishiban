@@ -32,7 +32,13 @@ it.skipIf(!capturePath)('captures inspector URLs for exact source session identi
                 sessionId,
                 agent: {agentType: 'codex', configurationId: null, configurationName: null}
               }
-            : {workspaceId: 'w1', sessionId, titles: {[prUrl]: 'Resolved title'}}
+            : {
+                workspaceId: 'w1',
+                sessionId,
+                lastEventId: session.lastEventId,
+                titles: {[prUrl]: 'Resolved title'},
+                stack: {}
+              }
         );
       },
       {preconnect: () => null}

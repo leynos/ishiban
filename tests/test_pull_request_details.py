@@ -8,7 +8,7 @@ import pytest
 
 import ishiban.pull_request_details as details
 from ishiban.domain import PullRequest
-from ishiban.lody import _PullRequestLookup
+from ishiban.lody import GitHubStackFacts, _PullRequestLookup
 from ishiban.protocol import ProtocolError
 from ishiban.pull_request_details import PullRequestTitles
 
@@ -61,6 +61,45 @@ async def test_default_lookup_uses_adapter_available_at_construction(
     reader = PullRequestTitles()
     assert await reader.read(requested) == {requested[0]: f"Title {requested[0]}"}, (
         "The ordinary service must use the adapter bound at construction."
+    )
+    adapter.assert_awaited_once_with(requested)
+
+
+@pytest.mark.asyncio
+async def test_stack_facts_share_the_bounded_title_lookup_and_cache() -> None:
+    """One inspector read supplies titles and branch facts without another CLI call."""
+    requested = [url(740), url(364)]
+    facts = GitHubStackFacts(
+        base_ref_name="prerequisite",
+        head_ref_name="dependent",
+        is_cross_repository=False,
+        merged_at=None,
+    )
+    lookup = _PullRequestLookup(
+        records={requested[1]: PullRequest(requested[1], "open", "Dependent")},
+        is_partial=True,
+        stack={requested[1]: facts},
+    )
+    adapter = mock.AsyncMock(return_value=lookup)
+    reader = PullRequestTitles(lookup=adapter)
+
+    expected_titles = {requested[1]: "Dependent"}
+    expected_stack = {
+        requested[1]: {
+            "baseRefName": "prerequisite",
+            "headRefName": "dependent",
+            "isCrossRepository": False,
+            "mergedAt": None,
+        }
+    }
+    assert await reader.read(requested) == expected_titles, (
+        "The first read must retain a successful sibling's title."
+    )
+    assert await reader.stack_for(requested) == expected_stack, (
+        "Partial lookup must retain the successful sibling's typed stack facts."
+    )
+    assert await reader.read(requested) == expected_titles, (
+        "The second read must serve the title from cache."
     )
     adapter.assert_awaited_once_with(requested)
 

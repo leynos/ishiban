@@ -230,11 +230,24 @@ async def read_catalogue(workspace: str, executable: str = "lody") -> Catalogue:
 
 
 class GitHubPR(msgspec.Struct, rename="camel"):
-    """The bounded fields needed to classify a PR."""
+    """Bounded classification and inspector fields read from a GitHub PR."""
 
     title: str
     state: str
     is_draft: bool
+    base_ref_name: str | None = None
+    head_ref_name: str | None = None
+    is_cross_repository: bool | None = None
+    merged_at: str | None = None
+
+
+class GitHubStackFacts(msgspec.Struct, rename="camel"):
+    """Inspector-only branch and merge facts; absent fields prove no edge."""
+
+    base_ref_name: str | None
+    head_ref_name: str | None
+    is_cross_repository: bool | None
+    merged_at: str | None
 
 
 class GitHubResult(msgspec.Struct):
@@ -253,6 +266,7 @@ class _PullRequestLookup(msgspec.Struct):
 
     records: dict[str, PullRequest]
     is_partial: bool
+    stack: dict[str, GitHubStackFacts] | None = None
 
 
 async def read_pull_requests(urls: list[str]) -> _PullRequestLookup:
@@ -268,6 +282,7 @@ async def read_pull_requests(urls: list[str]) -> _PullRequestLookup:
         Available facts and whether any requested fact could not be refreshed.
     """
     results: dict[str, PullRequest] = {}
+    stack: dict[str, GitHubStackFacts] = {}
     is_partial = False
     for start in range(0, len(urls), 40):
         batch = [url for url in urls[start : start + 40] if PR_URL.fullmatch(url)]
@@ -278,8 +293,9 @@ async def read_pull_requests(urls: list[str]) -> _PullRequestLookup:
                 is_partial = True
                 continue
             results.update(lookup.records)
+            stack.update(lookup.stack or {})
             is_partial |= lookup.is_partial
-    return _PullRequestLookup(records=results, is_partial=is_partial)
+    return _PullRequestLookup(records=results, is_partial=is_partial, stack=stack)
 
 
 async def _read_pr_batch(urls: list[str]) -> _PullRequestLookup:
@@ -320,6 +336,7 @@ async def _read_pr_batch(urls: list[str]) -> _PullRequestLookup:
     return _PullRequestLookup(
         records=lookup.records,
         is_partial=lookup.is_partial or returncode != 0 or bool(result.errors),
+        stack=lookup.stack,
     )
 
 
@@ -343,7 +360,8 @@ def _pr_field(index: int, url: str) -> str:
     owner, repository, number = match.groups()
     return (
         f'p{index}:repository(owner:"{owner}",name:"{repository}")'
-        f"{{pullRequest(number:{number}){{title state isDraft}}}}"
+        f"{{pullRequest(number:{number}){{title state isDraft "
+        "baseRefName headRefName isCrossRepository mergedAt}}"
     )
 
 
@@ -356,6 +374,7 @@ def _pr_results(urls: list[str], result: GitHubResult) -> _PullRequestLookup:
         Known records and a marker for inaccessible or absent items.
     """
     records: dict[str, PullRequest] = {}
+    stack: dict[str, GitHubStackFacts] = {}
     is_partial = result.data is None
     repositories = result.data or {}
     for index, url in enumerate(urls):
@@ -368,4 +387,10 @@ def _pr_results(urls: list[str], result: GitHubResult) -> _PullRequestLookup:
         if status == "open" and pr.is_draft:
             status = "draft"
         records[url] = PullRequest(url=url, status=status, title=pr.title)
-    return _PullRequestLookup(records=records, is_partial=is_partial)
+        stack[url] = GitHubStackFacts(
+            base_ref_name=pr.base_ref_name,
+            head_ref_name=pr.head_ref_name,
+            is_cross_repository=pr.is_cross_repository,
+            merged_at=pr.merged_at,
+        )
+    return _PullRequestLookup(records=records, is_partial=is_partial, stack=stack)

@@ -68,6 +68,12 @@ async def test_browser_inspector_urls_preserve_exact_source_ids(
                     == titles.json["sessionId"]
                     == item["sessionId"]
                 ), "Both inspector readers must use the exact source identity."
+                assert titles.json["stack"] == {}, (
+                    "Missing facts must not invent stack edges."
+                )
+                assert isinstance(titles.json["lastEventId"], int), (
+                    "The browser needs the source revision to reject stale responses."
+                )
             after = (await store.snapshot(), await store.events(0))
     assert before == after, "Inspector enrichment must leave the journal unchanged."
     assert agent_reader.await_count == title_reader.await_count == len(ids), (

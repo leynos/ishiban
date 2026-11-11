@@ -349,10 +349,13 @@ last-known observations, stop the API and collector, remove
 shared `--state-directory`), then restart both processes and refresh the
 browser. Previously lost browser-only results need to be collected again.
 
-The inspector prefers a known PR name as its linked heading, with the session
-title underneath. Missing PR names, including already merged PRs, are loaded on
-demand. PR links also show a muted `#123`-style number. Inspector links are
-underlined on hover.
+The inspector uses the top PR in a stack as its linked heading, with the
+session title underneath. Prerequisites do not displace the PR that would merge
+last. When former stack relationships are unavailable, an active PR takes
+precedence over merged prerequisites. Missing PR names, including already
+merged PRs, are loaded on demand. Titles are preserved as written; an issue
+reference in the title is distinct from the PR link's number. PR links also
+show a muted `#123`-style number. Inspector links are underlined on hover.
 
 The board groups sessions by `parentSessionId`, showing one entry for each
 family root. The root supplies the PR, branch, title, and workflow context; the

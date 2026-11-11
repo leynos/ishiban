@@ -502,9 +502,24 @@ configuration name; configuration commands never use `--show-secrets`. The copy
 control uses the Lody projection's session ID directly, not `acpSessionId`.
 Clipboard failures are reported accessibly. Missing PR names are fetched only
 for the selected session and cached separately; this includes terminal PRs and
-cannot change workflow classification. The primary known PR name becomes a
-linked heading, with the original session title retained below it. PR numbers
-are parsed from the supplied URLs and rendered in the neutral text colour.
+cannot change workflow classification. Inspector-local stack facts share the
+existing bounded GitHub lookup and TTL cache, even when all associated PRs
+already have titles. Their shared URL admission helper retains the first five
+distinct canonical PR URLs in source order and is local to inspector reads. The
+title response retains its title map and adds nullable base/head branch, fork
+and merge-time facts plus the session revision. The Effect boundary validates
+workspace, session and revision before using them; no stack facts enter the
+journal or browser preferences.
+
+`src/ui/pr-stack-order.ts` selects known graph tips: a same-repository,
+non-fork base/head branch match identifies a prerequisite. Tips use active,
+merged, then closed/unknown lifecycle priority, chronological merge time and a
+stable URL tie-break. A cycle without tips uses that same fallback. GitHub can
+retarget dependent branches after prerequisites merge, so lifecycle priority is
+a fallback rather than proof of dependency. Selection precedes title lookup,
+preventing a late prerequisite title from replacing the chosen PR. The exact
+title becomes the linked heading, with the session title below it. PR numbers
+are parsed from URLs and rendered separately in neutral text.
 
 The shared bounded JSON-object reader belongs only to read-only CLI adapters.
 Catalogue, activity and metadata readers supply their own limits and perform

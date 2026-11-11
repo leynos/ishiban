@@ -652,11 +652,15 @@ sticky column does not jump when scrolling begins.
 
 The inspector copies the Lody CLI session ID and lazily resolves agent type and
 configuration display name through a bounded TTL cache. Provider ACP IDs are
-not the copy target. A known PR name is the linked primary heading; the session
-title remains a subtitle, and PR links show muted numbers. Missing names for
-terminal PRs are resolved on inspector demand. Metadata-only unknown updates
-must not erase browser-local on-demand activity; fresh execution evidence and
-workspace changes retain precedence.
+not the copy target. The inspector chooses the top PR in a stack before
+resolving its name; a prerequisite title arriving later cannot replace it.
+Inspector-only GitHub branch/fork facts identify graph tips, with lifecycle,
+merge-time and stable-URL fallback when relationships are unavailable. The
+exact PR title is the linked heading; the session title remains a subtitle, and
+PR links show muted numbers. Missing names for terminal PRs are resolved on
+inspector demand. Metadata-only unknown updates must not erase browser-local
+on-demand activity; fresh execution evidence and workspace changes retain
+precedence.
 
 [ADR 004](adr-004-persist-on-demand-activity.md) extends the original activity
 lifetime with a workspace/session cache in a separate SQLite sidecar. API

@@ -134,8 +134,11 @@ class PullRequestDetailsResource:
         prs = msgspec.convert(
             projection.get("pullRequests", []), type=list[PullRequest]
         )
-        urls = [pr.url for pr in prs if not (pr.title or "").strip()]
+        urls = [pr.url for pr in prs]
         titles = await self.reader.read(urls)
+        stack = await self.reader.stack_for(urls)
         _set_scoped_detail(
             resp, (self.store.workspace_id, session_id), "titles", titles
         )
+        resp.media["stack"] = stack
+        resp.media["lastEventId"] = projection["lastEventId"]

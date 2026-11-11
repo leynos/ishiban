@@ -141,6 +141,15 @@ website's root path is external: dot-segment root IDs receive an explicit
 unavailable-link notice while the raw copyable ID remains usable. A selected
 child ID stays safe in the web link's tab query.
 
+Inspector PR selection retains the family root's associations and chooses a
+stack tip from validated same-repository, non-fork branch relationships.
+Lifecycle, merge-time and stable-URL ordering resolve remaining ambiguity,
+including branches retargeted after a prerequisite merge. Missing or cyclic
+relationships use that fallback; they do not invent dependency evidence. The
+chosen identity is independent of which title arrives first. These facts are
+lazy inspector metadata, shared with the existing title cache, and neither
+change workflow classification nor enter the observation journal.
+
 ## Consequences
 
 The board can show one stable task context while exposing the tab whose runtime

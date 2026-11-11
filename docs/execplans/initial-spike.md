@@ -1206,3 +1206,26 @@ forcing cleanup failure. It failed with a raw timeout before the fix and now
 preserves the cancellation outcome. Existing during-cleanup cancellation and
 uncancelled-error cases remain covered. Candidate-specific gates and post-push
 disposition are tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Queue histories and inspector stack heading, 11 November 2026
+
+The generated activity checks now vary bounded visibility histories, revision
+placement and request-completion order through the real lazy scanner. An
+independent eligibility oracle checks emitted identities, while explicit
+controls check batch/concurrency limits, stale results, dropped-work
+rediscovery and unchanged durable cursor semantics. Shared activity transport
+and viewport fixtures replace repeated test plumbing; an obsolete import-only
+duplication exception is removed and the existing cross-domain accessor guard
+exception follows its moved function.
+
+For multiple PRs the inspector now chooses a graph tip, with explicit fallback
+when GitHub has retargeted branches or metadata is unavailable. Branch and
+merge facts remain bounded inspector-only enrichment. The actual example is
+child tab `8bc61941-06c0-4536-aae3-3e3d8e326510`, whose parent holds the
+[merged prerequisite PR #740](https://github.com/leynos/axinite/pull/740) and
+[open dependent PR #364](https://github.com/leynos/axinite/pull/364). The
+latter's existing title includes issue reference `(#333)`; that exact title is
+retained. It is not renamed to PR #333. Named regressions cover ordering, fork
+isolation, fallback and late title arrival. Candidate-specific gates, browser
+validation and post-push dispositions remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
