@@ -624,3 +624,7 @@ reason = "Keep literal positive and intentionally invalid preference callbacks s
 [[tool.duplication_gate.allow]]
 members = ["tests/session-families.test.ts", "tests/session-family-graphs.test.ts", "tests/session-family-timestamps.test.ts"]
 reason = "Keep explicit dependencies for independent family-selection, graph-oracle and timestamp-oracle tests. The reviewed seven-line shallow declaration fragment shares tool, contract and fixture imports plus a base-session binding; the session factory is already shared. An import-only facade would obscure dependencies and the oracles must not reuse production resolution logic. No scenario or graph/timestamp algorithm is duplicated. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_public_projection_properties.py", "tests/test_turn_transition_properties.py"]
+reason = "Keep explicit copy, typing and Hypothesis imports in independent public-preview and turn-transition property modules. The reviewed seven-line declaration fragment contains no executable scenario or oracle logic. A dependency facade or import alias solely to alter the clone metric would obscure these boundaries. Recheck this exact file pair when either module changes; do not extend it to shared algorithms. See docs/developers-guide.md#duplication-review."
