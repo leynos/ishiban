@@ -82,6 +82,8 @@ def _fake_lody(
             lock_path = pathlib.Path({str(tmp_path / "counter.lock")!r})
             active_path = pathlib.Path({str(tmp_path / "active")!r})
             maximum_path = pathlib.Path({str(tmp_path / "maximum")!r})
+            ready_dir = pathlib.Path({str(tmp_path / "ready")!r})
+            release_path = pathlib.Path({str(tmp_path / "release")!r})
             with lock_path.open("a+") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 active = int(
@@ -93,7 +95,12 @@ def _fake_lody(
                 )
                 maximum_path.write_text(str(max(active, previous)))
                 fcntl.flock(lock, fcntl.LOCK_UN)
-            time.sleep({delay_before_output!r})
+            ready_dir.joinpath(args[2]).touch()
+            deadline = time.monotonic() + 3
+            while not release_path.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if not release_path.exists():
+                raise RuntimeError('parallel observer barrier was not released')
             with lock_path.open("a+") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 active_path.write_text(str(int(active_path.read_text()) - 1))
@@ -266,22 +273,45 @@ async def test_unrelated_reads_use_at_most_four_cli_processes(
     executable, _call_log = _fake_lody(
         tmp_path,
         _response(),
-        delay_before_output=0.12,
         track_concurrency=True,
     )
+    ready_dir = tmp_path / "ready"
+    ready_dir.mkdir()
     service = lazy_activity.LazyActivity("workspace-1", "leynos", str(executable))
-    results = await asyncio.gather(
-        *(service.read(f"session-{index}", 1) for index in range(8))
-    )
+    tasks = [
+        asyncio.create_task(service.read(f"session-{index}", 1)) for index in range(8)
+    ]
+    try:
+
+        async def four_children_started() -> None:
+            """Wait for four real children to enter the shared critical section."""
+            while True:
+                if sum(1 for _ in ready_dir.iterdir()) == 4:
+                    return
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(four_children_started(), timeout=2)
+        maximum = await asyncio.to_thread(
+            (tmp_path / "maximum").read_text,
+            encoding="utf-8",
+        )
+        assert maximum == "4", "At most four children can enter the barrier."
+    finally:
+        (tmp_path / "release").touch()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        await service.close()
     assert all(result is not None for result in results), (
         "Each valid independent observation must complete."
     )
-    maximum = await asyncio.to_thread(
-        (tmp_path / "maximum").read_text,
-        encoding="utf-8",
+    assert not any(isinstance(result, BaseException) for result in results), (
+        "All eight reads must complete after the barrier is released."
     )
-    assert maximum == "4", "No more than four Lody observer processes may overlap."
-    await service.close()
+    final_maximum = await asyncio.to_thread(
+        (tmp_path / "maximum").read_text, encoding="utf-8"
+    )
+    assert final_maximum == "4", (
+        "The second wave must also preserve the four-child concurrency limit."
+    )
 
 
 @pytest.mark.asyncio

@@ -106,7 +106,7 @@ def spawned_children(
                     "import {test} from 'bun:test';\n"
                     "import {writeSync} from 'node:fs';\n"
                     "test('flood', async () => {\n"
-                    f"  writeSync(1, 'x'.repeat({MAX_CAPTURE_BYTES + 1}));\n"
+                    f"  writeSync(1, 'x'.repeat({MAX_CAPTURE_BYTES * 16}));\n"
                     "  await new Promise(() => {});\n"
                     "});\n"
                 ),
@@ -144,8 +144,11 @@ async def test_real_bun_capture_limits_reap_their_child(
 
     started = time.monotonic()
     with pytest.raises(AssertionError, match=scenario.diagnostic):
-        await capture_bun_test_output(
-            tmp_path, test_file=str(test_file), variable="ISHIBAN_TEST_CAPTURE"
+        await asyncio.wait_for(
+            capture_bun_test_output(
+                tmp_path, test_file=str(test_file), variable="ISHIBAN_TEST_CAPTURE"
+            ),
+            timeout=9,
         )
 
     assert time.monotonic() - started < 5, (

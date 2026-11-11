@@ -4,11 +4,14 @@ import asyncio
 import pathlib
 import shlex
 import shutil
+import sys
+import time
 import typing as typ
 
 import pytest
 from cmd_mox import Invocation, Response
 from documentation_examples import load_user_guide_examples
+from merged_output_process import reap_merged_output_child
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
@@ -60,6 +63,8 @@ async def _run_example(argv: list[str], cwd: pathlib.Path) -> str:
     ------
     AssertionError
         If the command fails or exceeds its diagnostic output bound.
+    asyncio.CancelledError
+        If the caller cancels the command; the child is reaped first.
     """
     process = await asyncio.create_subprocess_exec(
         *argv,
@@ -67,6 +72,7 @@ async def _run_example(argv: list[str], cwd: pathlib.Path) -> str:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
+    cancellation: asyncio.CancelledError | None = None
     try:
         async with asyncio.timeout(5):
             output = await _bounded_command_output(process.stdout)
@@ -74,10 +80,31 @@ async def _run_example(argv: list[str], cwd: pathlib.Path) -> str:
         if process.returncode != 0:
             raise AssertionError(output.decode(errors="replace"))
         return output.decode(errors="replace")
+    except asyncio.CancelledError as exc:
+        cancellation = exc
+        raise
     finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
+        await reap_merged_output_child(process, cancellation=cancellation)
+
+
+@pytest.mark.asyncio
+async def test_guide_command_overflow_reaps_child_with_full_pipe(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Excess diagnostics cannot strand a guide command's killed child."""
+    script = tmp_path / "flood.py"
+    script.write_text(
+        "import os\nimport time\nos.write(1, b'x' * 1048576)\ntime.sleep(30)\n",
+        encoding="utf-8",
+    )
+    started = time.monotonic()
+    with pytest.raises(AssertionError, match="exceeded 8 KiB"):
+        await asyncio.wait_for(
+            _run_example([sys.executable, str(script)], tmp_path), timeout=9
+        )
+    assert time.monotonic() - started < 5, (
+        "A guide command's excess output must stop promptly after bounded cleanup."
+    )
 
 
 @pytest.mark.asyncio

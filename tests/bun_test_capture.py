@@ -4,6 +4,8 @@ import asyncio
 import os
 import pathlib
 
+from merged_output_process import reap_merged_output_child
+
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_CAPTURE_BYTES = 1024 * 1024
 
@@ -105,6 +107,8 @@ async def _run_bun_test(
     ------
     AssertionError
         If Bun fails or either channel exceeds one MiB.
+    asyncio.CancelledError
+        If the caller cancels the capture; the child is reaped first.
     """
     process = await asyncio.create_subprocess_exec(
         "bun",
@@ -115,6 +119,7 @@ async def _run_bun_test(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
+    cancellation: asyncio.CancelledError | None = None
     try:
         async with asyncio.timeout(20):
             completion = asyncio.gather(
@@ -134,11 +139,13 @@ async def _run_bun_test(
                 await asyncio.gather(completion, return_exceptions=True)
         if process.returncode != 0:
             raise AssertionError(output.decode(errors="replace"))
+    except asyncio.CancelledError as exc:
+        cancellation = exc
+        raise
+    else:
         return captured
     finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
+        await reap_merged_output_child(process, cancellation=cancellation)
 
 
 async def _read_bun_stdout(stdout: asyncio.StreamReader | None) -> bytes:

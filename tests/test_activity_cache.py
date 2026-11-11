@@ -283,10 +283,13 @@ async def test_cache_prunes_oldest_rows_per_workspace(
         await cache.remember(_projection("s1", state="idle"))
         await cache.remember(_projection("s2", state="running"))
         with sqlite3.connect(f"{journal_path}.activity.sqlite3") as connection:
-            connection.executemany(
+            update = connection.executemany(
                 "UPDATE activity_runtime_cache SET saved_at_ns = ? "
                 "WHERE workspace_id = ? AND session_id = ?",
-                [(0, "workspace-1", "s1"), (1, "workspace-1", "s2")],
+                [(0, "w1", "s1"), (1, "w1", "s2")],
+            )
+            assert update.rowcount == 2, (
+                "Both seeded workspace rows must receive deterministic ages."
             )
         await cache.remember(_projection("s3", state="waiting"))
         restored = await cache.merge([
