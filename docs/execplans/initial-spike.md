@@ -1229,3 +1229,17 @@ retained. It is not renamed to PR #333. Named regressions cover ordering, fork
 isolation, fallback and late title arrival. Candidate-specific gates, browser
 validation and post-push dispositions remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Idle stream heartbeat coverage, 11 November 2026
+
+The current-head pre-merge assessment identified missing coverage for idle SSE
+comments. A focused regression drives the real event-tail generator and a
+private SQLite store through repeated idle intervals. Heartbeats remain
+comments without event IDs and leave the durable cursor unchanged; a real
+journal event advances that cursor and restarts the idle interval. A bounded
+poll-wait driver yields through the event loop without waiting fifteen seconds
+in real time. Negative controls remove the heartbeat and idle-reset behaviour
+separately before restoring the exact production source. This adds acceptance
+coverage without changing the runtime contract. Candidate-specific gates and
+post-push disposition remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).

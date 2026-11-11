@@ -822,6 +822,13 @@ They are bounded generated scenarios with explicit controls, not an unbounded
 state-machine proof. The typed request accessor remains distinct from recency
 DOM-mark lookup; their reviewed duplicate guard has no shared scenario logic.
 
+Idle SSE heartbeat tests drive the real event-tail generator against a private
+store. Their bounded poll-wait driver belongs only to the stream test fixture;
+it substitutes the API module's local asyncio dependency while leaving the
+shared scheduler unchanged. It yields through the event loop and verifies wire
+comments, cursor stability and activity reset without adding a runtime clock
+interface.
+
 The batch API partitions current projections once before cache restoration and
 pending observations. Browser `ActivityVisibility` owns mark discovery and DOM
 observer cleanup, while the PR-title lookup owns its timeout and cancellation.
