@@ -581,6 +581,16 @@ available-member frames for the transport and packing suites, using current
 workspace and execution watermarks. Tests with different per-member history
 retain their own response fixtures.
 
+`tests/controlled-event-source.ts` owns the browser EventSource substitute for
+live-connection tests. Transport recovery and source-event validation reuse its
+replay URL, ready state, close count and scoped global installation; it does
+not implement journal replay or validate event payloads. Tests call the public
+`liveConnection` and assert applied evidence or snapshot recovery. Family
+timestamp tests construct numeric instants independently and encode
+offset/fraction variants, so their ordering oracle does not reuse the
+production timestamp parser. These finite generated checks complement the
+separate graph-reachability oracle.
+
 `tests/bun_test_capture.py` owns the bounded Bun child lifecycle shared by the
 recency, inspector-request and observed-timestamp cross-runtime contracts. It
 limits merged child output and a private POSIX FIFO to one MiB each while the
@@ -599,16 +609,17 @@ activity and semantic pulse comparisons. `batch_activity_api` owns only bounded
 HTTP decoding and response-waiter cleanup; `activity_api.resolve_activity`
 shares projection restoration and lookup precedence with the single-session
 route. `src/activity-batch.ts` owns incremental UTF-8 NDJSON decoding and
-Effect frame validation, with a 1,048,576-character frame limit and an
-eight-MiB response limit. These helpers are specific to activity reads and are
-not generic transport APIs. The browser pipelines two four-member batches; the
+Effect frame validation. The browser limits each decoded frame to 1,048,576
+JavaScript UTF-16 code units, excluding its newline, and each response to eight
+MiB of received bytes. These helpers are specific to activity reads and are not
+generic transport APIs. The browser pipelines two four-member batches; the
 shared reader permits four children and 64 pending observations with a
 45-second total lifetime. Metadata replay preserves in-flight identity
 ownership and execution-watermark reuse.
 
-The server pre-encodes each public batch frame, including its newline, against
-the browser's 1,048,576-byte UTF-8 limit. An oversized member becomes a typed
-`response_too_large` marker; a marker whose identity cannot fit causes a
+The server separately pre-encodes each public batch frame, including its
+newline, against a 1,048,576-byte UTF-8 limit. An oversized member becomes a
+typed `response_too_large` marker; a marker whose identity cannot fit causes a
 pre-stream HTTP 413. The browser keeps reading smaller siblings while one owned
 single-session GET recovers the marked member under the same batch deadline.
 The query route
@@ -714,9 +725,10 @@ size check. Session-show subprocess ownership remains with `SessionShowReader`.
 
 `src/bounded-frames.ts` is the shared transport-only owner for bounded NDJSON
 framing used by activity and recency reads. It handles UTF-8 chunk boundaries,
-frame and response byte limits, and isolation of invalid members. Endpoint
-callers retain their own schemas, identity checks, and execution-watermark
-validation; this helper is not a general HTTP or JSON abstraction.
+per-frame UTF-16 code-unit limits, total response byte limits, and isolation of
+invalid members. Endpoint callers retain their own schemas, identity checks,
+and execution-watermark validation; this helper is not a general HTTP or JSON
+abstraction.
 
 `src/request-lifetime.ts` owns the shared 50-second browser request deadline,
 abort-controller registration, and cleanup for lazy-activity and family-recency

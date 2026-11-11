@@ -1126,3 +1126,25 @@ waiver. This is a separate testability refactor; no new request, response or
 preference fields are introduced. The spike report retains its original
 measured runtime scope. Candidate-specific gates and affected reassessment
 remain tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Stream and timestamp boundary checks, 11 November 2026
+
+Fresh pre-merge findings identified missing source-event recovery assertions,
+limited generated timestamp precision and conflicting frame-limit wording.
+Tests now drive the actual live connection through valid source and observation
+events, invalid identities and cursors, and reset-required recovery. The shared
+EventSource fixture retains transport state and cleanup while production owns
+validation and replay.
+
+A separate generated oracle builds absolute microsecond instants and encodes
+varied offsets and fractional precision. It checks latest-tab selection,
+equal-instant tie-breaking and rejected calendar/offset values through public
+family grouping. These are bounded tests, not formal proofs. The developer
+guide distinguishes browser UTF-16 frame units from server UTF-8 frame bytes
+and total response bytes. No runtime behaviour changes.
+
+The declaration-only duplication exception now identifies all three family test
+modules; no scenario or oracle algorithm is shared. The obsolete activity
+resource pair exception is removed because the clock refactor no longer matches
+it. Candidate-specific quality gates, negative controls and affected assessment
+remain recorded in [PR #9](https://github.com/leynos/ishiban/pull/9).

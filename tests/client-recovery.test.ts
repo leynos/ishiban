@@ -4,37 +4,7 @@ import {Effect, Fiber} from 'effect';
 import {TestClock} from 'effect/testing';
 import {createBoardStore, liveConnection, type BoardStore} from '../src/client';
 import {createDemoSnapshot} from '../src/demo';
-
-/** Controllable EventSource boundary; transport errors retain browser ready states. */
-class ControlledEventSource extends EventTarget {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSED = 2;
-  readonly CONNECTING = 0;
-  readonly OPEN = 1;
-  readonly CLOSED = 2;
-  readonly withCredentials = false;
-  readonly url: string;
-  readyState = 1;
-  closeCount = 0;
-  onerror: EventSource['onerror'] = null;
-  onmessage: EventSource['onmessage'] = null;
-  onopen: EventSource['onopen'] = null;
-  static instances: ControlledEventSource[] = [];
-
-  /** Retain the requested replay URL, as the browser transport does. */
-  constructor(url: string | URL) {
-    super();
-    this.url = String(url);
-    ControlledEventSource.instances.push(this);
-  }
-
-  /** Record scoped disposal separately from a server-induced closed state. */
-  close(): void {
-    this.readyState = this.CLOSED;
-    this.closeCount += 1;
-  }
-}
+import {ControlledEventSource, installControlledEventSource} from './controlled-event-source';
 
 type RecoveryScenario = (store: BoardStore, connection: Fiber.Fiber<void, unknown>) => Effect.Effect<void>;
 
@@ -81,9 +51,7 @@ it('retries beyond four failed snapshots and stops retrying when cancelled', asy
 });
 
 it('resnapshots a permanently closed stream while leaving browser reconnects alone', async () => {
-  const previousSource = Object.getOwnPropertyDescriptor(globalThis, 'EventSource');
-  Object.defineProperty(globalThis, 'EventSource', {configurable: true, value: ControlledEventSource});
-  ControlledEventSource.instances = [];
+  const restoreEventSource = installControlledEventSource();
   let attempts = 0;
   const snapshotFetch = Object.assign(
     async () => {
@@ -118,7 +86,6 @@ it('resnapshots a permanently closed stream while leaving browser reconnects alo
       });
     await verifyRecovery(snapshotFetch, scenario);
   } finally {
-    if (previousSource) Object.defineProperty(globalThis, 'EventSource', previousSource);
-    else Reflect.deleteProperty(globalThis, 'EventSource');
+    restoreEventSource();
   }
 });
