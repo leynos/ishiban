@@ -1,4 +1,4 @@
-"""Bounded JSON encoding helpers for journal and projection records."""
+"""Encode journal JSON, read projection fields, and generate UTC timestamps."""
 
 import datetime as dt
 
