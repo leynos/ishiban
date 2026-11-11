@@ -9,8 +9,10 @@ import msgspec
 import pytest
 from falcon import testing
 
-from ishiban import cli
+from ishiban import cli, protocol
+from ishiban import collector as observation
 from ishiban.collector import Collector, collector_lock
+from ishiban.domain import PullRequest
 from ishiban.storage import Store
 
 if typ.TYPE_CHECKING:
@@ -18,6 +20,31 @@ if typ.TYPE_CHECKING:
 
     from cmd_mox import CmdMox
     from syrupy.assertion import SnapshotAssertion
+
+
+class ObserverCompleteError(RuntimeError):
+    """End one real collector after its initial PR reconciliation."""
+
+
+class CliPullRequest(msgspec.Struct):
+    """Only the retained PR fields needed by the CLI option contract."""
+
+    url: str
+    status: str
+    title: str | None
+
+
+class CliSession(msgspec.Struct, rename="camel"):
+    """The stage and associated PRs projected by one collector run."""
+
+    stage: str
+    pull_requests: list[CliPullRequest]
+
+
+class CliSnapshot(msgspec.Struct):
+    """Narrow public snapshot for one CLI collector invocation."""
+
+    sessions: list[CliSession]
 
 
 @pytest.mark.asyncio
@@ -87,6 +114,91 @@ async def test_collect_rejects_competing_owner_before_observation(
     run.assert_awaited_once()
     assert (state / "observatory.sqlite3").is_file(), (
         "A later collector must acquire ownership and initialize the journal."
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ((), "refine", 1),
+        (("--no-github",), "unclassified", 0),
+    ],
+    ids=["default", "no-github"],
+)
+def test_collect_github_flag_controls_real_pr_enrichment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cmd_mox: CmdMox,
+    case: tuple[tuple[str, ...], str, int],
+) -> None:
+    """Cyclopts controls whether an untitled active PR can gain a stage."""
+    flags, expected_stage, expected_lookups = case
+    pr_url = "https://github.com/leynos/ishiban/pull/1"
+    cmd_mox.mock("lody").with_args(
+        "session", "list", "--workspace", "leynos", "--all", "--json"
+    ).returns(
+        stdout=msgspec.json.encode({
+            "ok": True,
+            "workspaceId": "w1",
+            "sessions": [
+                {
+                    "id": "s1",
+                    "title": "Task",
+                    "pullRequests": [{"url": pr_url, "status": "open"}],
+                }
+            ],
+        }).decode()
+    )
+    lookup = mock.AsyncMock(
+        return_value=mock.Mock(
+            records={
+                pr_url: PullRequest(url=pr_url, status="open", title="Build task")
+            },
+            is_partial=False,
+        )
+    )
+    monkeypatch.setattr(observation, "read_pull_requests", lookup)
+    projections: list[tuple[str, str, str, str | None]] = []
+
+    async def observe_once(
+        self: Collector, catalogue: protocol.Catalogue | None = None
+    ) -> None:
+        """Reconcile real PR metadata, then stop the endless observer loop.
+
+        Raises
+        ------
+        ObserverCompleteError
+            Stops this bounded collector scenario after one reconciliation.
+        """
+        assert isinstance(catalogue, protocol.Catalogue), (
+            "CLI must pass its decoded initial catalogue."
+        )
+        await self.reconcile(catalogue)
+        snapshot = msgspec.convert(await self.store.snapshot(), type=CliSnapshot)
+        assert len(snapshot.sessions) == 1, "The catalogue must retain its session."
+        session = snapshot.sessions[0]
+        assert len(session.pull_requests) == 1, (
+            "Disabling enrichment must retain the catalogue PR association."
+        )
+        request = session.pull_requests[0]
+        projections.append((session.stage, request.url, request.status, request.title))
+        raise ObserverCompleteError
+
+    monkeypatch.setattr(Collector, "_follow", observe_once)
+    state = tmp_path / "state"
+    with pytest.raises(ObserverCompleteError):
+        cli.app(
+            ["collect", "--state-directory", str(state), *flags],
+            exit_on_error=False,
+            print_error=False,
+            result_action="return_value",
+        )
+    expected_title = "Build task" if expected_lookups else None
+    assert projections == [(expected_stage, pr_url, "open", expected_title)], (
+        "The flag controls enrichment while retaining the active PR association."
+    )
+    assert lookup.await_count == expected_lookups, (
+        "Disabling GitHub enrichment must make no metadata lookup."
     )
 
 
