@@ -59,6 +59,48 @@ def _reader_for_show(
     return SessionShowReader("w1", "w1"), cmd_mox.spy("lody").runs(show)
 
 
+@pytest.mark.parametrize("has_history_field", [False, True], ids=["missing", "empty"])
+@pytest.mark.asyncio
+async def test_show_requires_explicit_history_fact(
+    cmd_mox: CmdMox, *, has_history_field: bool
+) -> None:
+    """Omitted history is unavailable; explicit null confirms empty history."""
+    payload: dict[str, object] = {
+        "ok": True,
+        "workspace": {"id": "w1"},
+        "session": {"id": "child"},
+    }
+    if has_history_field:
+        payload["latestHistoryAt"] = None
+    cmd_mox.spy("lody").returns(stdout=json.dumps(payload))
+    result = await SessionShowReader("w1", "w1").read("child", 40)
+    assert (result is not None) is has_history_field, (
+        "Only an explicit empty-history fact may produce available metadata."
+    )
+
+
+@pytest.mark.parametrize("session_id", ["child", "-example"])
+@pytest.mark.asyncio
+async def test_show_keeps_opaque_id_after_option_separator(
+    cmd_mox: CmdMox, session_id: str
+) -> None:
+    """CLI option parsing must not interpret a supported session ID as a flag."""
+    spy = cmd_mox.spy("lody").runs(
+        lambda _invocation: _show_response(session_id=session_id)
+    )
+    result = await SessionShowReader("w1", "w1").read(session_id, 40)
+    assert result is not None, "The exact requested identity must remain available."
+    assert spy.invocations[0].args == [
+        "session",
+        "show",
+        "--workspace",
+        "w1",
+        "--json",
+        "--",
+        session_id,
+    ], "All options must precede the opaque session ID and option separator."
+
+
 async def _read_twice(
     reader: SessionShowReader, basis: int
 ) -> tuple[SessionShowMetadata | None, SessionShowMetadata | None]:
@@ -92,10 +134,11 @@ async def test_show_reader_reuses_one_validated_result_per_execution_basis(
         assert invocation.args == [
             "session",
             "show",
-            "child",
             "--workspace",
             "w1",
             "--json",
+            "--",
+            "child",
         ], "Only the selected child may be read through session show."
         return _show_response(
             session_fields={

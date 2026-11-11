@@ -33,7 +33,7 @@ def _show_recency_member(invocation: Invocation) -> Response:
     assert invocation.args[:2] == ["session", "show"], (
         "Family recency must use only session show, not configuration reads."
     )
-    session_id = invocation.args[2]
+    session_id = invocation.args[-1]
     return Response(
         stdout=json.dumps({
             "ok": True,

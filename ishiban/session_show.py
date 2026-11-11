@@ -54,7 +54,7 @@ class _SessionShowResponse(msgspec.Struct, rename="camel"):
     ok: bool
     workspace: _Workspace
     session: _Session
-    latest_history_at: str | None = None
+    latest_history_at: str | None
 
 
 def _monotonic_time() -> float:
@@ -78,6 +78,17 @@ async def read_show[T](
     """Decode one bounded CLI show envelope for caller identity checks.
 
     For example, configuration reads may permit Lody's known transport logs.
+
+    Parameters
+    ----------
+    command : tuple of str
+        Executable and exact argument vector for one read-only show command.
+    response_type : type
+        Typed envelope used to decode the returned JSON object.
+    deadline_seconds : float
+        Maximum process lifetime in seconds, including bounded output reads.
+    allow_transport_logs : bool, default False
+        Whether to accept known Lody transport-log lines around the JSON.
 
     Returns
     -------
@@ -184,10 +195,11 @@ class SessionShowReader:
             self._executable,
             "session",
             "show",
-            session_id,
             "--workspace",
             self._selector,
             "--json",
+            "--",
+            session_id,
         )
         response = await read_show(
             command, _SessionShowResponse, SESSION_TIMEOUT_SECONDS

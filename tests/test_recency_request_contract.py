@@ -55,7 +55,7 @@ def _show_member(invocation: Invocation) -> Response:
         stdout=json.dumps({
             "ok": True,
             "workspace": {"id": "w1"},
-            "session": {"id": invocation.args[2]},
+            "session": {"id": invocation.args[-1]},
             "latestHistoryAt": None,
         })
     )

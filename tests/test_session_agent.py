@@ -34,6 +34,7 @@ def _session_response(
     return {
         "ok": ok,
         "workspace": {"id": workspace_id, "name": "workspace label"},
+        "latestHistoryAt": None,
         "session": {
             "id": session_id,
             "acpSessionId": "acp-session-must-not-be-copied",
@@ -93,7 +94,7 @@ def _fake_lody(
         f"    payload = {session_payload!r}\n"
         "else:\n"
         f"    payload = {config_payload!r}\n"
-        "payload = payload.replace('@SESSION_ID@', args[2])\n"
+        "payload = payload.replace('@SESSION_ID@', args[-1])\n"
         "payload = payload.replace('@CONFIG_ID@', args[2])\n"
     )
     return create_fake_lody(
@@ -145,7 +146,7 @@ async def test_read_validates_lody_ids_and_returns_only_agent_labels(
         "ACP and Lody session identities must not be copied into agent details."
     )
     assert await wait_for_calls(call_log, 2) == [
-        "session\tshow\tlody-session-1\t--workspace\tleynos\t--json",
+        "session\tshow\t--workspace\tleynos\t--json\t--\tlody-session-1",
         "agent-config\tshow\tconfig-1\t--workspace\tleynos\t--json",
     ], "The reader must use read-only commands without secret-inclusion flags."
 
@@ -198,7 +199,7 @@ async def test_missing_config_id_is_valid_and_does_not_query_config(
         "A valid no-configuration result must use the successful cache."
     )
     assert await wait_for_calls(call_log) == [
-        "session\tshow\tlody-session-1\t--workspace\tleynos\t--json"
+        "session\tshow\t--workspace\tleynos\t--json\t--\tlody-session-1"
     ], "A missing configuration ID must not trigger agent-config show."
 
 
