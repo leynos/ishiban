@@ -49,6 +49,22 @@ def lookup_result(
     )
 
 
+@pytest.mark.asyncio
+async def test_default_lookup_uses_adapter_available_at_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ordinary API construction path binds the current read-only adapter."""
+    requested = [url(1)]
+    adapter = mock.AsyncMock(return_value=lookup_result(requested))
+    monkeypatch.setattr(details, "read_pull_requests", adapter)
+
+    reader = PullRequestTitles()
+    assert await reader.read(requested) == {requested[0]: f"Title {requested[0]}"}, (
+        "The ordinary service must use the adapter bound at construction."
+    )
+    adapter.assert_awaited_once_with(requested)
+
+
 @pytest.mark.parametrize(
     ("outcome", "category"),
     [
@@ -62,7 +78,6 @@ def lookup_result(
 )
 @pytest.mark.asyncio
 async def test_lookup_diagnostics_preserve_partial_titles_and_cache_outcomes(
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     outcome: str,
     category: str | None,
@@ -84,8 +99,7 @@ async def test_lookup_diagnostics_preserve_partial_titles_and_cache_outcomes(
         ),
         side_effect=failures.get(outcome),
     )
-    monkeypatch.setattr(details, "read_pull_requests", read)
-    reader = PullRequestTitles()
+    reader = PullRequestTitles(lookup=read)
 
     first = await reader.read(requested)
 
@@ -124,9 +138,7 @@ async def test_lookup_diagnostics_preserve_partial_titles_and_cache_outcomes(
 
 
 @pytest.mark.asyncio
-async def test_reads_titles_for_terminal_and_active_pull_requests(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_reads_titles_for_terminal_and_active_pull_requests() -> None:
     """Title enrichment does not filter by PR lifecycle status."""
     urls = [url(1), url(2), url(3)]
     records = {
@@ -137,9 +149,7 @@ async def test_reads_titles_for_terminal_and_active_pull_requests(
     adapter = mock.AsyncMock(
         return_value=_PullRequestLookup(records=records, is_partial=False)
     )
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
-
-    titles = await PullRequestTitles().read(urls)
+    titles = await PullRequestTitles(lookup=adapter).read(urls)
 
     assert titles.get(urls[0]) == "Closed PR", "Closed PR titles must remain available."
     assert titles.get(urls[1]) == "Merged PR", "Merged PR titles must remain available."
@@ -149,9 +159,7 @@ async def test_reads_titles_for_terminal_and_active_pull_requests(
 
 
 @pytest.mark.asyncio
-async def test_ignores_invalid_urls_and_requests_only_first_five_valid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_ignores_invalid_urls_and_requests_only_first_five_valid() -> None:
     """Untrusted URLs never reach the adapter and each call remains bounded."""
     candidates = [
         "https://evil.invalid/repo/pull/1",
@@ -159,8 +167,7 @@ async def test_ignores_invalid_urls_and_requests_only_first_five_valid(
     ]
     requested = candidates[1:6]
     adapter = mock.AsyncMock(return_value=lookup_result(requested))
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
-    service = PullRequestTitles()
+    service = PullRequestTitles(lookup=adapter)
 
     titles = await service.read(candidates)
 
@@ -177,11 +184,10 @@ async def test_ignores_invalid_urls_and_requests_only_first_five_valid(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("ttl", "initial_title"), [(300.0, "Title"), (30.0, None)])
 async def test_title_cache_uses_positive_and_negative_expiry(
-    monkeypatch: pytest.MonkeyPatch, ttl: float, initial_title: str | None
+    ttl: float, initial_title: str | None
 ) -> None:
     """Successful titles and misses expire on their distinct cache schedules."""
     current_time = [100.0]
-    service = PullRequestTitles()
     initial = (
         lookup_result([url(1)], title_prefix=initial_title)
         if initial_title is not None
@@ -191,7 +197,6 @@ async def test_title_cache_uses_positive_and_negative_expiry(
     adapter = mock.AsyncMock(
         side_effect=[initial, lookup_result([url(1)], title_prefix="Refreshed")]
     )
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
 
     def clock_now() -> float:
         """Return the controlled monotonic time.
@@ -203,7 +208,7 @@ async def test_title_cache_uses_positive_and_negative_expiry(
         """
         return current_time[0]
 
-    monkeypatch.setattr(service, "_clock", clock_now)
+    service = PullRequestTitles(clock=clock_now, lookup=adapter)
     assert await service.read([url(1)]) == expected, "Return the initial title or miss."
     current_time[0] += ttl - 0.1
     assert await service.read([url(1)]) == expected, "Reuse the unexpired cache entry."
@@ -216,9 +221,7 @@ async def test_title_cache_uses_positive_and_negative_expiry(
 
 
 @pytest.mark.asyncio
-async def test_partial_lookup_caches_known_title_and_missing_fact(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_partial_lookup_caches_known_title_and_missing_fact() -> None:
     """Partial adapter results keep known titles and negative-cache only misses."""
     first_url, blank_url, missing_url = url(1), url(2), url(3)
     adapter = mock.AsyncMock(
@@ -238,8 +241,7 @@ async def test_partial_lookup_caches_known_title_and_missing_fact(
             is_partial=True,
         )
     )
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
-    service = PullRequestTitles()
+    service = PullRequestTitles(lookup=adapter)
 
     assert await service.read([first_url, blank_url, missing_url]) == {
         first_url: "Known despite partial response"
@@ -261,23 +263,18 @@ async def test_partial_lookup_caches_known_title_and_missing_fact(
 )
 @pytest.mark.asyncio
 async def test_adapter_failures_return_no_untrusted_title(
-    monkeypatch: pytest.MonkeyPatch,
     failure: Exception,
 ) -> None:
     """Expected lookup failures become a short negative cache entry."""
     adapter = mock.AsyncMock(side_effect=failure)
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
-
-    assert await PullRequestTitles().read([url(1)]) == {}, (
+    assert await PullRequestTitles(lookup=adapter).read([url(1)]) == {}, (
         "Expected adapter failures must produce no unverified title."
     )
     adapter.assert_awaited_once_with([url(1)])
 
 
 @pytest.mark.asyncio
-async def test_concurrent_requests_deduplicate_missing_lookup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_concurrent_requests_deduplicate_missing_lookup() -> None:
     """A waiter sees the first completed lookup instead of repeating it."""
     lookup_started = asyncio.Event()
     release_lookup = asyncio.Event()
@@ -296,8 +293,7 @@ async def test_concurrent_requests_deduplicate_missing_lookup(
         return lookup_result(requested)
 
     adapter = mock.AsyncMock(side_effect=delayed_lookup)
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
-    service = PullRequestTitles()
+    service = PullRequestTitles(lookup=adapter)
 
     first = asyncio.create_task(service.read(urls))
     await lookup_started.wait()
@@ -312,13 +308,10 @@ async def test_concurrent_requests_deduplicate_missing_lookup(
 
 
 @pytest.mark.asyncio
-async def test_lru_cache_is_bounded_to_256_titles(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_lru_cache_is_bounded_to_256_titles() -> None:
     """The least recently used title is fetched again after the cache fills."""
-    service = PullRequestTitles()
     adapter = mock.AsyncMock(side_effect=lookup_result)
-    monkeypatch.setattr(details, "read_pull_requests", adapter)
+    service = PullRequestTitles(lookup=adapter)
     urls = [url(number) for number in range(1, 258)]
 
     for start in range(0, len(urls), 5):

@@ -6,6 +6,10 @@ concept. The measured runtime candidate was
 measurements do not establish a service-level objective, long-term leak rate,
 or upstream Lody latency.
 
+A later PR-title reader refactor injects its clock and lookup dependencies.
+Compatibility tests cover its unchanged defaults; these measurements have not
+been repeated on that refactor and remain scoped to the runtime above.
+
 ## Method and scope
 
 Runs used `ibara` on WSL2 kernel `6.6.87.2-microsoft-standard-WSL2`, with

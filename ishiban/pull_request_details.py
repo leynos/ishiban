@@ -20,6 +20,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from ishiban.domain import PullRequest
+    from ishiban.lody import _PullRequestLookup
 from ishiban.cache_entries import fresh_cache_entry
 
 MAX_REQUESTED_PR_URLS = 5
@@ -44,13 +45,26 @@ class PullRequestTitles:
     For example, terminal PR titles remain available without changing stage.
     """
 
-    def __init__(self) -> None:
-        """Start with an empty bounded cache and one lookup lock."""
+    def __init__(
+        self,
+        *,
+        clock: cabc.Callable[[], float] | None = None,
+        lookup: cabc.Callable[
+            [list[str]], cabc.Coroutine[object, object, _PullRequestLookup]
+        ]
+        | None = None,
+    ) -> None:
+        """Bind a clock and read-only adapter to one bounded title cache.
+
+        For example, ``PullRequestTitles(clock=fake_now, lookup=fake_read)``
+        keeps expiry and provider responses under test control.
+        """
         self._cache: collections.OrderedDict[str, _CacheEntry] = (
             collections.OrderedDict()
         )
         self._lock = asyncio.Lock()
-        self._clock: cabc.Callable[[], float] = time.monotonic
+        self._clock = time.monotonic if clock is None else clock
+        self._lookup = read_pull_requests if lookup is None else lookup
         self._lookup_timeout = LOOKUP_TIMEOUT_SECONDS
 
     async def read(self, urls: list[str]) -> dict[str, str]:
@@ -121,7 +135,7 @@ class PullRequestTitles:
         # Preserve useful titles without exposing provider diagnostics.
         try:
             async with asyncio.timeout(self._lookup_timeout):
-                lookup = await read_pull_requests(urls)
+                lookup = await self._lookup(urls)
         except TimeoutError:
             LOGGER.warning("PR titles unavailable category=deadline")
             return {}

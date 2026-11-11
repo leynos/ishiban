@@ -760,6 +760,13 @@ observer cleanup, while the PR-title lookup owns its timeout and cancellation.
 Inspector PR rows and session facts remain presentational. These helpers are
 scoped to their existing features and preserve journal and browser contracts.
 
+`PullRequestTitles` accepts optional `clock` and `lookup` dependencies for
+deterministic cache and adapter tests. Omitted dependencies resolve at
+construction to the monotonic clock and existing read-only GitHub adapter. The
+lookup deadline, positive and negative TTLs, partial-result diagnostics and
+successful sibling results remain owned by this reader. These Python
+dependencies are not new CLI or browser settings.
+
 ### Coverage instrumentation
 
 PR and main coverage use `.github/coverage-constraints.txt` for the action's

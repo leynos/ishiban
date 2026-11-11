@@ -1043,8 +1043,8 @@ lane is complete; candidate-specific acceptance and review remain tracked in
 The refreshed pre-merge checks identified additional test gaps. Native fake
 Lody children are now tracked through the real process adapter. Completed
 catalogue reads and collector cancellation assert termination and reaping; a
-child that installs SIGTERM ignoring before emitting valid JSON exercises the
-real three-second SIGKILL fallback. A private cleanup-disabled negative control
+child that ignores SIGTERM before emitting valid JSON exercises the real
+three-second SIGKILL fallback. A private cleanup-disabled negative control
 fails the new assertion, and fixture cleanup reaps the owned child afterwards.
 
 The recency packing property drives the actual hook over 50 generated
@@ -1053,5 +1053,21 @@ JSON escaping. Every intended ID appears exactly once, with no foreign member,
 and each JSON request stays within eight members and 8,192 UTF-8 bytes. These
 are finite executable checks, not a formal proof. The design topology now shows
 collector journal ownership and API enrichment/sidecar ownership. No runtime
-source changed after the measured candidate; final assessment and review remain
+source changed in this test/report plateau; final assessment and review remain
 tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### PR-title dependency injection, 11 November 2026
+
+The scoped pre-merge response accepted the API enrichment design, pure runtime
+policy, public preference type tests and bounded diagnostics. It retained one
+constructor testability criterion: PR-title clock and lookup dependencies must
+be injectable. A separate atomic refactor adds optional constructor inputs,
+resolving omitted values to the same monotonic clock and read-only adapter.
+
+Cache, expiry, partial-result and deadline tests use those injected
+dependencies instead of assigning a private clock or replacing a module
+adapter. Response, journal, sidecar and frontend contracts remain unchanged.
+The measured spike report remains explicitly scoped to runtime `1011471`; its
+figures are not new measurements of this later refactor. Final candidate gates
+and assessment remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
