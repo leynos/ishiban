@@ -402,6 +402,19 @@ this helper at the observer commit boundary rather than turning it into a
 general retry framework. Native-child ingestion tests exercise failures before
 and after commit and cancellation while the first record remains uncommitted.
 
+Generation allocation and disconnected-health writes use a collector-private
+lifecycle retry with cancellable delays capped at 30 seconds. Its returned
+integer is forwarded unchanged; only an acknowledged generation can own
+observation and later health writes. A lost acknowledgement can leave a
+committed connecting generation without an observer before the next allocation.
+Cancellation during that uncertainty skips stale-generation final health and
+logs a fixed diagnostic. Keep this retry scoped to collector lifecycle journal
+commands. The append-only generation journal remains monotonic, and a later
+start establishes the next quiet baseline without replaying upstream gaps. The
+real-store lifecycle tests reuse `RefreshClock` from the collector storage
+suite, as do the ingestion tests. It controls only these collector retry and
+periodic waits; production clocks and browser scheduling remain separate.
+
 `tests/test_runtime_evidence_properties.py` drives the real store through 40
 generated histories of at most 12 actions, plus explicit mixed-source and
 restart examples. Its independent model checks every committed prefix across

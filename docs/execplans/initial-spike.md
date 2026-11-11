@@ -1464,3 +1464,35 @@ with explicit controls for valid out-of-order results, discarded stale facts
 and a newer workspace result surviving an older response. A stream-consumption
 witness keeps assertions after frame handling. These remain finite tests.
 Aggregate gates, publication and affected confirmation remain separate steps.
+
+### Confirmed collector lifecycle writes, 11 November 2026
+
+The next affected assessment accepted ingestion recovery and the scoped-read
+tests, but found storage failures at generation start and disconnected-health
+writes could still prevent reconnects. These lifecycle commands now share a
+collector-private retry with cancellable exponential delays capped at 30
+seconds. Observation starts only after the returned generation is acknowledged;
+disconnected health is committed before the reconnect wait.
+
+An uncertain generation acknowledgement can leave a durable connecting record
+without an observer. Retry allocates the next local generation, and only its
+acknowledged value owns new source evidence. Cancellation before confirmation
+logs a fixed diagnostic and skips stale-generation stopped health, preserving
+the last durable state as an explicit partial outcome. The indexed design and
+users' guide describe this limit and the unchanged upstream replay gap.
+
+Eight targeted lifecycle scenarios cover initial and reconnect failures on both
+sides of commit, transient disconnected-health failure, and persistent
+generation or health failure with capped backoff and cancellation. The old
+implementation failed the retry and stale-generation controls; the new cases
+and adjacent collector tests pass. Existing journal generation checks and quiet
+browser baselines remain unchanged. Aggregate gates, publication and affected
+confirmation are separate acceptance steps.
+
+The persistent reconnect case begins with an acknowledged generation, then
+cancels after the next generation commits without an acknowledgement. Removing
+the confirmation reset at each loop makes this case fail with a stale-generation
+`ValueError` replacing cancellation; the collector source was restored byte
+for byte after that negative control. The case preserves the prior acknowledged
+generation in memory and the later durable connecting state without starting a
+second observer.

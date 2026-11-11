@@ -191,7 +191,12 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
    tokens in the SQLite file or browser.
 2. Acquire the collector lock and create a new **local ingestion generation**;
    set collector health to `connecting` and distinguish all previous
-   projections as *not yet revalidated in this generation*.
+   projections as *not yet revalidated in this generation*. Retry
+   generation-start storage failures with cancellable exponential delays from
+   one second up to 30 seconds. Start observation only after the generation is
+   acknowledged. A lost commit acknowledgement can leave a committed connecting
+   generation with no observer; retry allocates another local generation, and
+   only the acknowledged result owns subsequent writes.
 3. Spawn `lody` with `asyncio.create_subprocess_exec`, not a shell. Read stdout
    line by line with a maximum line size and bounded pending work. Drain stderr
    separately, with size limits and secret redaction.
@@ -236,9 +241,17 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
 7. On EOF, nonzero exit, parse failure or unrecoverable protocol error, record
    source health and last known valid event. Mark the collector disconnected;
    **do not** convert running turns to failed or idle. Restart with bounded
-   exponential backoff and jitter.
+   exponential backoff and jitter. If the disconnected-health write encounters
+   a storage failure, retry its same confirmed generation and diagnostic before
+   reconnecting. These retries use the same cancellable delays capped at 30
+   seconds and fixed safe logging. Reconnection still cannot replay upstream
+   events missed while disconnected.
 8. On graceful shutdown, terminate the child, await cleanup, flush committed
-   work and release the lock.
+   work and release the lock. Publish stopped health only for an acknowledged
+   generation. If cancellation interrupts an unconfirmed generation start, log
+   a fixed diagnostic and skip the stale-generation health write. The last
+   durable health may remain unchanged until another collector starts; it is
+   not proof of a live child.
 
 Native CLI teardown owns stdout and stderr discard tasks after the caller stops
 reading. Draining stdout permits a killed process to finish transport cleanup

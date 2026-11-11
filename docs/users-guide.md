@@ -206,6 +206,14 @@ received event until its journal write succeeds, then continues with the next
 record. Retrying an uncertain commit does not duplicate the event. Stopping the
 collector cancels a waiting retry even if storage cannot record final health.
 
+Generation starts and disconnection records also retry temporary storage
+failures before observation or reconnection proceeds. If cancellation happens
+before a generation acknowledgement, the collector logs a warning and leaves
+the last recorded health unchanged instead of writing under a stale generation.
+That last state may remain visible until the next start; no observer is started
+under an unconfirmed generation. Reconnecting does not recover upstream events
+missed while disconnected.
+
 During validation of the `leynos` workspace, the upstream Lody observer used
 approximately 4.4 GiB of resident memory after hydration; the collector and API
 used roughly 90 MiB each. These are single-run observations, rather than
