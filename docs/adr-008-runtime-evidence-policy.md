@@ -7,7 +7,7 @@ validation are tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
 
 ## Context
 
-Source-journal ingestion and on-demand sidecar restoration share projection
+Source-journal ingestion and on-demand activity resolution share projection
 merge rules. Keeping those decisions inside a public JSON projection builder
 couples runtime policy to storage field names and makes the decision boundary
 harder to test independently. Moving all validated records to a new model would
@@ -29,9 +29,11 @@ network, clock or logging effects and expose no public JSON field names.
 Keep the existing `storage/projections.py` entrypoints as adapters. They copy
 the current projection, apply the selected plan, encode optional turn fields,
 and retain the existing treatment of missing or malformed saved values. Both
-journal ingestion and sidecar restoration continue through this same adapter.
-The policy and encoding are specific to session runtime evidence; they are not
-a generic event framework or a replacement for protocol validation.
+journal ingestion and on-demand activity resolution use this same adapter.
+Restoring cached sidecar facts is a separate overlay in `ActivityCache.merge`
+and `storage/activity_projection.py`, with its own validation and watermark
+checks. The policy and encoding are specific to session runtime evidence; they
+are not a generic event framework or a replacement for protocol validation.
 
 Metadata refreshes preserve known runtime state, turns, evidence generation and
 observation time. Persisted observations replace those runtime facts. Starting
@@ -43,8 +45,9 @@ was observed. Turn events do not infer session activity or PR stage.
 
 The transition decisions can be tested without storage or public JSON. Adapter
 tests retain compatibility checks for legacy projections, optional fields,
-input immutability and bounded failed-turn errors. Existing journal and sidecar
-tests verify their shared externally observable results.
+input immutability and bounded failed-turn errors. Existing journal and
+activity tests verify their shared externally observable results. Sidecar
+restoration retains its existing overlay tests.
 
 The public response, source journal, sidecar, workflow classification and
 database schema remain compatible. Typed `msgspec` records retain their

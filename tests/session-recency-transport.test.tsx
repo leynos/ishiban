@@ -5,7 +5,7 @@ import {useSessionRecency} from '../src/session-recency';
 import {groupSessions} from '../src/session-families';
 import {createFamilySnapshot, createMultibyteFamilySnapshot, firstSession} from './board-fixtures';
 import {deferred, type Deferred} from './deferred';
-import {installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
+import {availableRecencyResponse, installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
 
 let browser: ReturnType<typeof installFamilyBrowser> | undefined;
 interface RequestBody {
@@ -15,14 +15,11 @@ interface RequestBody {
 /** Encode current member facts as the strict endpoint would after decoding. */
 function availableResponse() {
   const snapshot = createFamilySnapshot(1);
-  const frames = snapshot.sessions.map((session) => ({
-    workspaceId: snapshot.workspaceId,
-    sessionId: session.sessionId,
-    lastActivityEventId: session.lastActivityEventId ?? 0,
-    outcome: 'available',
-    latestHistoryAt: '2026-11-10T18:41:02.707Z'
-  }));
-  return new Response(`${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`);
+  return availableRecencyResponse(
+    snapshot,
+    snapshot.sessions.map((session) => session.sessionId),
+    '2026-11-10T18:41:02.707Z'
+  );
 }
 
 afterEach(() => {
@@ -79,16 +76,7 @@ it('packs accepted multibyte member IDs by encoded byte size', async () => {
     const body = String(init?.body);
     bodies.push(body);
     const sessionIds: string[] = JSON.parse(body).sessionIds;
-    const frames = sessionIds.map((sessionId) =>
-      JSON.stringify({
-        workspaceId: snapshot.workspaceId,
-        sessionId,
-        lastActivityEventId: 0,
-        outcome: 'available',
-        latestHistoryAt: null
-      })
-    );
-    return new Response(`${frames.join('\n')}\n`);
+    return availableRecencyResponse(snapshot, sessionIds);
   });
   const {result} = renderHook(() => useSessionRecency(snapshot));
   mark.setAttribute('data-family-id', firstSession(snapshot).sessionId);

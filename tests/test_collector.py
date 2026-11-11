@@ -1,16 +1,19 @@
 """A real fake-CLI boundary exercises catalogue and observer lifecycle together."""
 
 import asyncio
+import contextlib
 import pathlib
 import sys
 
 import msgspec
 import pytest
+from lody_process_support import tracked_fake_lody_children
 from storage_support import as_detail, as_events
 
 from ishiban.collector import Collector
 from ishiban.lody import read_catalogue
 from ishiban.storage import Store
+from ishiban.task_ownership import cancel_and_reap
 
 
 class CollectorStatus(msgspec.Struct):
@@ -92,19 +95,28 @@ async def assert_observer_transition(store: Store, session: SessionStatus) -> No
 @pytest.mark.asyncio
 async def test_collector_ingests_observer_and_reaps_it_on_cancellation(
     tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
     observer_fixture: str | None,
     expected_state: str,
 ) -> None:
     """The observer path persists activity independently of catalogue metadata."""
-    fixtures = pathlib.Path(__file__).parent / "fixtures"
-    tail = "" if observer_fixture is None else (fixtures / observer_fixture).read_text()
+    tail = (
+        ""
+        if observer_fixture is None
+        else (pathlib.Path(__file__).parent / "fixtures" / observer_fixture).read_text()
+    )
     executable = fake_lody(tmp_path, tail)
     store = Store(f"sqlite+aiosqlite:///{tmp_path / 'collector.sqlite3'}", "workspace")
     await store.initialize()
-    initial = await read_catalogue("leynos", str(executable))
-    collector = Collector(store, "leynos", executable=str(executable), github=False)
-    task = asyncio.create_task(collector.run(initial))
-    try:
+    async with contextlib.AsyncExitStack() as cleanup:
+        cleanup.push_async_callback(store.close)
+        children = await cleanup.enter_async_context(
+            tracked_fake_lody_children(monkeypatch, executable)
+        )
+        initial = await read_catalogue("leynos", str(executable))
+        collector = Collector(store, "leynos", executable=str(executable), github=False)
+        task = asyncio.create_task(collector.run(initial))
+        cleanup.push_async_callback(cancel_and_reap, (task,))
         async with asyncio.timeout(10):
             while True:
                 current = msgspec.convert(await store.snapshot(), type=SnapshotStatus)
@@ -125,12 +137,23 @@ async def test_collector_ingests_observer_and_reaps_it_on_cancellation(
         )
         if observer_fixture is not None:
             await assert_observer_transition(store, current.sessions[0])
-    finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await asyncio.wait_for(task, timeout=9)
         final = msgspec.convert(await store.snapshot(), type=SnapshotStatus)
         assert final.collector.state == "stopped", (
             "Cancellation must persist stopped health after reaping the child."
         )
-        await store.close()
+        observer_children = [
+            process for command, process in children if "observe" in command
+        ]
+        assert len(observer_children) == 1, (
+            "The collector must own one native observer child."
+        )
+        assert observer_children[0].returncode is not None, (
+            "Collector cancellation must terminate the native observer child."
+        )
+        assert (
+            await asyncio.wait_for(observer_children[0].wait(), timeout=1)
+            == observer_children[0].returncode
+        ), "Collector cancellation must reap the observer before stopping."

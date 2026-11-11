@@ -1,8 +1,17 @@
 """Shared plumbing for fake Lody subprocesses in reader tests."""
 
 import asyncio
+import contextlib
 import pathlib
 import sys
+import typing as typ
+
+from ishiban import lody
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+    import pytest
 
 
 def create_fake_lody(
@@ -47,6 +56,51 @@ def create_fake_lody(
     executable.write_text(source, encoding="utf-8")
     executable.chmod(0o700)
     return executable, call_log
+
+
+@contextlib.asynccontextmanager
+async def tracked_fake_lody_children(
+    monkeypatch: pytest.MonkeyPatch,
+    executable: pathlib.Path,
+) -> cabc.AsyncIterator[list[tuple[tuple[str, ...], asyncio.subprocess.Process]]]:
+    """Track real children of one fake CLI and reap any left by a failed test.
+
+    For example, a catalogue read can assert its child's return code after
+    the response is parsed. The wrapper still calls the native process adapter.
+
+    Yields
+    ------
+    list of tuple of command and asyncio.subprocess.Process
+        Commands and native handles for this executable only.
+    """
+    children: list[tuple[tuple[str, ...], asyncio.subprocess.Process]] = []
+    original_enter = lody._OwnedChild.__aenter__
+
+    async def tracked_enter(
+        owner: lody._OwnedChild,
+    ) -> asyncio.subprocess.Process:
+        """Record the owned native process after the real adapter starts it.
+
+        Returns
+        -------
+        asyncio.subprocess.Process
+            The native process created by the original adapter.
+        """
+        process = await original_enter(owner)
+        if owner.command[0] == str(executable):
+            children.append((owner.command, process))
+        return process
+
+    with monkeypatch.context() as patch:
+        patch.setattr(lody._OwnedChild, "__aenter__", tracked_enter)
+        try:
+            yield children
+        finally:
+            for _, process in children:
+                if process.returncode is None:
+                    with contextlib.suppress(ProcessLookupError):
+                        process.kill()
+                await asyncio.wait_for(process.wait(), timeout=3)
 
 
 async def wait_for_calls(path: pathlib.Path, count: int = 1) -> list[str]:

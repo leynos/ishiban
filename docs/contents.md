@@ -24,6 +24,8 @@ reference material.
   implementation milestones, validation evidence, and remaining limits.
   Candidate-specific acceptance and review status is tracked in
   [PR #9](https://github.com/leynos/ishiban/pull/9).
+- [Observation spike report](observation-spike-report.md) records bounded live,
+  synthetic storage and fan-out, browser timing, and cleanup measurements.
 - [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
   PR-based stages and independent activity/freshness semantics.
 

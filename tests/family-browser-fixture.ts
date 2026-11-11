@@ -1,4 +1,5 @@
 /** @file Control family-mark visibility and fetch ownership in browser tests. */
+import type {Snapshot} from '../src/contracts';
 import {
   ControlledIntersectionObserver,
   installControlledIntersectionObserver
@@ -46,4 +47,34 @@ export function installFamilyMarks(count: number): HTMLButtonElement[] {
   });
   document.body.replaceChildren(...marks);
   return marks;
+}
+
+/**
+ * Return strict available frames for requested raw family members.
+ * @param snapshot The current workspace and execution watermarks.
+ * @param sessionIds Requested member identities in wire order.
+ * @param latestHistoryAt A shared test history time, or null when absent.
+ * @returns One NDJSON response preserving each requested identity and watermark.
+ * @throws {Error} When the request names a member absent from the fixture.
+ * @example
+ * availableRecencyResponse(createFamilySnapshot(1), ['root-0']).status === 200;
+ */
+export function availableRecencyResponse(
+  snapshot: Snapshot,
+  sessionIds: readonly string[],
+  latestHistoryAt: string | null = null
+): Response {
+  const revisions = new Map(snapshot.sessions.map((session) => [session.sessionId, session.lastActivityEventId ?? 0]));
+  const frames = sessionIds.map((sessionId) => {
+    const basis = revisions.get(sessionId);
+    if (basis === undefined) throw new Error(`The recency fixture has no member ${sessionId}.`);
+    return JSON.stringify({
+      workspaceId: snapshot.workspaceId,
+      sessionId,
+      lastActivityEventId: basis,
+      outcome: 'available',
+      latestHistoryAt
+    });
+  });
+  return new Response(`${frames.join('\n')}\n`);
 }

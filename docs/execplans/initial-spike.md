@@ -988,8 +988,9 @@ added.
 **Decision.** Move runtime replacement, metadata preservation and named-turn
 transition decisions into `ishiban/runtime_evidence.py`. Frozen typed plans
 carry the decision to the existing storage adapter, which retains public JSON
-encoding and legacy-value handling. Journal ingestion and sidecar restoration
-continue through the shared adapter.
+encoding and legacy-value handling. Journal ingestion and on-demand activity
+resolution continue through the shared adapter; cached sidecar restoration
+keeps its separate validated overlay and watermark checks.
 [ADR 008](../adr-008-runtime-evidence-policy.md) records the session-specific
 boundary; the database schema, public contract and PR workflow classification
 are unchanged.
@@ -1008,3 +1009,49 @@ tests with 11 default opt-in skips, plus lint, formatting, type checking,
 audits and documentation checks. CodeScene reported no issues and scored the
 three changed code files 10.0 directly. The local review inspected all nine
 refactor paths and completed without findings.
+
+### Measured observation spike, 11 November 2026
+
+The bounded final-candidate run used backend
+`10114716f303e9add6aeb9fc3ca10c33cdf88732`. A corrected 90-second live
+observation sampled 52 `connecting` and 38 `following` health states, with 90
+local readiness responses and no sampled source-error presence. Its final
+snapshot had 2,788 sessions and cursor 5,647. The collector tree, including
+Lody, accumulated 96.84 observed CPU core-seconds; sampled RSS peaked at
+2,189,636 KiB and file descriptors at 62. The nested Lody child accounted for
+56.15 observed CPU core-seconds. Sampling limitations and interpretation are
+recorded in the [observation spike report](../observation-spike-report.md).
+
+Synthetic ingestion committed 1,000 events at 131.62 events per second, with
+7.56 ms median and 8.75 ms reported p95 commit-call duration. One, four, and
+eight SSE readers each received all 100 events in their phase. The browser-only
+run measured three local commit-to-render samples between 148.09 and 188.51 ms,
+with approximately 29–30 ms clock uncertainty. A sequence-gap fault was
+rejected without cursor movement; a finite paused-reader replay completed.
+Seven owned process groups or sessions were clear after cleanup, including a
+Lody child that disappeared after the immediate stop check.
+
+These results do not establish upstream latency, a service-level objective,
+production capacity, or arbitrary slow-client backpressure limits. The report
+records the prior invalid sampler and initial browser selector correction,
+source metadata gaps, and limits on CPU and RSS interpretation. The measurement
+lane is complete; candidate-specific acceptance and review remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is added.
+
+### Lifecycle and packing acceptance, 11 November 2026
+
+The refreshed pre-merge checks identified additional test gaps. Native fake
+Lody children are now tracked through the real process adapter. Completed
+catalogue reads and collector cancellation assert termination and reaping; a
+child that installs SIGTERM ignoring before emitting valid JSON exercises the
+real three-second SIGKILL fallback. A private cleanup-disabled negative control
+fails the new assertion, and fixture cleanup reaps the owned child afterwards.
+
+The recency packing property drives the actual hook over 50 generated
+Unicode-ID cases and three fixed controls for member count, encoded bytes and
+JSON escaping. Every intended ID appears exactly once, with no foreign member,
+and each JSON request stays within eight members and 8,192 UTF-8 bytes. These
+are finite executable checks, not a formal proof. The design topology now shows
+collector journal ownership and API enrichment/sidecar ownership. No runtime
+source changed after the measured candidate; final assessment and review remain
+tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).

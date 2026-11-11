@@ -149,8 +149,8 @@ Lody Cloud / Streams
 +-------------------------+         +---------------------------+
 | Ishiban collector       |         | Falcon ASGI API            |
 | asyncio subprocess      |         | snapshot / sessions / SSE  |
-| validate / project      |         | read-only SQLAlchemy       |
-| single SQLite writer    |         | SQLite reader              |
+| validate / project      |         | async SQLAlchemy / Lody    |
+| source-journal writer   |         | enrichment / sidecar owner |
 +------------+------------+         +------------+--------------+
              |                                   |
              +---------- SQLite WAL -------------+
@@ -161,11 +161,18 @@ Lody Cloud / Streams
                                         Ishiban panorama
 ```
 
-Use **two OS processes** in the spike: `python -m ishiban.collector` and a
-single-worker Granian/Falcon ASGI service. The collector exclusively owns the
-`lody` child process and writes to SQLite. The API only reads the database.
-This isolates collector restarts from active browser connections and avoids the
-complexity of Falcon lifespan task ownership or an extra broker.
+*Figure 1. Collector ownership of the source journal and API ownership of
+bounded enrichment and its activity sidecar.*
+
+Use **two application processes** in the spike: `ishiban collect` and a
+single-worker Uvicorn/Falcon ASGI service started by `ishiban serve`. The
+collector owns its `lody session observe` child with bounded input, output, and
+lifetime, and is the sole writer to the append-only source journal. The API
+uses async SQLAlchemy and owns its bounded, read-only Lody enrichment children;
+derived activity goes to its separate sidecar, never to journal events. Neither
+process mutates upstream sessions. This isolates collector restarts from active
+browser connections and avoids the complexity of Falcon lifespan task ownership
+or an extra broker.
 
 For a handful of browser clients, the API can tail SQLite every 250 ms in
 bounded batches per open SSE connection. The database is the synchronization
@@ -279,8 +286,9 @@ SQL decoding, process memory, or the byte length of individual fields.
 plans from their public-projection encoding. `ishiban/runtime_evidence.py`
 selects replacement, preservation and named-turn transitions from typed source
 records. The shared storage adapter applies those plans for journal ingestion
-and sidecar restoration, preserving legacy projection handling and optional
-field encoding without changing either persistence boundary.
+and on-demand activity resolution, preserving legacy projection handling and
+optional field encoding. Cached sidecar restoration retains its separate
+validated overlay and watermark checks; neither persistence boundary changes.
 
 - `snapshot` / `session.changed` with `source: persisted`: update current
   session state and reconcile `latestTurn` and `activeTurns` into `turns`.
@@ -537,10 +545,10 @@ CSS bootstrap:
    evidence, metadata-only unknowns and stale observations.
 5. Panorama handles the 120-repository demonstration without stage truncation
    or misleading live-data classification.
-6. The final spike report records measured latency, CPU, RSS and
-   file-descriptor growth (including the `lody` child), SQLite write
-   throughput, SSE fan-out cost, observed failure cases and the specific
-   missing Lody metadata fields.
+6. The final [spike report](observation-spike-report.md) records bounded
+   latency, CPU, RSS and file-descriptor measurements (including the `lody`
+   child), SQLite write throughput, SSE fan-out, observed failure cases, and
+   missing Lody metadata fields, with measurement limits stated.
 
 Do not set arbitrary performance thresholds as passing evidence before
 measuring a real workload. Record latency from **local SQLite commit to

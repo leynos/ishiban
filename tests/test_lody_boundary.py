@@ -2,12 +2,13 @@
 
 import asyncio
 import contextlib as ctx
-import sys
+import signal
 import types
 import typing as typ
 
 import msgspec
 import pytest
+from lody_process_support import create_fake_lody, tracked_fake_lody_children
 
 from ishiban import lody
 from ishiban.lody import read_catalogue
@@ -19,31 +20,53 @@ if typ.TYPE_CHECKING:
     from ishiban.protocol import Catalogue
 
 
+@pytest.mark.parametrize(
+    ("is_term_ignored", "expected_signal"),
+    [(False, signal.SIGTERM), (True, signal.SIGKILL)],
+    ids=["graceful-sigterm", "term-resistant-sigkill"],
+)
 @pytest.mark.asyncio
 async def test_catalogue_reader_stops_after_complete_json(
     tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    is_term_ignored: bool,
+    expected_signal: signal.Signals,
 ) -> None:
-    """A lingering transport must not hold an already complete snapshot hostage."""
-    executable = tmp_path / "fake-lody"
+    """A complete snapshot closes and reaps even a TERM-resistant child."""
     payload = msgspec.json.encode({
         "ok": True,
         "workspaceId": "workspace",
         "sessions": [],
     }).decode()
-    executable.write_text(
-        f"#!{sys.executable}\nimport time\n"
-        f"print({payload!r}, flush=True)\ntime.sleep(120)\n"
+    ignore_term = (
+        "import signal\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        if is_term_ignored
+        else ""
     )
-    executable.chmod(0o700)
-    catalogue = await asyncio.wait_for(
-        read_catalogue("leynos", str(executable)), timeout=10
+    executable, _ = create_fake_lody(
+        tmp_path,
+        f"{ignore_term}payload = {payload!r}",
+        linger_after_output=120,
     )
-    assert catalogue.workspace_id == "workspace", (
-        "A complete response must preserve the configured workspace identity."
-    )
-    assert catalogue.sessions == [], (
-        "An explicit empty list must be accepted without waiting for child teardown."
-    )
+    async with tracked_fake_lody_children(monkeypatch, executable) as children:
+        catalogue = await asyncio.wait_for(
+            read_catalogue("leynos", str(executable)), timeout=9
+        )
+        assert catalogue.workspace_id == "workspace", (
+            "A complete response must preserve the configured workspace identity."
+        )
+        assert catalogue.sessions == [], (
+            "An explicit empty list must return despite the lingering transport."
+        )
+        assert len(children) == 1, "The catalogue read must own one native child."
+        child = children[0][1]
+        assert child.returncode == -expected_signal, (
+            f"The completed read must terminate its child with {expected_signal.name}."
+        )
+        assert await asyncio.wait_for(child.wait(), timeout=1) == -expected_signal, (
+            f"The {expected_signal.name} child must be reaped before returning."
+        )
 
 
 @pytest.mark.asyncio

@@ -24,8 +24,10 @@ animation frames. PR-stage evidence and its limitations are recorded in
 over typed source records. Its frozen results use Python field names and have
 no storage, clock or process effects. `storage/projections.py` copies and
 updates public JSON, retains legacy-value handling, and encodes the shared
-optional turn shape. Journal ingestion and sidecar restoration use that same
-adapter. Keep these responsibilities together rather than adding another merge
+optional turn shape. Journal ingestion and on-demand activity resolution use
+that same adapter. Cached sidecar restoration instead overlays validated facts
+through `ActivityCache.merge` and `storage/activity_projection.py`. Keep the
+transition responsibilities together rather than adding another merge
 implementation. [ADR 008](adr-008-runtime-evidence-policy.md) records this
 session-specific reuse boundary and its compatibility requirements.
 
@@ -541,8 +543,14 @@ tests; they are not application data contracts.
 
 `tests/lody_process_support.py` shares executable-script creation and call-log
 reading between those two reader suites. Each suite retains its own protocol
-fixtures and assertions. `tests/deferred.ts` supplies controlled asynchronous
-completion for browser-hook tests without production timing delays.
+fixtures and assertions. Its native-child tracker is limited to lifecycle
+tests: it observes handles from the real adapter for one fake executable and
+reaps leftovers if a test assertion fails. Catalogue and collector tests assert
+termination and reaping before that fallback cleanup; a child that ignores
+SIGTERM exercises the adapter's real SIGKILL deadline. These tests require a
+dedicated child rather than an ordinary command-response mock.
+`tests/deferred.ts` supplies controlled asynchronous completion for
+browser-hook tests without production timing delays.
 `tests/documentation_examples.py` loads marked fences from the published users'
 guide for integration and behaviour-driven tests. It enforces this guide's
 strict marker/fence contract, not general Markdown rendering. External setup
@@ -552,6 +560,14 @@ edges. A Make dry-run checks the Act environment flag without running Act.
 negative assertions for public preference callbacks; it is never executed. The
 bounded-frame property exercises finite UTF-8 chunk partitions and malformed
 siblings, complementing the named limit tests without claiming a formal proof.
+The recency-packing property drives the real browser hook with distinct
+eligible Unicode IDs, including JSON escaping and length boundaries. It checks
+exact membership, count and encoded-byte limits over 50 generated cases and
+three fixed controls, retaining per-case cleanup and deadlines.
+`availableRecencyResponse` in `tests/family-browser-fixture.ts` supplies strict
+available-member frames for the transport and packing suites, using current
+workspace and execution watermarks. Tests with different per-member history
+retain their own response fixtures.
 
 `tests/bun_test_capture.py` owns the bounded Bun child lifecycle shared by the
 recency, inspector-request and observed-timestamp cross-runtime contracts. It
