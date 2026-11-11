@@ -1438,3 +1438,29 @@ Removing live-stream cleanup or activity cleanup now fails its respective
 control. Payload-validation and sequence-contiguity bypasses each fail the
 protocol property. Production source and built browser assets were restored
 byte for byte after these controls.
+
+### Ingestion storage recovery and scoped reads, 11 November 2026
+
+The affected assessment accepted catalogue refresh recovery, but identified a
+separate ingestion path that could exit on a SQLAlchemy storage error. The
+collector now retains the decoded event and exact raw line across capped
+retries before reading another record. Native-child tests fail on the old path
+and pass after the repair, covering pre-commit failure and uncertain
+post-commit acknowledgement. Both produce one durable row per source sequence
+and then admit the next record. Persistent failure respects the 30-second cap;
+cancellation reaps the observer even when final health cannot be written.
+
+Readiness tests now fail the bounded database read while process liveness
+remains available, and separately keep a readable database ready with a
+disconnected source. Removing the readiness query makes its regression fail;
+the production API source was restored exactly. Session-show rejections emit
+one safe category per owned failed read, cache unavailability without extra
+warnings or subprocesses and accept the next valid revision quietly.
+
+The recency lifecycle property drives the real hook through 35 bounded
+histories of visibility, revision, workspace and held-response changes. Its
+independent expected map checks exact accepted timestamps after each action,
+with explicit controls for valid out-of-order results, discarded stale facts
+and a newer workspace result surviving an older response. A stream-consumption
+witness keeps assertions after frame handling. These remain finite tests.
+Aggregate gates, publication and affected confirmation remain separate steps.

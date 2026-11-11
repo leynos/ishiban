@@ -393,6 +393,15 @@ Both collector suites reuse `storage_support.observer_frame` to adapt committed
 observer fixtures to their isolated `w1` workspace; keep this helper scoped to
 those journal fixtures rather than general input rewriting.
 
+`Collector._ingest_with_retry` owns only the commit of an already decoded
+observer record. It retains the same event and raw bytes across retryable
+storage failures before the next stream read; journal deduplication handles an
+uncertain acknowledgement. Its backoff is cancellable and capped at 30 seconds.
+The final stopped-health diagnostic cannot replace incoming cancellation. Keep
+this helper at the observer commit boundary rather than turning it into a
+general retry framework. Native-child ingestion tests exercise failures before
+and after commit and cancellation while the first record remains uncommitted.
+
 `tests/test_runtime_evidence_properties.py` drives the real store through 40
 generated histories of at most 12 actions, plus explicit mixed-source and
 restart examples. Its independent model checks every committed prefix across
@@ -411,6 +420,21 @@ the next valid record must still accept the unconsumed sequence. The
 independent model tracks only accepted stream identity and sequence. Keep its
 perturbation builders local to this decoder contract rather than duplicating
 validation policy in production.
+
+The readiness tests in `tests/test_api.py` inject SQLAlchemy read failures at
+the bounded journal query: `/ready` must fail while `/health` remains live.
+They separately confirm that a disconnected collector leaves a readable
+database ready. Session-show rejection tests use `cmd-mox` and captured logging
+to check safe categories, cache-hit silence and a quiet valid retry without
+exposing private response fields.
+
+`tests/session-recency-lifecycle-property.test.tsx` runs the real hook through
+35 bounded histories of visibility, workspace, execution revision and held
+response changes. Its independent map tracks accepted timestamps, not only
+session membership. Distinct response times and explicit controls check that
+newer accepted facts survive older responses. A second stream pull witnesses
+frame consumption before assertions. Keep the held-response and model helpers
+local to this property; they are finite test evidence, not production policy.
 
 The public-preview and turn-transition property modules keep their own explicit
 copy, typing and Hypothesis imports. Their exact file-pair exception covers a
@@ -585,14 +609,17 @@ argument vector, while the activity reader's native-process regression retains
 its bounded transport and cleanup coverage.
 
 Metadata-cache warnings use fixed `capacity`, `deadline`, `protocol` and `cli`
-categories. Recency storage failures use `storage`; incomplete GitHub title
-lookups use `partial` while preserving successful sibling titles and normal
-positive/negative caching. These diagnostic messages omit session IDs, PR URLs,
-payloads, exception messages and tracebacks. They do not infer authentication
-failures from an ambiguous CLI failure. This is local diagnostic logging,
-without a metrics or tracing backend. Capacity warnings are limited to one per
-reader in each 30-second monotonic interval; the next warning counts suppressed
-rejections without retaining their identities.
+categories. An explicit negative session-show acknowledgement uses `negative`;
+foreign workspace or session responses use the shared `protocol` path. Each
+rejected session-show load emits its category once; a cached unavailable result
+adds no warning or CLI read. Recency storage failures use `storage`; incomplete
+GitHub title lookups use `partial` while preserving successful sibling titles
+and normal positive/negative caching. These diagnostic messages omit session
+IDs, PR URLs, payloads, exception messages and tracebacks. They do not infer
+authentication failures from an ambiguous CLI failure. This is local diagnostic
+logging, without a metrics or tracing backend. Capacity warnings are limited to
+one per reader in each 30-second monotonic interval; the next warning counts
+suppressed rejections without retaining their identities.
 
 Inspector agent metadata uses a separate bounded reader and 128-entry TTL
 cache. The only exported fields are agent type, configuration ID and

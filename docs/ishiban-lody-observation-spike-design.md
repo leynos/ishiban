@@ -203,7 +203,14 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
    for idempotency. The API can see the event only after the projection commit.
    Persist the **post-event public projection** with the journal row so
    reconnect replay does not reconstruct old events from the database's newest
-   state.
+   state. On a retryable SQLAlchemy `OperationalError`, retain the decoded
+   event and exact raw record without reading the next observer record. Retry
+   with exponential delays from one second up to 30 seconds until commit or
+   cancellation. An uncertain commit acknowledgement can safely repeat the
+   write because stream/sequence deduplication prevents a second journal row or
+   cursor advance. Report fixed diagnostics without payloads or exception text.
+   Observer teardown still owns its refresher, and an unavailable final
+   `stopped` health write must not mask incoming cancellation.
 6. On `ready`, mark *catalogue enumeration* ready, not every session fully
    synchronized. Fetch the optional read-only catalogue snapshot for repository
    enrichment in a separately owned refresh task while stream ingestion

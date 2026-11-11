@@ -201,6 +201,11 @@ reports a warning when storage accepts writes and clears it after successful
 reconciliation. Initial retries retain the quiet startup baseline, so recovery
 does not turn initial catalogue data into a flood of update pulses.
 
+Observation writes use the same capped retry delays. The collector retains a
+received event until its journal write succeeds, then continues with the next
+record. Retrying an uncertain commit does not duplicate the event. Stopping the
+collector cancels a waiting retry even if storage cannot record final health.
+
 During validation of the `leynos` workspace, the upstream Lody observer used
 approximately 4.4 GiB of resident memory after hydration; the collector and API
 used roughly 90 MiB each. These are single-run observations, rather than
