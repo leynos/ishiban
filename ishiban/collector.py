@@ -15,6 +15,7 @@ import msgspec
 from ishiban.domain import CatalogueEntry, PullRequest
 from ishiban.lody import PR_URL, child, read_catalogue, read_pull_requests
 from ishiban.protocol import Catalogue, ProtocolError, StreamPosition, decode_event
+from ishiban.task_ownership import cancel_and_reap
 from ishiban.workflow import classify
 
 if typ.TYPE_CHECKING:
@@ -135,12 +136,9 @@ class Collector:
             while True:
                 self.generation = await self.store.begin_generation()
                 try:
-                    catalogue = initial or await read_catalogue(
-                        self.workspace, self.executable
-                    )
+                    catalogue = initial
                     initial = None
-                    await self.reconcile(catalogue)
-                    await self._follow()
+                    await self._follow(catalogue)
                 except (
                     OSError,
                     TimeoutError,
@@ -158,7 +156,7 @@ class Collector:
         finally:
             await self.store.health("stopped", self.generation)
 
-    async def _follow(self) -> None:
+    async def _follow(self, initial: Catalogue | None = None) -> None:
         """Attach one workspace observer and a periodic catalogue refresher.
 
         Raises
@@ -176,7 +174,7 @@ class Collector:
             "--jsonl",
             "--follow",
         )
-        refresh = asyncio.create_task(self._refresh())
+        refresh: asyncio.Task[None] | None = None
         try:
             async with child(command) as process:
                 if process.stdout is None:
@@ -186,35 +184,40 @@ class Collector:
                 while line := await process.stdout.readline():
                     event = decode_event(line, self.store.workspace_id, position)
                     await self.store.ingest(event, self.generation, raw=line)
-                    if event.type == "ready":
-                        await self.store.health(
-                            "following", self.generation, self.enrichment_error
+                    if event.type == "ready" and refresh is None:
+                        refresh = asyncio.create_task(
+                            self._refresh(initial, start_immediately=True)
                         )
                 message = (
                     "Observer exited; historical gaps cannot be replayed upstream."
                 )
                 raise ProtocolError(message)
         finally:
-            refresh.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await refresh
+            if refresh is not None:
+                await cancel_and_reap((refresh,))
 
-    async def _refresh(self) -> None:
-        """Reconcile read-only catalogue associations every five minutes."""
+    async def _refresh(
+        self, initial: Catalogue | None = None, *, start_immediately: bool = False
+    ) -> None:
+        """Reconcile after observer readiness, then every five minutes."""
+        if start_immediately:
+            await self._refresh_once(initial)
         while True:
             await asyncio.sleep(300)
-            try:
-                catalogue = await read_catalogue(self.workspace, self.executable)
-                await self.reconcile(catalogue)
-                await self.store.health(
-                    "following", self.generation, self.enrichment_error
-                )
-            except OSError, TimeoutError, ProtocolError, msgspec.DecodeError:
-                await self.store.health(
-                    "following",
-                    self.generation,
-                    "Catalogue refresh unavailable; associations may be stale.",
-                )
+            await self._refresh_once()
+
+    async def _refresh_once(self, catalogue: Catalogue | None = None) -> None:
+        """Apply one catalogue read, preserving a live observer on failure."""
+        try:
+            current = catalogue or await read_catalogue(self.workspace, self.executable)
+            await self.reconcile(current)
+            await self.store.health("following", self.generation, self.enrichment_error)
+        except OSError, TimeoutError, ProtocolError, msgspec.DecodeError:
+            await self.store.health(
+                "following",
+                self.generation,
+                "Catalogue refresh unavailable; associations may be stale.",
+            )
 
 
 @contextlib.contextmanager

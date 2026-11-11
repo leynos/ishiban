@@ -53,7 +53,7 @@ async def test_collector_retries_preserve_errors_and_release_on_cancellation(
         await original_sleep(0)
 
     source = mock.AsyncMock(side_effect=source_error)
-    monkeypatch.setattr(observation, "read_catalogue", source)
+    monkeypatch.setattr(observation.Collector, "_follow", source)
     monkeypatch.setattr(observation.asyncio, "sleep", two_attempts)
     async with opened_store(tmp_path) as store:
         with pytest.raises(asyncio.CancelledError):

@@ -3,6 +3,7 @@ import {useEffect, useMemo, useState} from 'react';
 import type {Session, Snapshot} from '../contracts';
 
 const PULSE_LIFETIME_MS = 900;
+const QUIET_STARTUP_STATES = new Set(['connecting', 'catalogue_ready']);
 
 interface PulseCue {
   readonly revision: number;
@@ -135,8 +136,8 @@ function hasMeaningfulChange(previous: Session, current: Session): boolean {
 /** Startup replay and generation transitions establish a quiet semantic baseline. */
 function shouldResetBaseline(previous: Snapshot, current: Snapshot): boolean {
   return (
-    previous.collector.state === 'connecting' ||
-    current.collector.state === 'connecting' ||
+    QUIET_STARTUP_STATES.has(previous.collector.state) ||
+    QUIET_STARTUP_STATES.has(current.collector.state) ||
     previous.collector.generation !== current.collector.generation
   );
 }
