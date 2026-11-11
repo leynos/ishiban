@@ -1,14 +1,9 @@
 /** @file Exercise computed board geometry and real SSE pulses in Chromium. */
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
-import {GlobalRegistrator} from '@happy-dom/global-registrator';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
 import {runCapturedCommand} from './browser-command';
-
-const {ISHIBAN_BROWSER_TESTS: browserTestSwitch} = Bun.env;
-const isBrowserEnabled = browserTestSwitch === '1';
-// This opt-in suite uses Chromium and Bun's native HTTP types, rather than Happy DOM.
-if (isBrowserEnabled) await GlobalRegistrator.unregister();
+import {isBrowserEnabled} from './native-browser-environment';
 
 const sessionName = `ishiban-layout-${process.pid}`;
 const snapshot = createDemoSnapshot();
