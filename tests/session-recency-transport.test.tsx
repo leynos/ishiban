@@ -2,6 +2,7 @@
 import {afterEach, expect, it, setSystemTime} from 'bun:test';
 import {act, cleanup, renderHook, waitFor} from '@testing-library/react';
 import {useSessionRecency} from '../src/session-recency';
+import {groupSessions} from '../src/session-families';
 import {createFamilySnapshot, createMultibyteFamilySnapshot, firstSession} from './board-fixtures';
 import {deferred, type Deferred} from './deferred';
 import {installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
@@ -96,6 +97,34 @@ it('packs accepted multibyte member IDs by encoded byte size', async () => {
   await waitFor(() => expect(result.current.facts.size).toBe(8));
   expect(bodies.flatMap((body) => JSON.parse(body).sessionIds).length).toBe(8);
   expect(bodies.every((body) => new TextEncoder().encode(body).byteLength <= 8192)).toBe(true);
+});
+
+it('keeps a valid family sibling out of a batch with a 257-code-point source ID', async () => {
+  const base = createFamilySnapshot(1);
+  const snapshot = {
+    ...base,
+    sessions: base.sessions.map((session) =>
+      session.sessionId === 'child-0' ? {...session, sessionId: 'x'.repeat(257)} : session
+    )
+  };
+  const mark = installFamilyMarks(1)[0];
+  if (!mark) throw new Error('The unsupported-ID family needs a root mark.');
+  const requests: string[][] = [];
+  browser = installFamilyBrowser(async (_input, init) => {
+    const ids: string[] = JSON.parse(String(init?.body)).sessionIds;
+    requests.push(ids);
+    return availableResponse();
+  });
+  const {result, rerender} = renderHook(({current}) => useSessionRecency(current), {
+    initialProps: {current: snapshot}
+  });
+  act(() => browser?.visibility(mark, true));
+  await waitFor(() => expect(result.current.facts.get('root-0')?.outcome).toBe('available'));
+  expect(requests).toEqual([['root-0']]);
+  const family = groupSessions(snapshot.sessions, result.current.facts)[0];
+  expect(family?.recencyIncomplete).toBe(true);
+  rerender({current: {...snapshot}});
+  expect(requests).toEqual([['root-0']]);
 });
 
 for (const variant of [

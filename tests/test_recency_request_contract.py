@@ -163,3 +163,36 @@ async def test_multibyte_browser_batches_pass_real_asgi_decoder(
     )
     assert len(lody.invocations) == 8, "The native adapter must read each ID once."
     assert before == after, "Recency enrichment must not mutate the journal."
+
+
+@pytest.mark.asyncio
+async def test_unsupported_source_id_does_not_reject_valid_browser_sibling(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+) -> None:
+    """A 257-code-point catalogue tab stays off the wire while its root resolves."""
+    body = await _capture_browser_request(
+        tmp_path, variable="ISHIBAN_RECENCY_UNSUPPORTED_CAPTURE"
+    )
+    assert json.loads(body)["sessionIds"] == ["root-0"], (
+        "The browser must isolate the valid sibling before Falcon sees the batch."
+    )
+    lody = cmd_mox.spy("lody").runs(_show_member)
+    async with opened_store(tmp_path) as store:
+        await seed_unknown_sessions(store, ["root-0", "x" * 257])
+        before = (await store.snapshot(), await store.events(0))
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            result = await conductor.simulate_post(
+                "/api/v1/sessions/recency",
+                body=body,
+                headers={"content-type": "application/json"},
+            )
+            after = (await store.snapshot(), await store.events(0))
+    assert result.status_code == 200, "The isolated valid request must pass Falcon."
+    frames = [json.loads(line) for line in result.content.splitlines()]
+    assert [frame["sessionId"] for frame in frames] == ["root-0"], (
+        "The valid sibling must receive exactly one result."
+    )
+    assert frames[0]["outcome"] == "available", "The valid root must resolve."
+    assert len(lody.invocations) == 1, "Only the requestable ID reaches Lody."
+    assert before == after, "On-demand recency must leave the journal unchanged."

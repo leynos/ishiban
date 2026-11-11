@@ -5,6 +5,9 @@ import {readBoundedFrames} from './bounded-frames';
 import type {Snapshot} from './contracts';
 import {groupSessions, type RecencyFact, type SessionFamily} from './session-families';
 import {withRequestLifetime} from './request-lifetime';
+import {isRequestableSessionId} from './lookup-session-id';
+import {settleFact, unconfirmedFact, type CacheEntry, type RecencyState} from './recency-facts';
+export type {RecencyState} from './recency-facts';
 
 const FrameSchema = Schema.Union([
   Schema.Struct({
@@ -27,15 +30,6 @@ interface Lookup {
   readonly sessionId: string;
   readonly basis: number;
 }
-interface CacheEntry {
-  readonly basis: number;
-  readonly fact: RecencyFact;
-  readonly expiresAt: number;
-}
-export interface RecencyState {
-  readonly facts: ReadonlyMap<string, RecencyFact>;
-  readonly limitedRoots: ReadonlySet<string>;
-}
 interface ScopedFacts extends RecencyState {
   readonly workspaceId: string;
 }
@@ -51,13 +45,6 @@ const MAX_CACHE = 512;
 /** Measure the exact recency POST request shape; only this endpoint reuses it. */
 function encodedBodyBytes(sessionIds: readonly string[]): number {
   return new TextEncoder().encode(JSON.stringify({sessionIds})).byteLength;
-}
-
-/** Retain a known history fact when one refresh is unavailable. */
-function retainedFact(fact: RecencyFact, prior: CacheEntry | undefined, basis: number): RecencyFact {
-  if (fact.outcome === 'available') return fact;
-  if (prior?.basis !== basis) return fact;
-  return prior.fact.outcome === 'available' ? prior.fact : fact;
 }
 
 /** Own queued visible lookups and cancel all network work on scope or unmount. */
@@ -119,6 +106,8 @@ class RecencyRequests {
 
   /** Retry expired facts and changed execution bases for visible family members. */
   revisit(): void {
+    if (this.stopped) return;
+    this.expireFacts();
     this.familyByMember.clear();
     const eligible = new Set<string>();
     const limitedRoots = new Set<string>();
@@ -136,6 +125,18 @@ class RecencyRequests {
     this.drain();
   }
 
+  /** Mark expired timestamps provisional, even while their family is hidden. */
+  private expireFacts(): void {
+    const now = Date.now();
+    let hasExpiredFact = false;
+    for (const [id, entry] of this.cache) {
+      if (entry.expiresAt > now || entry.fact.outcome !== 'available') continue;
+      this.cache.set(id, {...entry, fact: unconfirmedFact(entry.fact, 'pending')});
+      hasExpiredFact = true;
+    }
+    if (hasExpiredFact) this.publishState();
+  }
+
   /** Preserve stable family member order when filling the bounded queue. */
   private enqueueAdmittedMembers(eligible: ReadonlySet<string>): void {
     for (const family of this.families) {
@@ -149,7 +150,9 @@ class RecencyRequests {
   private indexFamily(family: SessionFamily, eligible: Set<string>, limitedRoots: Set<string>): void {
     for (const member of family.members) this.familyByMember.set(member.sessionId, family.rootId);
     if (family.members.length < 2 || !this.visible.has(family.rootId)) return;
-    const realMembers = family.members.filter((member) => member.source !== 'demo');
+    const realMembers = family.members.filter(
+      (member) => member.source !== 'demo' && isRequestableSessionId(member.sessionId)
+    );
     if (realMembers.length > MAX_CACHE - eligible.size) {
       limitedRoots.add(family.rootId);
       return;
@@ -180,7 +183,7 @@ class RecencyRequests {
   private record(task: Lookup, fact: RecencyFact): void {
     if (!this.isCurrent(task)) return;
     const prior = this.cache.get(task.sessionId);
-    const finalFact = retainedFact(fact, prior, task.basis);
+    const finalFact = settleFact(fact, prior, task.basis);
     this.cache.delete(task.sessionId);
     if (this.cache.size >= MAX_CACHE) {
       const evictable = [...this.cache.keys()].find((sessionId) => !this.eligible.has(sessionId));

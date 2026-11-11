@@ -351,6 +351,14 @@ view releases capacity for the remaining visible work. A failed or malformed
 history response pauses new requests briefly while valid sibling results stay
 available.
 
+An expired history result makes the selected tab provisional again until a
+fresh read succeeds. A failed refresh can keep an older timestamp as fallback
+evidence, but it does not override a running tab while selection is
+provisional. Source tabs whose IDs exceed the lookup API's limit or contain a
+NUL remain visible with their original inspector identity. Their recency or
+unknown activity cannot be looked up; other tabs in the family continue
+updating.
+
 The inspector keeps your selection as the board discovers related tabs.
 
 Archiving the root hides the logical task, including any child tabs Lody leaves

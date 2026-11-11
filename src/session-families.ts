@@ -4,6 +4,8 @@
  * reads, board state, and transport caching belong to their existing owners.
  */
 import type {Session} from './contracts';
+import {historyTimestamp, type RecencyFact} from './recency-facts';
+export type {RecencyFact} from './recency-facts';
 
 /** One root's stable context and the family member selected to represent activity. */
 export interface SessionFamily {
@@ -15,13 +17,7 @@ export interface SessionFamily {
   readonly recencyBudgetLimited: boolean;
 }
 
-/**
- * The state of a member's history lookup; a successful empty history differs from failure.
- */
-export type RecencyFact =
-  | {readonly outcome: 'available'; readonly latestHistoryAt: string | null}
-  | {readonly outcome: 'unavailable'};
-
+/** Separate seconds and fractions to preserve sub-millisecond recency ordering. */
 interface ParsedTimestamp {
   readonly epochSecond: bigint;
   readonly fraction: string;
@@ -180,9 +176,9 @@ function compareActivityCandidates(
 
 /** Resolve successful history recency, using creation time for empty history. */
 function effectiveRecencyFor(session: Session, recency: ReadonlyMap<string, RecencyFact>): ParsedTimestamp | undefined {
-  const fact = recency.get(session.sessionId);
-  if (fact?.outcome !== 'available') return undefined;
-  return parseTimestamp(fact.latestHistoryAt) ?? parseTimestamp(session.createdAt);
+  const knownHistoryAt = historyTimestamp(recency.get(session.sessionId));
+  if (knownHistoryAt === undefined) return undefined;
+  return parseTimestamp(knownHistoryAt) ?? parseTimestamp(session.createdAt);
 }
 
 /** Parse a strict extended ISO timestamp without losing sub-millisecond precision. */

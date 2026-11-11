@@ -1,13 +1,13 @@
 # Ishiban initial observation proof of concept
 
-Status: the original implementation and its local acceptance are complete.
-Draft PR #9 is published. The core session-family browser acceptance, full
-local quality gates, and hosted CI and Act Validation on `b26d0ba` passed.
-CodeRabbit then identified three further recency edge cases, now repaired with
-full local gates and focused follow-up checks passing. The repair candidate's
-hosted checks, reassessment, and formal review are tracked in
-[PR #9](https://github.com/leynos/ishiban/pull/9). The original
-implementation's publication restriction is superseded by the user's PR
+Status: the original implementation and its local acceptance are complete. The
+proof of concept is published in
+[PR #9](https://github.com/leynos/ishiban/pull/9). Hosted CI and Act Validation
+passed on `b26d0ba` and the assessment-4 repair head `461ea91`. The
+assessment-5 refresh-status and unsupported-ID fixes now pass full local gates,
+including 249 Python tests, 151 Bun tests and four Chromium geometry cases.
+Current publication, hosted evidence and review convergence are tracked in the
+PR. The original publication restriction is superseded by the user's PR
 creation and babysitting requests. Lody writes remain forbidden; no merge has
 been authorized.
 
@@ -844,5 +844,32 @@ validation. The working-tree CodeScene delta reports no issues; all changed
 source and test files score 10.0 in direct reviews. A test-only cleanup derives
 expected membership from raw parent links; its four focused cases pass.
 Published candidate checks and reassessment are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
+introduced.
+
+### Refresh status and lookup ID admission, 10 November 2026
+
+**Surprise and decision.** Assessment 5 found that a failed refresh retained an
+`available` fact and could make a stale idle tab appear conclusive. It also
+found that a 257-code-point source ID could reject valid siblings in an entire
+Falcon batch. Keep current status separate from last-known history, mark
+expired facts pending even for hidden families, and retain same-execution
+history only as provisional fallback. Use one pure client predicate for both
+recency and activity lookup admission; preserve raw catalogue and CLI IDs.
+[ADR 007](../adr-007-session-tab-families.md) records these boundaries.
+
+**Progress and verification.** Focused red regressions reproduced the expired
+winner and unsupported recency/activity batches. The repaired candidate passes
+43 focused Bun recency, activity, board and model cases. These include a hidden
+inspector expiry and a generated timestamp property for provisional selection.
+Three browser-to-Falcon/CmdMox contract cases pass, including actual wire bytes
+for a 257-code-point source tab and valid sibling with no journal writes. Full
+local validation completed on 11 November 2026: 249 Python tests, 151 Bun tests
+(nine opt-in skips), and four Chromium cases with 24 geometry, scrolling and
+pulse assertions. Build, formatting, lint, typecheck, dependency audit,
+Markdown/spelling, diagrams and Makefile validation pass. The strict
+working-tree CodeScene delta exits zero and its human report says no issues;
+new helper and test files score 10.0 in direct reviews. These are local
+results; exact-head hosted checks and reassessment are tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
 introduced.

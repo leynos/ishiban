@@ -4,6 +4,7 @@ import {readActivityFrames} from './activity-batch';
 import {readSessionActivityResponse} from './activity-fallback';
 import type {BoardStore} from './client';
 import {withRequestLifetime} from './request-lifetime';
+import {isRequestableSessionId} from './lookup-session-id';
 
 interface Lookup {
   readonly workspaceId: string;
@@ -38,6 +39,13 @@ const BATCH_SIZE = 4;
 const MAX_BATCHES = 2;
 const TRANSFER_NOTICE = 'Activity details exceed the transfer limit. Open the session in Lody.';
 
+/** Require one real unknown session whose raw ID can cross the API boundary. */
+function isActivityLookupCandidate(session: Session): boolean {
+  if (session.state !== 'unknown') return false;
+  if (session.source === 'demo') return false;
+  return isRequestableSessionId(session.sessionId);
+}
+
 /** Own two bounded browser lookups; for example, enqueue a visible unknown session. */
 class ActivityRequests {
   private readonly queue: Lookup[] = [];
@@ -58,8 +66,7 @@ class ActivityRequests {
     if (!snapshot) return;
     const session = snapshot.sessions.find((item) => item.sessionId === sessionId);
     if (!session) return;
-    if (session.state !== 'unknown') return;
-    if (session.source === 'demo') return;
+    if (!isActivityLookupCandidate(session)) return;
     if (this.queue.length >= 256 || this.activeSessionIds.has(sessionId)) return;
     const key = `${snapshot.workspaceId}:${sessionId}:${session.lastEventId}`;
     if (this.isRecentlyAttempted(key)) return;

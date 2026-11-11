@@ -3,6 +3,7 @@ import {afterEach, expect, it, setSystemTime} from 'bun:test';
 import {act, cleanup, renderHook, waitFor} from '@testing-library/react';
 import type {Snapshot} from '../src/contracts';
 import {useSessionRecency} from '../src/session-recency';
+import {groupSessions, type RecencyFact, type SessionFamily} from '../src/session-families';
 import {createFamilySnapshot} from './board-fixtures';
 import {installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
 import {deferred, type Deferred} from './deferred';
@@ -37,6 +38,20 @@ function availableFrame(snapshot: Snapshot, sessionId: string, time: string): Re
       latestHistoryAt: time
     })}\n`
   );
+}
+
+/** Require a family after projecting current recency into the fixture catalogue. */
+function currentFamily(snapshot: Snapshot, facts: ReadonlyMap<string, RecencyFact>): SessionFamily {
+  const family = groupSessions(snapshot.sessions, facts)[0];
+  if (!family) throw new Error('The refresh fixture must keep its linked family.');
+  return family;
+}
+
+/** Require one held recency request before advancing its response. */
+function requestGate(network: ReturnType<typeof installPendingFetch>, index: number): Deferred<Response> {
+  const gate = network.gates[index];
+  if (!gate) throw new Error(`The refresh fixture must start request ${index}.`);
+  return gate;
 }
 
 afterEach(() => {
@@ -127,4 +142,53 @@ it('drops a queued family after its mark leaves the viewport', async () => {
   });
   await waitFor(() => expect(network.requests.length).toBe(3));
   expect(network.requests[2]).toEqual(['child-3', 'root-3']);
+});
+
+it('makes an expired winner provisional through failed refresh and conclusive recovery', async () => {
+  let now = Date.now();
+  setSystemTime(now);
+  try {
+    const marks = installFamilyMarks(1);
+    const mark = marks[0];
+    if (!mark) throw new Error('The refresh fixture needs one visible family mark.');
+    const network = installPendingFetch();
+    const snapshot = createFamilySnapshot(1);
+    const {result, rerender} = renderHook(({current}) => useSessionRecency(current), {
+      initialProps: {current: snapshot}
+    });
+    act(() => browser?.visibility(mark, true));
+    await waitFor(() => expect(network.gates.length).toBe(1));
+    const oldRoot = '2026-11-10T18:41:02.707Z';
+    const oldChild = '2026-11-03T22:05:49.972Z';
+    const root = await availableFrame(snapshot, 'root-0', oldRoot).text();
+    const child = await availableFrame(snapshot, 'child-0', oldChild).text();
+    const successfulBody = root + child;
+    await act(async () => requestGate(network, 0).resolve(new Response(successfulBody)));
+    await waitFor(() => expect(result.current.facts.get('root-0')?.outcome).toBe('available'));
+    expect(currentFamily(snapshot, result.current.facts).activity.sessionId).toBe('root-0');
+
+    now += 300_001;
+    setSystemTime(now);
+    rerender({current: {...snapshot}});
+    await waitFor(() => expect(network.gates.length).toBe(2));
+    expect(result.current.facts.get('root-0')).toEqual({outcome: 'pending', lastKnownHistoryAt: oldRoot});
+    const pending = currentFamily(snapshot, result.current.facts);
+    expect(pending.activity.sessionId).toBe('child-0');
+    expect(pending.recencyIncomplete).toBe(true);
+
+    await act(async () => requestGate(network, 1).resolve(new Response('', {status: 429})));
+    expect(result.current.facts.get('root-0')).toEqual({outcome: 'unavailable', lastKnownHistoryAt: oldRoot});
+    expect(currentFamily(snapshot, result.current.facts).activity.sessionId).toBe('child-0');
+    now += 30_001;
+    setSystemTime(now);
+    rerender({current: {...snapshot}});
+    await waitFor(() => expect(network.gates.length).toBe(3));
+    await act(async () => requestGate(network, 2).resolve(new Response(successfulBody)));
+    await waitFor(() => expect(result.current.facts.get('root-0')?.outcome).toBe('available'));
+    const settled = currentFamily(snapshot, result.current.facts);
+    expect(settled.activity.sessionId).toBe('root-0');
+    expect(settled.recencyIncomplete).toBe(false);
+  } finally {
+    setSystemTime();
+  }
 });

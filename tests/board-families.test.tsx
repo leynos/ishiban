@@ -1,10 +1,11 @@
 /** @file Verify one stable board mark combines root workflow and latest-tab activity. */
-import {afterEach, expect, it} from 'bun:test';
+import {afterEach, expect, it, setSystemTime} from 'bun:test';
 import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Board} from '../src/ui/board';
 import {createFamilySnapshot} from './board-fixtures';
 import {installFamilyBrowser} from './family-browser-fixture';
+import {deferred, type Deferred} from './deferred';
 
 afterEach(cleanup);
 
@@ -130,6 +131,50 @@ it('settles visible family recency quietly from two validated history frames', a
     expect(requested).toEqual([['child-0', 'root-0']]);
     expect(mark.querySelector('[data-session-update-pulse]')).toBeNull();
   } finally {
+    browser.restore();
+  }
+});
+
+it('marks a hidden-family inspector provisional when its settled history expires', async () => {
+  let now = Date.now();
+  setSystemTime(now);
+  const snapshot = createFamilySnapshot(1);
+  const requests: Deferred<Response>[] = [];
+  const browser = installFamilyBrowser(async (input) => {
+    if (String(input) !== '/api/v1/sessions/recency') return new Response('', {status: 404});
+    const request = deferred<Response>();
+    requests.push(request);
+    return request.promise;
+  });
+  try {
+    const user = userEvent.setup();
+    const {rerender} = render(<Board connection="Connected" snapshot={snapshot} />);
+    const mark = screen.getByRole('button', {name: /Root planning work; Refine; running/u});
+    act(() => browser.visibility(mark, true));
+    await waitFor(() => expect(requests.length).toBe(1));
+    const frames = snapshot.sessions.map((session) =>
+      JSON.stringify({
+        workspaceId: snapshot.workspaceId,
+        sessionId: session.sessionId,
+        lastActivityEventId: session.lastActivityEventId ?? 0,
+        outcome: 'available',
+        latestHistoryAt: session.sessionId === 'root-0' ? '2026-11-10T18:41:02.707Z' : '2026-11-03T22:05:49.972Z'
+      })
+    );
+    await act(async () => requests[0]?.resolve(new Response(`${frames.join('\n')}\n`)));
+    await waitFor(() => expect(mark.getAttribute('data-session-id')).toBe('root-0'));
+    await user.click(mark);
+    expect(screen.queryByText(/Tab recency is pending or unavailable/u)).toBeNull();
+
+    act(() => browser.visibility(mark, false));
+    now += 300_001;
+    setSystemTime(now);
+    rerender(<Board connection="Connected" snapshot={{...snapshot}} />);
+    await waitFor(() => expect(mark.getAttribute('data-session-id')).toBe('child-0'));
+    expect(requests).toHaveLength(1);
+    expect(screen.getByText(/Tab recency is pending or unavailable.*selected tab is provisional/u)).toBeTruthy();
+  } finally {
+    setSystemTime();
     browser.restore();
   }
 });

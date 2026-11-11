@@ -266,6 +266,29 @@ it('keeps provisional running activity when that member lookup becomes unavailab
   expect(groupSessions([root, child], historyUnavailable)[0]?.activity).toBe(child);
 });
 
+it('keeps a running tab provisional across generated retained timestamp orderings', () => {
+  const root = sessionRecord('root', {state: 'idle'});
+  const child = sessionRecord('child', {parentSessionId: 'root', state: 'running'});
+  fc.assert(
+    fc.property(
+      fc.integer({min: 0, max: 100_000}),
+      fc.integer({min: 0, max: 100_000}),
+      fc.constantFrom('pending', 'unavailable'),
+      (rootMinute, childMinute, outcome) => {
+        const rootTime = new Date(Date.UTC(2026, 10, 1) + rootMinute * 60_000).toISOString();
+        const childTime = new Date(Date.UTC(2026, 10, 1) + childMinute * 60_000).toISOString();
+        const facts: ReadonlyMap<string, RecencyFact> = new Map([
+          ['root', {outcome, lastKnownHistoryAt: rootTime}],
+          ['child', available(childTime)]
+        ]);
+        const family = groupSessions([root, child], facts)[0];
+        expect(family?.activity.sessionId).toBe('child');
+        expect(family?.recencyIncomplete).toBe(true);
+      }
+    )
+  );
+});
+
 it('is invariant under input reversal for generated parent graphs', () => {
   const graph = fc.uniqueArray(fc.integer({min: 0, max: 10_000}), {minLength: 1, maxLength: 8});
 

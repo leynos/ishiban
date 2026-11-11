@@ -562,6 +562,24 @@ or missing HTTP 200 members engage the same cooldown after valid siblings are
 applied. The recency decoder marks malformed members before the shared frame
 reader skips them; activity decoding retains its independent-member policy.
 
+`src/lookup-session-id.ts` is the one pure client-side admission predicate for
+the recency and lazy-activity producers. It mirrors Falcon's nonempty,
+256-Unicode-code-point, NUL-free request identity limit. It is not a source
+catalogue validator: preserve raw session, parent, inspector link and CLI-copy
+IDs. Filter unsupported IDs before queue and retry bookkeeping so one such
+member cannot reject valid siblings or cause periodic bad requests. The shared
+predicate does not normalize opaque path syntax.
+
+`src/recency-facts.ts` owns the pure distinction between current lookup status
+and last-known history. A successful cached fact becomes pending on the next
+bounded revisit after its five-minute expiry, even if hidden; only visible
+admitted members refresh. Failed refreshes become unavailable while retaining a
+same-watermark timestamp for fallback ordering. Both states keep family
+selection provisional, so a running tab wins. No negative-cache or separate
+pending map is added; the existing bounded owner cache holds these facts. Reuse
+this model only for per-tab history recency, not the durable activity sidecar
+or API process cache.
+
 `src/session-recency.ts` admits whole visible families into a shared 512-member
 fact budget. It keeps a selected running tab provisional when that budget
 cannot fit a family, and exposes a bounded, derived incomplete status to the
