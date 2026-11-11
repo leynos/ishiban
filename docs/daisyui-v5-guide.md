@@ -434,8 +434,12 @@ Buttons allow the user to take actions
   colour/style/behaviour/size/modifier class names
 - btn can be used on any html tags such as `<button>`, `<a>`, `<input>`
 - btn can have an icon before or after the text
-- set `tabindex="-1" role="button" aria-disabled="true"` to disable the
-  button using a class name
+- Use the native `disabled` attribute to disable a `<button>`.
+- `aria-disabled="true"` communicates disabled state but does not prevent
+  activation. For elements without native disabling, guard activation in code
+  and document whether the control remains in sequential keyboard navigation.
+  `tabindex="-1"` removes a control from that navigation; it does not disable
+  it.
 
 ### calendar
 

@@ -520,8 +520,12 @@ providing a historical record for future maintainers.
 
 ### Naming convention
 
-Name ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to the
-`docs/` directory, for example `docs/adrs/adr-0001-async-fixtures-and-tests.md`.
+Name new ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to
+the `docs/` directory, for example
+`docs/adrs/adr-0009-async-fixtures-and-tests.md`. Existing published ADRs
+remain at their current locations, including `docs/adr-002-…` through
+`docs/adr-008-…`; preserve their inbound links and continue the repository's
+existing number sequence.
 
 - `nnnn` is a four-digit, zero-padded serial number, unique among the ADRs in
   the repository and allocated independently of RFC numbers.

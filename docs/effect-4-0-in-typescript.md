@@ -191,11 +191,10 @@ so tests call `Effect.runPromise` instead.
 
 ## Validation boundaries
 
-Effect 4 recommends `Schema` for all parsing. This repository's `AGENTS.md`
-standardizes on `valibot` for I/O boundaries (saved games in `localStorage`), so
-`Schema` is used only for tagged error classes. Revisit that split if the
-project ever adopts Effect `Schema` wholesale; mixing two general-purpose
-schema libraries for the same boundary is not acceptable.
+Ishiban uses Effect 4 `Schema` to parse untrusted browser-boundary data, as
+specified in `AGENTS.md` and the developers' guide. Use the same schemas for
+runtime validation and inferred types at those boundaries. Do not introduce a
+second general-purpose schema library for the same boundary.
 
 ## Gotchas observed
 
