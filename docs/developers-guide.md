@@ -463,8 +463,9 @@ cases. Its independent model covers captured and delayed results, metadata-only
 updates, newer executions and reopening. Every prefix checks the overlay,
 retained metadata and journal ownership; lookup and restore cannot append
 journal events or advance the cursor. Keep its `History` fixture local to this
-sidecar contract and reuse the existing storage builders. Results do not expire
-within these histories; targeted tests cover expiry and pruning separately.
+sidecar contract and reuse the existing storage builders. The durable sidecar
+has no expiry. The separate lazy-activity request cache has a TTL, which is
+outside this history model.
 
 `tests/test_cli_coverage.py` exercises Cyclopts option parsing with a cmd-mox
 catalogue and the real collector, reconciliation, and store. Its bounded
@@ -472,6 +473,12 @@ observer replacement stops after one metadata reconciliation. The test-local
 projection types assert the retained PR fields and resulting stage; keep them
 local to this CLI contract. Native observer transport and cancellation remain
 in the process suites.
+
+`tests/test_request_body_streaming.py` invokes the real ASGI route with
+separate request frames and no `Content-Length`. It checks valid JSON at the
+cumulative activity-body limit and rejection one byte above it before batch
+decoding. Keep its controlled sender and receiver local to this body-limit
+contract; ordinary HTTP cases use the existing Falcon test helpers.
 
 The readiness tests in `tests/test_api.py` inject SQLAlchemy read failures at
 the bounded journal query: `/ready` must fail while `/health` remains live.

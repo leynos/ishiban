@@ -1549,11 +1549,23 @@ actions plus four explicit controls against an independent model and the real
 store. Delayed reads, catalogue metadata, a known execution followed by an
 unknown reset, and reopening vary the ordering. Each prefix checks metadata,
 eligible activity overlays, execution provenance, and unchanged journal order
-for lookup or restore. Cache expiry does not occur within this model; existing
-targeted expiry and pruning tests remain.
+for lookup or restore. The durable sidecar has no expiry; TTL belongs to the
+separate lazy-activity request cache and is outside this history model.
 
 Removing only the store watermark comparison makes an explicit delayed result
 after a newer execution fail: stale activity becomes visible when the model
 requires rejection. The store source was restored byte for byte. Aggregate
 gates, publication, and the affected confirmation remain separate acceptance
 steps.
+
+### Streamed request boundary, 11 November 2026
+
+The activity-body boundary test sends two ASGI request frames without a
+`Content-Length` header through the mounted Falcon route. Valid JSON padded to
+exactly 8,192 bytes succeeds; a cumulative 8,193 bytes returns HTTP 413 before
+batch decoding. A decoder spy distinguishes rejection from endpoint processing.
+Removing only the cumulative guard makes the oversized case return 200 and fail
+the test; the request-body source was restored byte for byte. Twenty-two
+focused streaming, batch API, and interface-state cases pass. The sidecar
+property description now distinguishes the durable cache's lack of expiry from
+the separate lazy-activity request-cache TTL.
