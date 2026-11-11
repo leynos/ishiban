@@ -1521,3 +1521,39 @@ raw argument makes the property fail; the collector source was restored byte
 for byte. This is bounded evidence alongside the retained native cancellation
 and backoff cases. Aggregate gates, publication, and affected confirmation
 remain separate acceptance steps.
+
+### Further acceptance boundaries, 11 November 2026
+
+Four terminal-classification cases cover merged and closed PRs in both
+conflicting orders, plus unanimous merged and closed controls. Removing only
+the unanimity guard fails both conflicting cases; the classifier was restored
+byte for byte. The affected assessment accepts these and the earlier search,
+collector restart, and generated retry coverage on revision
+`300f8141d7693a1ce574859b045ff248457feded`.
+
+Revision `f266af0db306cbb49dde288161bf65178154a043` adds actual Cyclopts
+parsing for default collection and `--no-github`, using cmd-mox for the
+catalogue, real collector reconciliation and SQLite, and a controlled GitHub
+lookup. The bounded observer replacement checks one reconciliation, not native
+transport. Both cases retain the PR URL and status; the default gains a title
+and Refine stage, while disabled enrichment makes no lookup and retains null
+title with an unclassified stage. Removing only the forwarded option fails the
+disabled case; the production CLI was restored exactly.
+
+The serialization module description now names its JSON, projection-field, and
+UTC timestamp helpers without claiming an intrinsic size limit. No encoding or
+validation policy changes.
+
+The new activity-sidecar property checks 30 generated histories of at most 10
+actions plus four explicit controls against an independent model and the real
+store. Delayed reads, catalogue metadata, a known execution followed by an
+unknown reset, and reopening vary the ordering. Each prefix checks metadata,
+eligible activity overlays, execution provenance, and unchanged journal order
+for lookup or restore. Cache expiry does not occur within this model; existing
+targeted expiry and pruning tests remain.
+
+Removing only the store watermark comparison makes an explicit delayed result
+after a newer execution fail: stale activity becomes visible when the model
+requires rejection. The store source was restored byte for byte. Aggregate
+gates, publication, and the affected confirmation remain separate acceptance
+steps.

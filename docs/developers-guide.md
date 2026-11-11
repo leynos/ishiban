@@ -457,6 +457,22 @@ matching family mark visible. Removing either matching field makes its
 corresponding regression fail; the production search source is restored after
 each control.
 
+`tests/test_activity_sidecar_properties.py` drives the real store and activity
+sidecar through 30 generated histories of at most 10 actions and four explicit
+cases. Its independent model covers captured and delayed results, metadata-only
+updates, newer executions and reopening. Every prefix checks the overlay,
+retained metadata and journal ownership; lookup and restore cannot append
+journal events or advance the cursor. Keep its `History` fixture local to this
+sidecar contract and reuse the existing storage builders. Results do not expire
+within these histories; targeted tests cover expiry and pruning separately.
+
+`tests/test_cli_coverage.py` exercises Cyclopts option parsing with a cmd-mox
+catalogue and the real collector, reconciliation, and store. Its bounded
+observer replacement stops after one metadata reconciliation. The test-local
+projection types assert the retained PR fields and resulting stage; keep them
+local to this CLI contract. Native observer transport and cancellation remain
+in the process suites.
+
 The readiness tests in `tests/test_api.py` inject SQLAlchemy read failures at
 the bounded journal query: `/ready` must fail while `/health` remains live.
 They separately confirm that a disconnected collector leaves a readable
