@@ -1415,3 +1415,26 @@ users' API reference also records recency request bounds, streamed outcomes and
 execution watermarks, plus interface-state defaults, accepted values, signed
 cookie updates and error responses. This corrects documentation for existing
 behaviour without inventing a released-version migration path.
+
+### Application modes and observer cursor properties, 11 November 2026
+
+The next saved assessment accepted the API and recovery documentation, then
+identified two further coverage gaps. The real Chromium layout suite now drives
+the actual application from live to demo and back, using distinct fixture data
+and real SSE connections to check connection cleanup and resumption. It also
+checks lazy-observer lifecycle rather than rendering the Board alone.
+
+The observer property checks 60 generated mixed histories and explicit controls
+after varied valid prefixes. Accepted records advance an independent expected
+stream position; invalid identity, sequence, timestamp, JSON and payload
+records preserve both fields before a valid recovery at the same next sequence.
+These tests cover the real decoder and remain finite evidence. Candidate-bound
+validation and affected assessment confirmation are separate acceptance steps.
+
+Both native browser suites pass together: eight cases and 37 assertions. The
+mode test requires every captured session-mark observer to close, avoiding an
+earlier broad probe that could mistake recency cleanup for activity cleanup.
+Removing live-stream cleanup or activity cleanup now fails its respective
+control. Payload-validation and sequence-contiguity bypasses each fail the
+protocol property. Production source and built browser assets were restored
+byte for byte after these controls.

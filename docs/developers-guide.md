@@ -92,18 +92,20 @@ ISHIBAN_BROWSER_TESTS=1 bun test tests/board-layout.browser.test.ts tests/board-
 ```
 
 Scope that environment flag to these files. The geometry suite serves built
-assets with synthetic snapshots and real SSE. Its fixture helpers belong only
-to these layout scenarios. The preference suite starts the real Falcon server
-with a private migrated database, ephemeral loopback port and unique browser
-session. It saves visible controls, reloads through the actual snapshot
-endpoint and checks restored controls, plus absent and tampered-cookie
-defaults. It starts no collector or Lody read. Its server watchdog derives from
-the same setup, sequential test and cleanup budgets: 10 minutes 20 seconds in
-total, with bounded shutdown. Setup failure also releases its private state.
-Both suites close their own browser/server resources and skip by default.
-Geometry checks cover horizontal overflow with and without the inspector,
-compact evidence visibility, and task-bounded list pulses with reduced-motion
-support.
+assets with synthetic snapshots and real SSE. It also drives the application's
+live-to-demo-to-live controls, checking distinct data, connection state, stream
+closure and lazy-observer cleanup before live work resumes. Its fixture helpers
+belong only to these application and layout scenarios. The preference suite
+starts the real Falcon server with a private migrated database, ephemeral
+loopback port and unique browser session. It saves visible controls, reloads
+through the actual snapshot endpoint and checks restored controls, plus absent
+and tampered-cookie defaults. It starts no collector or Lody read. Its server
+watchdog derives from the same setup, sequential test and cleanup budgets: 10
+minutes 20 seconds in total, with bounded shutdown. Setup failure also releases
+its private state. Both suites close their own browser/server resources and
+skip by default. Geometry checks cover horizontal overflow with and without the
+inspector, compact evidence visibility, and task-bounded list pulses with
+reduced-motion support.
 
 `tests/native-browser-environment.ts` owns the shared opt-in switch and
 restores Bun's native globals once after the Happy DOM preload. Both native
@@ -400,6 +402,15 @@ activity cursors and PR context. Mutating metadata to erase state or a turn to
 lose its evidence generation makes the corresponding assertion fail. The model
 and action builders belong to this suite; they are finite test evidence, not a
 formal proof or a second production policy implementation.
+
+`tests/test_protocol_properties.py` reuses the existing `event_line` fixture
+builder for 60 generated mixed histories and explicit controls. Valid prefixes
+exercise each recognized observer record type. Invalid identity, sequence,
+timestamp, JSON and payload records must preserve both stream-position fields;
+the next valid record must still accept the unconsumed sequence. The
+independent model tracks only accepted stream identity and sequence. Keep its
+perturbation builders local to this decoder contract rather than duplicating
+validation policy in production.
 
 The public-preview and turn-transition property modules keep their own explicit
 copy, typing and Hypothesis imports. Their exact file-pair exception covers a
