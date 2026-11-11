@@ -72,7 +72,10 @@ async def _finish_child(
 
 
 async def reap_child(
-    process: asyncio.subprocess.Process, stderr_drainer: asyncio.Task[None]
+    process: asyncio.subprocess.Process,
+    stderr_drainer: asyncio.Task[None],
+    *,
+    cancellation: asyncio.CancelledError | None = None,
 ) -> None:
     """Complete bounded teardown despite caller cancellation, then propagate it.
 
@@ -87,6 +90,8 @@ async def reap_child(
         The owned child after the caller has stopped reading stdout.
     stderr_drainer : asyncio.Task of None
         The child's existing stderr consumer, transferred to teardown ownership.
+    cancellation : asyncio.CancelledError, optional
+        Cancellation already raised by the context body before teardown starts.
 
     Raises
     ------
@@ -102,6 +107,8 @@ async def reap_child(
             await asyncio.wait({cleanup})
         except asyncio.CancelledError:
             was_cancelled = True
+    if cancellation is not None:
+        raise cancellation from cleanup.exception()
     if was_cancelled:
         raise asyncio.CancelledError from cleanup.exception()
     await cleanup

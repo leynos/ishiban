@@ -218,8 +218,9 @@ Native CLI teardown owns stdout and stderr discard tasks after the caller stops
 reading. Draining stdout permits a killed process to finish transport cleanup
 when its pipe buffer is full. TERM and post-KILL waits each have a three-second
 bound within a seven-second owned cleanup task. Caller cancellation waits for
-that task before propagating, including repeated cancellation. A cleanup
-failure remains chained as the cause of caller cancellation. These helpers
+that task before propagating, including repeated cancellation. Cancellation
+received before teardown begins is forwarded from the context body with its
+original payload. A cleanup failure remains chained as its cause. These helpers
 remain specific to the read-only CLI adapter; generic task cancellation does
 not own process signals or pipe consumption.
 

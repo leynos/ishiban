@@ -1194,3 +1194,15 @@ cannot model pipe backpressure.
 Both regressions failed against the prior implementation. Candidate-specific
 quality gates, review replies and affected assessment remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Cancellation at the context boundary, 11 November 2026
+
+Assessment 12 identified cancellation that precedes teardown as a distinct
+ordering. The child owner now forwards a cancellation received in the context
+body to the bounded cleanup owner. Cleanup finishes before the original
+cancellation, including its message, is re-raised; a cleanup failure remains
+its cause. A native-child regression cancels a blocked stdout read before
+forcing cleanup failure. It failed with a raw timeout before the fix and now
+preserves the cancellation outcome. Existing during-cleanup cancellation and
+uncancelled-error cases remain covered. Candidate-specific gates and post-push
+disposition are tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).

@@ -176,9 +176,17 @@ class _OwnedChild:
         self.drainer = asyncio.create_task(discard_pipe(self.process.stderr))
         return self.process
 
-    async def __aexit__(self, *_error: object) -> None:
-        """Reap the child before cancelling its stderr consumer."""
-        await reap_child(self.process, self.drainer)
+    async def __aexit__(
+        self,
+        _error_type: type[BaseException] | None,
+        body_error: BaseException | None,
+        _traceback: object,
+    ) -> None:
+        """Reap the child while retaining cancellation from the context body."""
+        cancellation = (
+            body_error if isinstance(body_error, asyncio.CancelledError) else None
+        )
+        await reap_child(self.process, self.drainer, cancellation=cancellation)
 
 
 def child(command: tuple[str, ...]) -> _OwnedChild:
