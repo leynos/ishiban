@@ -305,13 +305,12 @@ class RecencyRequests {
     const task = outstanding.get(frame.sessionId);
     if (!task) return;
     if (frame.workspaceId !== task.workspaceId) return;
-    if (frame.lastActivityEventId !== task.basis) return;
     outstanding.delete(frame.sessionId);
+    // Changed execution settles this member without a transport cooldown.
+    const isAvailable = frame.lastActivityEventId === task.basis && frame.outcome === 'available';
     this.record(
       task,
-      frame.outcome === 'available'
-        ? {outcome: 'available', latestHistoryAt: frame.latestHistoryAt}
-        : {outcome: 'unavailable'}
+      isAvailable ? {outcome: 'available', latestHistoryAt: frame.latestHistoryAt} : {outcome: 'unavailable'}
     );
   }
 

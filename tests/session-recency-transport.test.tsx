@@ -67,6 +67,37 @@ it('holds an HTTP 429 cooldown while more families remain visible', async () => 
   expect(gates.length).toBe(2);
 });
 
+it('settles a stale execution without delaying other visible families', async () => {
+  const snapshot = createFamilySnapshot(4);
+  const marks = installFamilyMarks(4);
+  const requests: string[][] = [];
+  const gates: Deferred<Response>[] = [];
+  browser = installFamilyBrowser(async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)).sessionIds);
+    const gate = deferred<Response>();
+    gates.push(gate);
+    return gate.promise;
+  });
+  const {result} = renderHook(() => useSessionRecency(snapshot));
+  for (const mark of marks) act(() => browser?.visibility(mark, true));
+  await waitFor(() => expect(gates.length).toBe(2));
+  const frames = ['child-0', 'root-0'].map((sessionId) => ({
+    workspaceId: snapshot.workspaceId,
+    sessionId,
+    lastActivityEventId: sessionId === 'child-0' ? 1 : 0,
+    outcome: 'available',
+    latestHistoryAt: '2026-11-10T18:41:02.707Z'
+  }));
+  await act(async () =>
+    gates[0]?.resolve(new Response(`${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`))
+  );
+  expect(result.current.facts.get('child-0')?.outcome).toBe('unavailable');
+  expect(result.current.facts.get('root-0')?.outcome).toBe('available');
+  await waitFor(() => expect(gates.length).toBe(3));
+  expect(requests[2]).toEqual(expect.arrayContaining(['child-2', 'root-2']));
+  expect(requests[2]).not.toContain('child-0');
+});
+
 it('packs accepted multibyte member IDs by encoded byte size', async () => {
   const snapshot = createMultibyteFamilySnapshot();
   const mark = installFamilyMarks(1)[0];
