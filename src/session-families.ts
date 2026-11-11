@@ -40,11 +40,13 @@ const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+
  * expected to have unique session IDs; returned members and families are sorted
  * by ID so catalogue order cannot alter the result.
  *
- * While any lookup is pending or unavailable, an observed running member is
- * provisional; without one, the newest available effective recency preserves a
- * known winner. When every lookup succeeds, recency takes precedence over
- * running state. Successful empty or invalid history uses that member's creation
- * time as effective recency, while unavailable facts contribute no history time.
+ * While any lookup is pending or unavailable, or the family is budget-limited,
+ * an observed running member is provisional; without one, the newest available
+ * effective recency preserves a known winner. When every lookup succeeds and
+ * the family is not budget-limited, recency takes precedence over running state.
+ * Empty or invalid known history uses that member's creation time as effective
+ * recency. Pending or unavailable facts may retain history as fallback evidence;
+ * facts without known history contribute no history time.
  *
  * @param sessions Unmodified records from one workspace catalogue.
  * @param recency Per-session history lookup outcomes; missing keys remain pending.
@@ -178,7 +180,7 @@ function compareActivityCandidates(
   return creationOrder || compareIds(left.sessionId, right.sessionId);
 }
 
-/** Resolve successful history recency, using creation time for empty history. */
+/** Resolve retained history recency, using creation time for empty history. */
 function effectiveRecencyFor(session: Session, recency: ReadonlyMap<string, RecencyFact>): ParsedTimestamp | undefined {
   const knownHistoryAt = historyTimestamp(recency.get(session.sessionId));
   if (knownHistoryAt === undefined) return undefined;
