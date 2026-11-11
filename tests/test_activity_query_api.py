@@ -19,11 +19,11 @@ if typ.TYPE_CHECKING:
 
 
 @pytest.mark.asyncio
-async def test_query_fallback_preserves_dot_slash_and_percent_identities(
+async def test_query_fallback_preserves_opaque_session_id_operands(
     tmp_path: Path, cmd_mox: CmdMox
 ) -> None:
     """Real ASGI and CLI boundaries keep exact accepted session identities."""
-    session_ids = [".", "..", "a/b", "100%?"]
+    session_ids = [".", "..", "a/b", "100%?", "-example"]
 
     def observe(invocation: Invocation) -> Response:
         """Return the exact identity passed by the query-backed endpoint.
@@ -33,10 +33,16 @@ async def test_query_fallback_preserves_dot_slash_and_percent_identities(
         Response
             A persisted observation for one fixture session.
         """
-        assert invocation.args[:2] == ["session", "observe"], (
-            "The fallback must use only Lody's read-only observation command."
-        )
-        session_id = invocation.args[2]
+        session_id = invocation.args[-1]
+        assert invocation.args == [
+            "session",
+            "observe",
+            "--workspace",
+            "w1",
+            "--json",
+            "--",
+            session_id,
+        ], "Only the read-only command, options and one opaque operand are allowed."
         assert session_id in session_ids, "Query decoding must retain an accepted ID."
         return Response(
             stdout=json.dumps({
@@ -65,15 +71,15 @@ async def test_query_fallback_preserves_dot_slash_and_percent_identities(
                 for session_id in session_ids
             ]
             after = (await store.snapshot(), await store.events(0))
-    assert [response.status_code for response in responses] == [200] * 4, (
-        "Every accepted query identity must resolve through the actual ASGI route."
-    )
+    assert [response.status_code for response in responses] == [200] * len(
+        session_ids
+    ), "Every accepted query identity must resolve through the actual ASGI route."
     assert [
         response.json["session"]["sessionId"] for response in responses
-    ] == session_ids, (
-        "The fallback must never normalize dot, slash, or percent session IDs."
+    ] == session_ids, "The fallback must preserve every accepted opaque session ID."
+    assert len(lody.invocations) == len(session_ids), (
+        "Each uncached raw ID requires one Lody read."
     )
-    assert len(lody.invocations) == 4, "Each uncached raw ID requires one Lody read."
     assert before == after, "The fallback must not change the source journal."
 
 

@@ -32,9 +32,15 @@ def _observe(invocation: Invocation) -> Response:
         If the API requests an unexpected command or session.
     """
     match invocation.args:
-        case ["session", "observe", session_id, "--workspace", "w1", "--json"] if (
-            session_id in {"s2", "s3"}
-        ):
+        case [
+            "session",
+            "observe",
+            "--workspace",
+            "w1",
+            "--json",
+            "--",
+            session_id,
+        ] if session_id in {"s2", "s3"}:
             return Response(
                 stdout=json.dumps({
                     "ok": session_id == "s2",
@@ -98,7 +104,7 @@ async def test_batch_api_reads_mocked_lody_and_keeps_journal_unchanged(
         "A missing identity must produce a null frame without a CLI call."
     )
     assert len(lody.invocations) == 2, "Exactly two uncached sessions must be read."
-    assert {invocation.args[2] for invocation in lody.invocations} == {"s2", "s3"}, (
+    assert {invocation.args[-1] for invocation in lody.invocations} == {"s2", "s3"}, (
         "Only uncached unknown sessions should start Lody processes."
     )
     assert journal_after[0] == journal_before[0], (
@@ -127,7 +133,7 @@ async def test_large_cached_member_yields_marker_before_small_sibling(
             If the API asks for an unexpected command.
         """
         match invocation.args:
-            case ["session", "observe", "large", "--workspace", "w1", "--json"]:
+            case ["session", "observe", "--workspace", "w1", "--json", "--", "large"]:
                 turns = [
                     {"userTurnId": f"u{index:03}{'x' * 9900}", "state": "pending"}
                     for index in range(100)
@@ -139,7 +145,7 @@ async def test_large_cached_member_yields_marker_before_small_sibling(
                     "freshness": "synced",
                     "activeTurns": turns,
                 }
-            case ["session", "observe", "small", "--workspace", "w1", "--json"]:
+            case ["session", "observe", "--workspace", "w1", "--json", "--", "small"]:
                 session = {
                     "sessionId": "small",
                     "state": "running",

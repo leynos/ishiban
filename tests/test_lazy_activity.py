@@ -95,7 +95,7 @@ def _fake_lody(
                 )
                 maximum_path.write_text(str(max(active, previous)))
                 fcntl.flock(lock, fcntl.LOCK_UN)
-            ready_dir.joinpath(args[2]).touch()
+            ready_dir.joinpath(args[-1]).touch()
             deadline = time.monotonic() + 3
             while not release_path.exists() and time.monotonic() < deadline:
                 time.sleep(0.01)
@@ -110,7 +110,7 @@ def _fake_lody(
     elif delay_before_output:
         concurrency_code = f"time.sleep({delay_before_output!r})\n"
     response_code = (
-        f"payload = {payload!r}.replace('@SESSION_ID@', args[2])\n{concurrency_code}"
+        f"payload = {payload!r}.replace('@SESSION_ID@', args[-1])\n{concurrency_code}"
     )
     return create_fake_lody(
         tmp_path,
@@ -144,12 +144,34 @@ async def test_read_returns_persisted_session_before_cli_eof(
         "Turn errors must survive lazy observation for the inspector."
     )
     assert await wait_for_calls(call_log) == [
-        "session\tobserve\tsession-1\t--workspace\tleynos\t--json"
+        "session\tobserve\t--workspace\tleynos\t--json\t--\tsession-1"
     ], (
         "The CLI must receive the session, selector, and JSON flags as separate "
         "arguments."
     )
     await service.close()
+
+
+@pytest.mark.asyncio
+async def test_option_like_session_id_is_passed_as_one_opaque_operand(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The real child receives a separator before an option-like session ID."""
+    executable, call_log = _fake_lody(tmp_path, _response())
+    service = lazy_activity.LazyActivity("workspace-1", "leynos", str(executable))
+    try:
+        observation = await service.read("-example", 1)
+        assert observation is not None, (
+            "A valid option-like ID must reach the bounded observation reader."
+        )
+        assert observation.session_id == "-example", (
+            "The validated result must retain the exact requested opaque ID."
+        )
+        assert await wait_for_calls(call_log) == [
+            "session\tobserve\t--workspace\tleynos\t--json\t--\t-example"
+        ], "All options must precede the separator and opaque ID."
+    finally:
+        await service.close()
 
 
 @pytest.mark.parametrize(

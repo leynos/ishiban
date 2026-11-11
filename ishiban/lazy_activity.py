@@ -166,14 +166,16 @@ class LazyActivity:
         ObservedSession or None
             The validated persisted observation, if available.
         """
+        # Opaque session IDs can begin with a dash; keep them after the separator.
         command = (
             self._executable,
             "session",
             "observe",
-            session_id,
             "--workspace",
             self._selector,
             "--json",
+            "--",
+            session_id,
         )
         async with asyncio.timeout(MAX_OBSERVATION_LIFETIME_SECONDS):
             async with self._semaphore:

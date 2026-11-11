@@ -37,7 +37,8 @@ def _slow_service(
     }
     payload = msgspec.json.encode(response).decode("utf-8")
     response_code = (
-        f"time.sleep({delay!r})\npayload = {payload!r}.replace('@SESSION_ID@', args[2])"
+        f"time.sleep({delay!r})\n"
+        f"payload = {payload!r}.replace('@SESSION_ID@', args[-1])"
     )
     executable, call_log = create_fake_lody(tmp_path, response_code)
     service = lazy_activity.LazyActivity(
