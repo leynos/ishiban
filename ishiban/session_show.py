@@ -3,6 +3,7 @@
 import asyncio
 import dataclasses
 import datetime as dt
+import logging
 import re
 import time
 
@@ -11,6 +12,7 @@ import msgspec
 from ishiban import lody
 from ishiban.cached_lody_reads import CachedLodyReads, CachedReadPolicy
 
+LOGGER = logging.getLogger(__name__)
 MAX_CACHE_ENTRIES = 256
 MAX_IN_FLIGHT_READS = 32
 MAX_CONCURRENT_SHOWS = 2
@@ -189,7 +191,7 @@ class SessionShowReader:
         Raises
         ------
         lody.ProtocolError
-            If Lody supplies a malformed history timestamp.
+            If Lody supplies a foreign identity or malformed history timestamp.
         """
         command = (
             self._executable,
@@ -205,11 +207,14 @@ class SessionShowReader:
             command, _SessionShowResponse, SESSION_TIMEOUT_SECONDS
         )
         if response.ok is not True:
+            LOGGER.warning("Lody metadata unavailable category=negative")
             return None
-        if response.workspace.id != self._workspace_id:
-            return None
-        if response.session.id != session_id:
-            return None
+        if (
+            response.workspace.id != self._workspace_id
+            or response.session.id != session_id
+        ):
+            message = "Session show response identity mismatch."
+            raise lody.ProtocolError(message)
         history_time = _valid_history_time(response.latest_history_at)
         if response.latest_history_at is not None and history_time is None:
             message = "Session history time is not an aware ISO timestamp."
