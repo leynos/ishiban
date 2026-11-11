@@ -26,6 +26,8 @@ This page locates the proof of concept's runtime components and verification.
 - `ishiban/api.py` exposes Falcon snapshots, session detail, health, and SSE.
 - `ishiban/cli.py` supplies the `ishiban collect` and `ishiban serve` commands.
 - `migrations/` and `alembic.ini` define the local database schema history.
+  Wheels include the canonical migration scripts at `ishiban/migrations/` for
+  embedded initialization outside the checkout.
 - `src/contracts.ts` and `src/client.ts` validate and apply browser projections.
 - `src/ui/` renders the board and accessible inspector; `src/styles.css` owns
   semantic Tailwind and daisyUI styling.

@@ -55,12 +55,17 @@ def create_engine(database_url: str) -> AsyncEngine:
 
 
 async def initialize_schema(engine: AsyncEngine) -> None:
-    """Apply the repository's Alembic migrations to the async engine."""
-    repository_root = Path(__file__).parents[2]
-    alembic_config = Config(str(repository_root / "alembic.ini"))
-    alembic_config.set_main_option(
-        "script_location", str(repository_root / "migrations")
-    )
+    """Apply packaged migrations, or the source tree's canonical scripts."""
+    package_root = Path(__file__).parents[1]
+    packaged_migrations = package_root / "migrations"
+    if packaged_migrations.is_dir():
+        alembic_config = Config()
+        script_location = packaged_migrations
+    else:
+        repository_root = package_root.parent
+        alembic_config = Config(str(repository_root / "alembic.ini"))
+        script_location = repository_root / "migrations"
+    alembic_config.set_main_option("script_location", str(script_location))
 
     async with engine.begin() as connection:
         await connection.run_sync(_upgrade_schema, alembic_config)

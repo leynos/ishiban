@@ -432,6 +432,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["ishiban"]
 
+[tool.hatch.build.targets.wheel.force-include]
+migrations = "ishiban/migrations"
+
 
 # Reviewed spike families: see docs/developers-guide.md#duplication-review.
 

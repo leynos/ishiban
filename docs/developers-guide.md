@@ -47,14 +47,17 @@ helper or public adapter is introduced by these private runtime modules.
 
 SQLite WAL, foreign keys, busy timeout, and explicit transaction isolation are
 configured by `ishiban/storage/`. Alembic applies the initial schema on
-startup. Embedded Alembic migrations preserve the application's logging
-handlers; standalone Alembic commands retain their own console setup. Do not
-delete a journal to resolve a transient source error. Source stream/sequence
-identity deduplicates replay; the independent local journal ID is the public
-SSE cursor. The workspace-filtered `read_cursor` query is shared by snapshot
-reads and `Store.current_cursor`; use the latter when a caller only needs the
-replay boundary, such as SSE reset validation. Metadata and durable evidence
-generations remain separate during reconciliation.
+startup. Wheels include the canonical `migrations/` tree at
+`ishiban/migrations/`; embedded initialization uses those installed scripts
+with an in-memory Alembic configuration. Source checkouts retain the top-level
+script tree and `alembic.ini` fallback. Embedded migrations preserve the
+application's logging handlers; standalone Alembic commands retain their own
+console setup. Do not delete a journal to resolve a transient source error.
+Source stream/sequence identity deduplicates replay; the independent local
+journal ID is the public SSE cursor. The workspace-filtered `read_cursor` query
+is shared by snapshot reads and `Store.current_cursor`; use the latter when a
+caller only needs the replay boundary, such as SSE reset validation. Metadata
+and durable evidence generations remain separate during reconciliation.
 
 Observer protocol validation admits only nonnegative epoch milliseconds within
 the JavaScript date range, including the upper bound `8_640_000_000_000_000`.
@@ -290,11 +293,18 @@ handlers in a browser's heuristic cache. Fingerprinted production assets are
 outside this spike.
 
 The collector applies migrations to its selected state directory through an
-injected SQLAlchemy connection. Standalone Alembic commands use the synchronous
-SQLite driver and target `.ishiban/observatory.sqlite3` relative to the
-checkout's `alembic.ini`, independently of the caller's working directory.
-Create that state directory first. A custom collector `--state-directory`
-continues to use its injected connection rather than the standalone URL.
+injected SQLAlchemy connection. `tests/test_wheel_migrations.py` builds the
+actual wheel and initializes its extracted package in an isolated interpreter
+outside the checkout, checking the imported path, schema head and initial
+snapshot. The same wheel runs the actual collector CLI against a dedicated fake
+Lody stream, persists an observer event and shuts down on SIGINT. Owned process
+groups are reaped if the test fails. This regression covers installed resources
+and streaming lifecycle rather than substituting command responses for
+packaging. Standalone Alembic commands use the synchronous SQLite driver and
+target `.ishiban/observatory.sqlite3` relative to the checkout's `alembic.ini`,
+independently of the caller's working directory. Create that state directory
+first. A custom collector `--state-directory` continues to use its injected
+connection rather than the standalone URL.
 
 Storage assertion shapes live in `tests/storage_contracts.pyi`. These static
 contracts describe camel-case public JSON fields without constructing unused
