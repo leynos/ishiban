@@ -3,9 +3,9 @@
 *A read-only observatory for coding-agent sessions across a Lody workspace.*
 
 Ishiban is an early experiment from df12 Productions. The repository currently
-contains a Python scaffold, an interactive reference interface, and a draft
-design for observing one Lody Cloud workspace. The live collector, API, and
-application are planned; the reference interface uses synthetic data.
+contains a live observer, a durable SQLite journal, a Falcon read API, and a
+React board for one Lody Cloud workspace. A separate labelled demo preserves
+the reference interface's 120-repository stress view.
 
 ______________________________________________________________________
 
@@ -25,60 +25,65 @@ ______________________________________________________________________
 
 ### Installation
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
-clone the repository and install its development dependencies. The package
-requires Python 3.14 or newer; uv can provision the interpreter.
+Install uv, Python 3.14+, Bun 1.4.x, and Node.js 24 or 26. Authenticate the
+`lody` CLI for the target workspace and `gh` for associated PR metadata.
 
 ```bash
 git clone https://github.com/leynos/ishiban.git
 cd ishiban
 uv sync --group dev
+bun install --frozen-lockfile
+bun run build
 ```
 
-### Preview the reference interface
+### Observe a workspace
 
-From the repository root, serve the standalone mockup:
+In one terminal:
 
 ```bash
-uv run python -m http.server 8000 --bind 127.0.0.1 --directory reference
+uv run ishiban collect --workspace leynos
 ```
 
-Open <http://127.0.0.1:8000/ishiban-mockup.html> in a browser. Search for a
-repository, change the density, or select a task mark to inspect it. All data
-is illustrative and interactions stay in the page. Press Ctrl+C to stop the
-server.
-
-### Check the Python scaffold
-
-The package currently exposes a greeting as an installation check:
+In another terminal, from the same repository root:
 
 ```bash
-uv run python -c 'import ishiban; print(ishiban.hello())'
+uv run ishiban serve
 ```
 
-Expected output: `hello from Python`.
+Open <http://127.0.0.1:8765/>. Search repositories, select a task mark to
+inspect its evidence, or switch to **Demo data**. The collector and API share
+the ignored `.ishiban/` directory; press Ctrl+C in each terminal to stop them.
+
+See the [users' guide](docs/users-guide.md) for configuration, source-health
+semantics, and the proof of concept's limits.
 
 ______________________________________________________________________
 
 ## Features
 
-The reference interface includes:
+- A dense repository panorama, five-wide wrapping marks, five mark sizes, and
+  a docked task inspector with search, filters, and keyboard access.
+- Oxide failure marks, striped waiting marks, and brief update pulses with
+  reduced-motion support.
+- Explicit Planning, Ready, Building, Refine, and Merged stages from PR facts,
+  with separate Closed and Unclassified groups.
+- Independent agent activity, evidence freshness, and collector health.
+- An append-only SQLAlchemy/SQLite journal and cursor-resumable server-sent
+  events, with typed Effect v4 decoding and scoped browser connections.
+- Semantic Tailwind v4 and daisyUI v5 styling, built and tested with Bun 1.4.x.
 
-- A 120-repository panorama with five workflow stages and wrapping task marks.
-- Matrix and list views, search, filters, and adjustable density.
-- A task inspector with larger selection targets.
-
-The proposed live spike adds a durable SQLite event journal, a Falcon read API,
-and a React interface with resumable Server-Sent Events (SSE). Live sessions
-will remain unclassified until an explicit workflow association is available;
-agent activity alone does not establish a workflow stage or task success.
+The observer cannot recover transitions missed while it was offline or prove
+that a completed turn produced a successful task. PR metadata is polled and may
+be stale; unavailable titles remain unclassified. See the
+[workflow evidence decision](docs/adr-002-workflow-evidence.md).
 
 ______________________________________________________________________
 
 ## Learn more
 
 - [Documentation contents](docs/contents.md) — the full documentation index.
-- [Users' guide](docs/users-guide.md) — scaffold commands and quality gates.
+- [Users' guide](docs/users-guide.md) — running the board and interpreting
+  evidence.
 - [Developers' guide](docs/developers-guide.md) — contributor workflow and
   automation conventions.
 - [Observation spike design](docs/ishiban-lody-observation-spike-design.md) —

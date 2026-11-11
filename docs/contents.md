@@ -5,6 +5,30 @@ reference material.
 
 ## Design and reference
 
+- [Runtime evidence transition policy](adr-008-runtime-evidence-policy.md)
+  separates pure merge decisions from compatible public-projection encoding.
+- [Logical session families](adr-007-session-tab-families.md) records the
+  approved board grouping, per-tab recency, and bounded metadata-read policy.
+- [Public turn previews and fixed-size cursors](adr-006-public-turn-previews-and-cursors.md)
+  bounds public active-turn arrays and detail continuation size.
+- [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
+  bounds concurrent lazy reads and suppresses unchanged startup pulses.
+
+- [Persistent on-demand activity decision](adr-004-persist-on-demand-activity.md)
+  preserves collected runtime outcomes across browser and process restarts.
+- [Interface state and lazy activity decision](adr-003-interface-state-and-lazy-activity.md)
+  separates signed MessagePack preferences and ephemeral activity reads from
+  the durable observation journal.
+
+- [Observation proof-of-concept plan](execplans/initial-spike.md) records the
+  implementation milestones, validation evidence, and remaining limits.
+  Candidate-specific acceptance and review status is tracked in
+  [PR #9](https://github.com/leynos/ishiban/pull/9).
+- [Observation spike report](observation-spike-report.md) records bounded live,
+  synthetic storage and fan-out, browser timing, and cleanup measurements.
+- [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
+  PR-based stages and independent activity/freshness semantics.
+
 - [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
   imported linting, formatting, compiler policy, and Bun runtime pins.
 - [Lody observation spike design](ishiban-lody-observation-spike-design.md)
@@ -16,8 +40,11 @@ reference material.
 
 ## Project guides
 
-- [User guide](users-guide.md) explains how to use the generated project and
-  its public build and test commands.
+- [Repository layout](repository-layout.md) locates runtime, frontend, schema,
+  test, and local state files.
+
+- [User guide](users-guide.md) explains read-only Lody observation, board
+  controls, session evidence, and proof-of-concept limitations.
 - [Developer guide](developers-guide.md) explains the contributor workflow and
   points maintainers to script automation standards.
 - [Documentation style guide](documentation-style-guide.md) defines the
@@ -26,6 +53,8 @@ reference material.
 
 ## Engineering practice
 
+- [Multibyte capture investigation](debugging/debugging-plan-2026-11-11-multibyte-capture.md)
+  records falsifiable tests for the bounded cross-runtime fixture.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   explains cognitive complexity, the bumpy-road antipattern, and refactoring
   approaches for maintainable code.

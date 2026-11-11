@@ -20,6 +20,7 @@ on:
 
 jobs:
   coverage-upload:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,13 +45,18 @@ jobs:
 
       - name: Generate coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@ec1432aa6fa5379b2dd8f4b3402fd5b250a597bd
+        env:
+          UV_CONSTRAINT: ${{ github.workspace }}/.github/coverage-constraints.txt
+          PYTHONWARNINGS: error:Unable to activate pytest branch coverage:RuntimeWarning:slipcover.importer
         with:
           output-path: coverage.xml
           format: cobertura
           artefact-name-suffix: ishiban
           publish-artefact: ${{ env.ACT != 'true' }}
           with-ratchet: 'true'
-
+          publish-baseline: 'always'
+          # Serial coverage preserves dynamically imported Alembic migration hits.
+          pytest-workers: ''
 
       - name: Upload coverage data to CodeScene
         if: env.CS_ACCESS_TOKEN != ''

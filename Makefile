@@ -45,7 +45,7 @@ PYLINT_TARGETS ?= $(PYTHON_TARGETS)
 PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) --from 'pylint==$(PYLINT_VERSION)' pylint
 
 
-.PHONY: help all audit clean build build-release lint lint-python fmt check-fmt \
+.PHONY: help all audit clean build build-web build-release lint lint-python fmt check-fmt \
         check-python-sources install-js fmt-js check-fmt-js lint-js typecheck-js test-js audit-js \
         markdownlint nixie spelling test typecheck dead-code duplication install-nose lint-actions validate $(TOOLS) $(VENV_TOOLS)
 
@@ -53,7 +53,7 @@ PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) --f
 # Shared build caches require sequential gates even when make receives -j.
 .NOTPARALLEL:
 
-all: check-python-sources build check-fmt lint typecheck test
+all: check-python-sources build build-web check-fmt lint typecheck test
 	+$(MAKE) spelling
 
 define ensure_uv
@@ -93,6 +93,9 @@ test-js: install-js ## Run JavaScript and TypeScript tests with Bun
 
 audit-js: install-js ## Audit the locked JavaScript dependencies
 	$(BUN) run audit
+
+build-web: install-js ## Build the Tailwind styles and Bun browser bundle
+	$(BUN) run build
 
 build-release: ## Build artefacts (sdist & wheel)
 	$(call ensure_uv)

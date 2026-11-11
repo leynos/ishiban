@@ -1,0 +1,7 @@
+@import "tailwindcss" source("./");
+@import "./ui/board-theme.css";
+@import "./ui/board.css";
+@import "./ui/board-exceptions.css";
+@import "./ui/board-inspector.css";
+@import "./ui/board-responsive.css";
+@import "./ui/board-marks.css";

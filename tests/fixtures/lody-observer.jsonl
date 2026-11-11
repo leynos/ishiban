@@ -1,0 +1,2 @@
+{"version":1,"streamId":"fake","observedAt":1,"workspaceId":"workspace","sequence":1,"type":"snapshot","sessionId":"session","session":{"sessionId":"session","machineId":"machine","title":"Fixture","source":"metadata","state":"unknown","freshness":"synced","archived":false,"activeTurns":[]}}
+{"version":1,"streamId":"fake","observedAt":1,"workspaceId":"workspace","sequence":2,"type":"ready"}

@@ -1,0 +1,244 @@
+/* Keep five stage cells readable while the board scrolls inside its own viewport. */
+.ishiban-board {
+  --bank-min-width: 32rem;
+  --mark-gap: 1px;
+  --mark-size: 7px;
+}
+
+.ishiban-board[data-density="compact"] {
+  --bank-min-width: 36rem;
+  --mark-gap: 0.15rem;
+  --mark-size: 12px;
+}
+
+.ishiban-board[data-density="balanced"] {
+  --bank-min-width: 46rem;
+  --mark-gap: 0.15rem;
+  --mark-size: 18px;
+}
+
+.ishiban-board[data-density="roomy"] {
+  --bank-min-width: 56rem;
+  --mark-gap: 0.2rem;
+  --mark-size: 24px;
+}
+
+.ishiban-board[data-density="comfortable"] {
+  --bank-min-width: 64rem;
+  --mark-gap: 0.2rem;
+  --mark-size: 28px;
+}
+
+.board-banks {
+  grid-template-columns: repeat(4, var(--bank-min-width));
+  min-width: max-content;
+  width: max-content;
+  padding-inline: 0;
+}
+
+.board-bank,
+.repository-table {
+  min-width: var(--bank-min-width);
+}
+
+.repository-table {
+  width: 100%;
+}
+
+/* Selection and pulse layers stay below the sticky repository column. */
+.stage-cell {
+  isolation: isolate;
+  position: relative;
+}
+
+.ishiban-board[data-density] .repository-table th:first-child {
+  max-width: 12rem;
+  min-width: 12rem;
+  width: 12rem;
+}
+
+.repository-table th,
+.repository-table td {
+  padding: 0.2rem;
+}
+
+.repository-label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.repository-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-name small {
+  display: inline;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.ishiban-board[data-density] .session-mark-grid {
+  display: grid;
+  gap: var(--mark-gap);
+  grid-template-columns: repeat(5, var(--mark-size));
+  min-width: 0;
+  width: max-content;
+}
+
+button.session-mark:not(.session-mark--empty) {
+  height: var(--mark-size);
+  min-height: var(--mark-size);
+  min-width: var(--mark-size);
+  width: var(--mark-size);
+}
+
+button.session-mark:not(.session-mark--empty):hover {
+  filter: brightness(0.93);
+  transform: translateY(-1px);
+}
+
+.session-mark--empty {
+  cursor: default;
+  pointer-events: none;
+  transition: none;
+}
+
+.ishiban-board[data-density="compact"] .session-mark > small {
+  display: none;
+}
+
+.session-mark[data-last-turn-failed="true"]:not([data-blocked="true"]) {
+  background: var(--color-oxide);
+  border-color: color-mix(in oklab, var(--color-oxide) 68%, var(--color-paper));
+  color: var(--color-paper);
+}
+
+.session-mark[data-blocked="true"] {
+  background-color: var(--color-amber);
+  background-image: repeating-linear-gradient(135deg, var(--color-oxide) 0 2px, var(--color-amber) 2px 4px);
+  border-color: color-mix(in oklab, var(--color-oxide) 52%, var(--color-amber));
+  border-style: solid;
+  color: var(--color-ink);
+}
+
+.session-mark__condition {
+  display: grid;
+  font-size: min(0.65rem, calc(var(--mark-size) - 2px));
+  inset: 0;
+  line-height: 1;
+  place-items: center;
+  position: absolute;
+}
+
+.ishiban-board .session-mark > .session-mark__condition {
+  display: grid;
+}
+
+.session-mark[data-update-revision] {
+  isolation: isolate;
+}
+
+.session-update-pulse {
+  animation: session-update-pulse 900ms ease-out both;
+  border: 2px solid var(--color-oxide);
+  box-shadow: 0 0 0 1px var(--color-paper);
+  display: grid;
+  inset: -2px;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.ishiban-board .session-mark > .session-update-pulse {
+  display: grid;
+}
+
+.session-list-item--failed {
+  border-inline-start: 4px solid var(--color-oxide);
+}
+
+/* List pulses must use their task, rather than the scrollport, as their bounds. */
+.session-list-item {
+  overflow: clip;
+  position: relative;
+}
+
+.session-list-item--blocked {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-oxide) 15%, transparent) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+@keyframes session-update-pulse {
+  from {
+    opacity: 0.95;
+    transform: scale(0.72);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@media (min-width: 1200px) {
+  .ishiban-board:not([data-density="comfortable"]) .board-banks {
+    grid-template-columns: repeat(4, var(--bank-min-width));
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1199px) {
+  .ishiban-board:not([data-density="comfortable"]) .board-banks {
+    grid-template-columns: repeat(2, var(--bank-min-width));
+  }
+}
+
+@media (max-width: 640px) {
+  .ishiban-board:not([data-density="comfortable"]) .board-banks {
+    grid-template-columns: var(--bank-min-width);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ishiban-board :is(.session-mark, .session-list-item) > .session-update-pulse {
+    animation: none;
+    display: none;
+  }
+}
+
+.ishiban-board[data-density="comfortable"] .board-banks {
+  grid-template-columns: var(--bank-min-width);
+}
+
+/* A filtered board must not retain empty tracks from the full panorama. */
+.ishiban-board .board-banks[data-bank-count="1"] {
+  grid-template-columns: var(--bank-min-width);
+}
+
+@media (min-width: 1200px) {
+  .ishiban-board:not([data-density="comfortable"]) .board-banks[data-bank-count="2"] {
+    grid-template-columns: repeat(2, var(--bank-min-width));
+  }
+
+  .ishiban-board:not([data-density="comfortable"]) .board-banks[data-bank-count="3"] {
+    grid-template-columns: repeat(3, var(--bank-min-width));
+  }
+}
+
+/* Keep small evidence glyphs legible over the blocked-state stripe pattern. */
+.session-mark[data-blocked="true"] > span:first-child,
+.session-mark[data-blocked="true"] > small {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Waiting already supplies its activity glyph and a non-colour stripe cue. */
+.ishiban-board .session-mark[data-blocked="true"] > .session-mark__condition {
+  display: none;
+}

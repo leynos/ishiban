@@ -1,0 +1,43 @@
+.workflow-exceptions {
+  @apply grid border-t border-base-content bg-base-200 p-4;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+}
+
+.exception-group {
+  @apply min-w-0 border border-base-300 bg-base-100 p-4;
+}
+
+.exception-group__heading {
+  @apply flex items-center justify-between gap-3 border-b border-base-300 pb-2;
+}
+
+.exception-group__heading h2 {
+  @apply m-0 text-lg;
+  font:
+    italic 1.35rem / 1.2 Georgia,
+    "Times New Roman",
+    serif;
+}
+
+.exception-group__heading span,
+.exception-repository h3 {
+  @apply font-mono text-xs text-neutral;
+}
+
+.exception-repository {
+  @apply mt-4 border-t border-base-300 pt-2;
+}
+
+.exception-repository h3 {
+  @apply mb-2 mt-0 font-bold text-base-content;
+  overflow-wrap: anywhere;
+}
+
+.exception-repository .session-list {
+  @apply gap-2 p-0;
+}
+
+.exception-repository .session-list-item {
+  @apply min-h-0 px-3 py-2 text-xs;
+}

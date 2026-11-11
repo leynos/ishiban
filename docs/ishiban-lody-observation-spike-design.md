@@ -1,10 +1,18 @@
 # Ishiban: single-workspace Lody observation spike
 
-**Status:** Draft design, for implementation and falsification  
+**Status:** Accepted design; proof of concept implemented and validated
+locally, including the follow-up interface refinements. Review reconciliation
+is in progress; the acceptance record distinguishes validation evidence from
+pending findings and incomplete external review coverage.
+
+Logical session-family grouping has passed the repository gates and local
+browser acceptance checks. Hosted Chromium evidence is not available; review
+reconciliation remains pending. See [ADR 007](adr-007-session-tab-families.md).
+
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
-**Reference interface:** `ishiban-mockup(1).html` (supplied Ishiban panorama
-mockup)
+**Reference interface:**
+[Ishiban panorama mockup](../reference/ishiban-mockup.html)
 
 ## 1. Decision and hypothesis
 
@@ -13,16 +21,18 @@ process feeds an append-only SQLite event journal and materialized session/turn
 projections. A Falcon ASGI API exposes an atomic snapshot and a
 cursor-resumable Server-Sent Events (SSE) feed. A React + TypeScript
 application uses Effect v4 for typed decoding and connection lifecycle, with
-Tailwind CSS v4, daisyUI v5 and Radix Primitives for presentation.
+Tailwind CSS v4 and daisyUI v5 for semantic presentation.
 
 **Hypothesis:** Lody's existing versioned observation protocol can drive a
 responsive, restart-tolerant, read-only fleet view across a single workspace
 without subscribing to raw Loro documents or introducing a second orchestration
 control plane.
 
-**Non-hypothesis:** The feed alone can populate the five df12 workflow stages,
-identify all repositories, determine PR/review/CI state, or prove task success.
-Those require separate evidence and are outside this spike.
+**Boundary:** The observer feed alone cannot establish workflow stage or task
+success. The accepted PR conventions now use explicit catalogue associations
+and read-only GitHub title/status enrichment. CI conclusions, issue progress,
+and task-success inference remain outside this spike. See
+[ADR 002](adr-002-workflow-evidence.md).
 
 ### Questions the spike must settle
 
@@ -65,8 +75,9 @@ Those require separate evidence and are outside this spike.
   permissions or dispatching tasks.
 - Direct Loro/Flock replication or modification of Lody's daemon or its
   internal schema.
-- GitHub/Ghillie and Linear ingestion; PR checks, reviews, issue progress,
-  dependency resolution or task workflow transitions.
+- General GitHub/Ghillie and Linear ingestion; PR checks, review outcomes,
+  issue progress, dependency resolution or task orchestration. Read-only
+  associated PR title/status lookup is the sole GitHub exception.
 - Inferring a work item's workflow stage from an agent's running/idle state.
 - Multi-workspace aggregation, multi-user access, general-purpose event
   brokerage or horizontal API scaling.
@@ -91,7 +102,7 @@ The Lody OSS implementation defines `SessionObserveEnvelope` with `version: 1`,
 | `turn.finished`   | Durable outcome of `completed`, `failed` or `canceled`; not proof that code or tests succeeded.      |
 | `session.removed` | Metadata confirms deletion, unlike archive.                                                          |
 
-A session projection contains `sessionId`, `machineId`, optional `title`,
+A session projection contains `sessionId`, optional `machineId` and `title`,
 `archived`, `state`, `freshness`, `source`, optional `latestTurn`, and
 `activeTurns`. Session state is `idle | pending | running | waiting | unknown`.
 A turn's state can also be `completed | failed | canceled`.
@@ -138,8 +149,8 @@ Lody Cloud / Streams
 +-------------------------+         +---------------------------+
 | Ishiban collector       |         | Falcon ASGI API            |
 | asyncio subprocess      |         | snapshot / sessions / SSE  |
-| validate / project      |         | read-only SQLAlchemy       |
-| single SQLite writer    |         | SQLite reader              |
+| validate / project      |         | async SQLAlchemy / Lody    |
+| source-journal writer   |         | enrichment / sidecar owner |
 +------------+------------+         +------------+--------------+
              |                                   |
              +---------- SQLite WAL -------------+
@@ -150,33 +161,28 @@ Lody Cloud / Streams
                                         Ishiban panorama
 ```
 
-Use **two OS processes** in the spike: `python -m ishiban.collector` and a
-single-worker Granian/Falcon ASGI service. The collector exclusively owns the
-`lody` child process and writes to SQLite. The API only reads the database.
-This isolates collector restarts from active browser connections and avoids the
-complexity of Falcon lifespan task ownership or an extra broker.
+*Figure 1. Collector ownership of the source journal and API ownership of
+bounded enrichment and its activity sidecar.*
 
-For a handful of browser clients, the API can tail SQLite every 500-1,000 ms
-per open SSE connection. The database is the synchronization boundary. Do not
-introduce Redis, Valkey, NATS, a broker or in-process cross-worker pub/sub yet.
-Run **one** API worker for the spike and reject a second collector using a
-local process lock. If eventual fan-out becomes material, revisit it using
-measurements.
+Use **two application processes** in the spike: `ishiban collect` and a
+single-worker Uvicorn/Falcon ASGI service started by `ishiban serve`. The
+collector owns its `lody session observe` child with bounded input, output, and
+lifetime, and is the sole writer to the append-only source journal. The API
+uses async SQLAlchemy and owns its bounded, read-only Lody enrichment children;
+derived activity goes to its separate sidecar, never to journal events. Neither
+process mutates upstream sessions. This isolates collector restarts from active
+browser connections and avoids the complexity of Falcon lifespan task ownership
+or an extra broker.
 
-Suggested package layout:
+For a handful of browser clients, the API can tail SQLite every 250 ms in
+bounded batches per open SSE connection. The database is the synchronization
+boundary. Do not introduce Redis, Valkey, NATS, a broker or in-process
+cross-worker pub/sub yet. Run **one** API worker for the spike and reject a
+second collector using a local process lock. If eventual fan-out becomes
+material, revisit it using measurements.
 
-```text
-ishiban/
-  collector/{main,process,parser,projector,catalogue}.py
-  persistence/{models,engine,repository}.py
-  api/{app,resources,sse}.py
-  contracts/{observations,snapshot}.py
-web/
-  src/{app,features/board,features/activity,services,components}/
-  src/styles.css
-migrations/
-tests/{unit,integration,contract}/
-```
+Implementation layout is recorded in [Repository layout](repository-layout.md).
+Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
 
 ## 5. Collector protocol and lifecycle
 
@@ -185,7 +191,12 @@ tests/{unit,integration,contract}/
    tokens in the SQLite file or browser.
 2. Acquire the collector lock and create a new **local ingestion generation**;
    set collector health to `connecting` and distinguish all previous
-   projections as *not yet revalidated in this generation*.
+   projections as *not yet revalidated in this generation*. Retry
+   generation-start storage failures with cancellable exponential delays from
+   one second up to 30 seconds. Start observation only after the generation is
+   acknowledged. A lost commit acknowledgement can leave a committed connecting
+   generation with no observer; retry allocates another local generation, and
+   only the acknowledged result owns subsequent writes.
 3. Spawn `lody` with `asyncio.create_subprocess_exec`, not a shell. Read stdout
    line by line with a maximum line size and bounded pending work. Drain stderr
    separately, with size limits and secret redaction.
@@ -197,16 +208,60 @@ tests/{unit,integration,contract}/
    for idempotency. The API can see the event only after the projection commit.
    Persist the **post-event public projection** with the journal row so
    reconnect replay does not reconstruct old events from the database's newest
-   state.
+   state. On a retryable SQLAlchemy `OperationalError`, retain the decoded
+   event and exact raw record without reading the next observer record. Retry
+   with exponential delays from one second up to 30 seconds until commit or
+   cancellation. An uncertain commit acknowledgement can safely repeat the
+   write because stream/sequence deduplication prevents a second journal row or
+   cursor advance. Report fixed diagnostics without payloads or exception text.
+   Observer teardown still owns its refresher, and an unavailable final
+   `stopped` health write must not mask incoming cancellation.
 6. On `ready`, mark *catalogue enumeration* ready, not every session fully
    synchronized. Fetch the optional read-only catalogue snapshot for repository
-   enrichment.
+   enrichment in a separately owned refresh task while stream ingestion
+   continues. The CLI's workspace-identity preflight may provide the initial
+   catalogue, but GitHub enrichment and reconciliation wait for observer
+   readiness. Enrichment failure leaves the live observer attached and records
+   stale-association health; observer teardown cancels and reaps its refresh
+   task. Metadata reconciliation preserves newer execution evidence. Keep
+   `catalogue_ready` until initial reconciliation succeeds or a handled source
+   failure leaves a retained warning, then publish `following`. Retry SQLAlchemy
+   `OperationalError` from catalogue or health writes with exponential delays
+   from one second up to 30 seconds. Retain the initial catalogue and quiet
+   phase throughout these storage retries; periodic retries retain `following`.
+   Keep observation attached, publish a generic storage warning when writable
+   and use a fixed log diagnostic if that warning cannot be persisted. Clear
+   the warning and reset the five-minute cadence after successful
+   reconciliation. Cancellation interrupts retry waits through the existing
+   owned-task cleanup. The board includes this phase in its quiet startup
+   baseline: live activity remains visible during initial enrichment, without
+   pulses. Journal order places the `following` source record after all
+   bootstrap catalogue records, so quiet admission does not depend on browser
+   batching.
 7. On EOF, nonzero exit, parse failure or unrecoverable protocol error, record
    source health and last known valid event. Mark the collector disconnected;
    **do not** convert running turns to failed or idle. Restart with bounded
-   exponential backoff and jitter.
+   exponential backoff and jitter. If the disconnected-health write encounters
+   a storage failure, retry its same confirmed generation and diagnostic before
+   reconnecting. These retries use the same cancellable delays capped at 30
+   seconds and fixed safe logging. Reconnection still cannot replay upstream
+   events missed while disconnected.
 8. On graceful shutdown, terminate the child, await cleanup, flush committed
-   work and release the lock.
+   work and release the lock. Publish stopped health only for an acknowledged
+   generation. If cancellation interrupts an unconfirmed generation start, log
+   a fixed diagnostic and skip the stale-generation health write. The last
+   durable health may remain unchanged until another collector starts; it is
+   not proof of a live child.
+
+Native CLI teardown owns stdout and stderr discard tasks after the caller stops
+reading. Draining stdout permits a killed process to finish transport cleanup
+when its pipe buffer is full. TERM and post-KILL waits each have a three-second
+bound within a seven-second owned cleanup task. Caller cancellation waits for
+that task before propagating, including repeated cancellation. Cancellation
+received before teardown begins is forwarded from the context body with its
+original payload. A cleanup failure remains chained as its cause. These helpers
+remain specific to the read-only CLI adapter; generic task cancellation does
+not own process signals or pipe consumption.
 
 For malformed JSON, oversized lines, foreign workspace IDs, invalid ordering or
 unexpected version changes, preserve a bounded redacted diagnostic, stop that
@@ -252,17 +307,37 @@ WAL checkpoint starvation.
 | `collector_state` | Singleton per workspace: `generation`, `state` (`connecting`, `catalogue_ready`, `following`, `disconnected`, `error`, `stopped`), `started_at`, `last_received_at`, `last_error_summary`, `last_event_id`.                                                                                                                                                                                                                                                                                |
 
 All timestamps are UTC or original Lody Unix milliseconds, with explicit
-conversion. Never use `observedAt` as the underlying turn execution time: it is
-the observer's timestamp. `source_events.id` increases on each committed local
-update, including catalogue enrichment and source-health events; it does not
-attempt to preserve Lody process sequence across generations.
+conversion. Validate observer epoch milliseconds in the inclusive range
+`0..8_640_000_000_000_000` before consuming a stream position, so newly
+accepted evidence remains representable by the browser date API. Previously
+retained values are not rewritten; invalid date conversion renders an explicit
+unavailable label while preserving the session. Never use `observedAt` as the
+underlying turn execution time: it is the observer's timestamp.
+`source_events.id` increases on each committed local update, including
+catalogue enrichment and source-health events; it does not attempt to preserve
+Lody process sequence across generations.
 
 Store the original validated JSON payload for inspection and forward
 compatibility, but expose only bounded, normalized fields via the public API.
 This is an append-only spike with **no retention pruning**; document that
 database growth needs a later policy.
 
+[ADR 006](adr-006-public-turn-previews-and-cursors.md) bounds the public
+`activeTurns` array to a deterministic 100-turn preview after sidecar activity
+restoration. An exact count, truncation flag, and full-set semantic revision
+retain the visible meaning of hidden turns. The private projection and source
+payload remain complete; this response boundary does not bound private JSON,
+SQL decoding, process memory, or the byte length of individual fields.
+
 ### Projection merge rules
+
+[ADR 008](adr-008-runtime-evidence-policy.md) separates pure runtime transition
+plans from their public-projection encoding. `ishiban/runtime_evidence.py`
+selects replacement, preservation and named-turn transitions from typed source
+records. The shared storage adapter applies those plans for journal ingestion
+and on-demand activity resolution, preserving legacy projection handling and
+optional field encoding. Cached sidecar restoration retains its separate
+validated overlay and watermark checks; neither persistence boundary changes.
 
 - `snapshot` / `session.changed` with `source: persisted`: update current
   session state and reconcile `latestTurn` and `activeTurns` into `turns`.
@@ -285,13 +360,40 @@ All endpoints are versioned under `/api/v1`. For the local spike, bind to
 loopback by default and serve the UI from the same origin. A deployment beyond
 loopback needs authentication and transport security before it is shared.
 
-| Endpoint                            | Purpose                                                                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/snapshot`              | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
-| `GET /api/v1/sessions/{session_id}` | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
-| `GET /api/v1/events?after=<cursor>` | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
-| `GET /health`                       | Process liveness.                                                                                                                              |
-| `GET /ready`                        | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
+| Endpoint                                      | Purpose                                                                                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/snapshot`                        | Consistent list of session projections, collector health and the highest committed `cursor`. Read all in one explicit SQLite read transaction. |
+| `GET /api/v1/sessions/{session_id}`           | Latest materialized record, associated turns and bounded recent provenance.                                                                    |
+| `GET /api/v1/sessions/{session_id}/activity`  | Resolve unknown activity; `includeKnown=true` also returns current known evidence without another Lody read.                                   |
+| `GET /api/v1/session-activity?sessionId=<id>` | Query-based activity fallback for IDs whose path syntax may be normalized.                                                                     |
+| `POST /api/v1/sessions/activity`              | Stream up to eight activity results as bounded NDJSON frames.                                                                                  |
+| `POST /api/v1/sessions/recency`               | Return per-session latest-history facts for bounded visible-family enrichment.                                                                 |
+| `GET /api/v1/events?after=<cursor>`           | SSE replay of committed `source_events` after a cursor, then continuous tail. Supports `Last-Event-ID` on automatic reconnect.                 |
+| `GET /health`                                 | Process liveness.                                                                                                                              |
+| `GET /ready`                                  | Database readable and migrations present. **Does not** claim the Lody source is connected.                                                     |
+
+Each batch frame, including its newline, fits 1,048,576 UTF-8 bytes. A valid
+larger member becomes a small `response_too_large` marker while sibling members
+continue. The browser may recover that member through the bounded
+single-session activity route. An identity too large even for a marker receives
+HTTP 413 before the stream starts. This transport limit leaves the private
+journal and cache complete; see
+[ADR 005](adr-005-batched-activity-and-update-cues.md) and
+[ADR 006](adr-006-public-turn-previews-and-cursors.md).
+
+Session detail returns at most 100 retained turns in ascending
+`(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`
+is a fixed-size URL-safe version 2 continuation with a structured scope digest,
+event ID, and inclusive rank within that event's turn group. The rank is
+counted in the same read transaction and collation as the page query. It is
+`null` after the final page. Clients pass it as `turnCursor` on the next detail
+request. Malformed, foreign, or version 1 continuations return HTTP 400;
+clients restart at the first page after an upgrade. Every request reads the
+current materialized projection in its own database transaction, so concurrent
+turn updates can shift ranks and change later pages. This cursor does not
+promise a frozen historical snapshot. The public session preview and 30 most
+recent provenance events remain available on each page. See
+[ADR 006](adr-006-public-turn-previews-and-cursors.md).
 
 Example `GET /api/v1/snapshot` shape (illustrative data):
 
@@ -384,20 +486,40 @@ Preserve the supplied mockup's understated, high-density styling: warm paper
 background, pine/oxide accents, compact status glyphs, grouped repositories,
 inspector, search, matrix/list/panorama modes and accessible larger-target
 inspection. The mockup establishes **five workflow columns**: `Planning`,
-`Planned`, `Pending review` (building), `Refining` (PR babysitting) and
-`Merged`. Each column is five marks wide and wraps to as many rows as
-necessary. At overview density, target a 120-repository panorama of four banks
-of roughly 30 rows; support a comfortable-density mode. Preserve the
-6/10/13-item wrapping behaviour and avoid truncation.
+`Ready`, `Building`, `Refine` and `Merged`, using the user conventions in ADR
+002. Each column is five marks wide and wraps to as many rows as necessary. At
+overview density, target a 120-repository panorama of four banks of roughly 30
+rows. Provide Overview, Compact, Balanced, Roomy, and Comfortable mark sizes.
+Keep the repository column `12rem` wide at every density, allowing horizontal
+scrolling when bank widths exceed the viewport. Preserve the 6/10/13-item
+wrapping behaviour and avoid truncation.
 
-**Honest live-mode compromise:** Lody observation does not provide workflow
-stages or even reliable repository context. Show real sessions in a separate
-**Unclassified sessions** gutter/group (grouped by repo only when enriched
-metadata supplies one). Do not place them in a fabricated workflow stage. Keep
-the five stage columns available but empty in genuine live mode until a
-separate work-item association source exists. Label the original mockup's
-synthetic task dataset explicitly as **Demo data**, selectable only in an
-isolated presentation mode.
+Compact hides evidence glyphs while preserving activity glyphs and complete
+accessible labels. Constrain the main area to its grid track so table overflow
+belongs to the scroll pane rather than widening the document. Every pulse has a
+positioned task owner; list buttons clip their pulse to prevent pane-sized
+overlays. Reduced-motion preferences apply to both table and list pulses.
+
+The inspector is an initially hidden, nonmodal right-hand dock. Selecting a
+task opens it while the board remains interactive. Its reserved space must
+leave a horizontal scroll viewport through which every table column can be
+reached. Close and Escape return focus appropriately; opening the panel does
+not trap keyboard focus or lock document scrolling.
+
+Use solid oxide with a tonal border for a failed latest turn, and the
+reference's oxide/amber candy cane for waiting (blocked) activity. Preserve
+non-colour labels and glyphs. A brief, reduced-motion-aware pulse marks newly
+received session updates; empty placeholders have no pointer feedback.
+
+**Live workflow evidence:** A successful catalogue with no PR association is
+Planning. A uniquely associated active PR with a `Plan:` title is Ready; a
+non-plan draft is Building, and a non-plan ready-for-review PR is Refine.
+Merged and closed-unmerged PRs are terminal groups. Multiple active PRs,
+missing titles, or conflicting lifecycle facts remain Unclassified. Historical
+terminal PRs do not override one active association. The installed Lody CLI
+omits PR titles, so a bounded read-only GitHub lookup supplies them. Source
+outages and cached metadata remain visible. The original mockup's synthetic
+workload is explicitly labelled **Demo data** in an isolated mode.
 
 Distinguish visually and semantically:
 
@@ -405,15 +527,17 @@ Distinguish visually and semantically:
 - Evidence quality: metadata-only, persisted/synced, persisted/unavailable, or
   carried forward from an earlier collector generation.
 - Collector health: following, reconnecting, unavailable.
-- Workflow stage: **not known yet**. Do not equate `waiting` with a project
-  dependency or `turn.finished` with `Merged`.
+- Workflow stage: justified only by explicit PR association and lifecycle
+  facts. Never equate `waiting` with a dependency or `turn.finished` with
+  Merged.
 
-Use daisyUI 5 for application-level controls and semantic tokens, Tailwind 4
-for layout and responsive density, and Radix Primitives for accessible Dialog,
-Popover, Tooltip and ToggleGroup controls. Build the mark grid with compact
-native buttons rather than hundreds of nested Radix roots. Keyboard selection
-and screen-reader labels must identify session title, repository when known,
-runtime state and evidence freshness; support reduced motion.
+Use daisyUI 5 for application-level controls and semantic tokens, and Tailwind
+4 for layout and responsive density. Use native buttons for the mark grid and a
+labelled complementary region for the docked inspector. Add Radix Primitives
+only when an interaction needs them; this inspector has no modal lifecycle.
+Keyboard selection and screen-reader labels must identify session title,
+repository when known, runtime state, and evidence freshness; support reduced
+motion.
 
 CSS bootstrap:
 
@@ -454,7 +578,7 @@ CSS bootstrap:
   consumption (validate Lody observer behaviour separately), and a synthetic
   workload of 120 repository rows with uneven mark counts.
 - Visual regression for 5, 6, 10, 11 and 13 marks per stage in demo mode;
-  keyboard focus, Radix inspector and responsive panorama.
+  keyboard focus, the docked inspector, and responsive panorama.
 - Confirm *no* endpoint, CLI invocation or UI control mutates Lody.
   Source-health failures remain visible while the API itself stays healthy.
 
@@ -470,10 +594,10 @@ CSS bootstrap:
    evidence, metadata-only unknowns and stale observations.
 5. Panorama handles the 120-repository demonstration without stage truncation
    or misleading live-data classification.
-6. The final spike report records measured latency, CPU, RSS and
-   file-descriptor growth (including the `lody` child), SQLite write
-   throughput, SSE fan-out cost, observed failure cases and the specific
-   missing Lody metadata fields.
+6. The final [spike report](observation-spike-report.md) records bounded
+   latency, CPU, RSS and file-descriptor measurements (including the `lody`
+   child), SQLite write throughput, SSE fan-out, observed failure cases, and
+   missing Lody metadata fields, with measurement limits stated.
 
 Do not set arbitrary performance thresholds as passing evidence before
 measuring a real workload. Record latency from **local SQLite commit to
@@ -506,7 +630,7 @@ worth proposing. No production hardening without evidence from the spike.
 | Lody CLI observation cannot attach to local-only OSS deployment | Declare Cloud authentication prerequisite; track local daemon adapter as a future upstream request.                                       |
 | Observer misses history-only changes of unopened idle rooms     | Preserve its documented limits; use targeted single-session observation later if needed.                                                  |
 | Source has no durable replay cursor                             | Store Ishiban-local append-only log; reconcile new Lody snapshots after every restart. Historical unseen transitions are not recoverable. |
-| Repository/task/stage associations absent                       | Optional `session list` metadata bridge, explicit Unclassified group, no workflow inference.                                              |
+| Repository/task/stage associations absent                       | Catalogue and associated GitHub PR metadata bridge, explicit Unclassified group, no activity-based stage inference.                       |
 | SQLite lock contention or SSE polling overhead                  | One writer, short reads, WAL, one API worker and measured fan-out; use a broker only when justified.                                      |
 | Native EventSource reconnect masks a lost source                | Persist explicit collector-health events; surface observation generation and staleness.                                                   |
 | Lody auth expiry or provider failures                           | Distinguish auth errors from transient outages; bound retries; never put credentials in logs or frontend.                                 |
@@ -527,10 +651,94 @@ identifiers and provenance. That is a follow-on design, not part of this spike.
 - [Effect v4 documentation](https://effect.website/docs/v4/onboarding)
 - [daisyUI React/Tailwind installation](https://daisyui.com/docs/install/react/)
 - [Radix Primitives](https://www.radix-ui.com/primitives)
-- Supplied `ishiban-mockup(1).html`, specifically its five-stage schema,
+- Supplied `reference/ishiban-mockup.html`, specifically its five-stage schema,
   120-repository panorama, density toggle, inspector and wrapping logic.
 
 **Source-derived claims** above concern the current Lody implementation and
 published library APIs. **Proposed contracts** such as `/api/v1/events`, the
 SQLite tables, `Unclassified sessions`, cursor handling and test plan are
 Ishiban design choices, not features Lody already provides.
+
+## Inspector session links and error details
+
+The inspector links real sessions to their originating Lody workspace. Snapshot
+navigation metadata may include the configured `workspaceSlug`; absent a usable
+slug, the workspace-qualified native session URI remains available. Demo
+sessions must not generate links to fictitious Lody sessions.
+
+An optional source-supplied turn `error` is retained in bounded public turn
+JSON for failed outcomes and rendered as plain text in the inspector. Missing
+error details are labelled explicitly. This extension is accepted on snapshots
+and turn-finish envelopes, but the installed observer does not currently emit
+the provider diagnostic. The CLI's visible transcript also omits it. Neither
+assistant text nor unrelated collector errors may substitute for the failed
+turn's actual diagnostic. Reopened turns clear stale errors.
+
+## Remembered controls and lazy activity
+
+[ADR 003](adr-003-interface-state-and-lazy-activity.md) defines signed
+MessagePack cookie storage for density/presentation and read-only lazy
+activity. The footer discloses the preference cookie. These mechanisms remain
+separate from the durable journal: lazy results preserve the local event
+cursor, do not claim a collector generation, and update frames without a pulse.
+Only visible real unknown sessions trigger bounded, deduplicated reads; stale
+responses cannot overwrite newer journal evidence.
+
+Task-cell feedback has its own stacking context beneath the sticky repository
+column. Selected marks and pulse overlays disappear behind that opaque column
+when scrolled underneath it. Panorama banks have zero horizontal padding so the
+sticky column does not jump when scrolling begins.
+
+The inspector copies the Lody CLI session ID and lazily resolves agent type and
+configuration display name through a bounded TTL cache. Provider ACP IDs are
+not the copy target. The inspector chooses the top PR in a stack before
+resolving its name; a prerequisite title arriving later cannot replace it.
+Inspector-only GitHub branch/fork facts identify graph tips, with lifecycle,
+merge-time and stable-URL fallback when relationships are unavailable. The
+exact PR title is the linked heading; the session title remains a subtitle, and
+PR links show muted numbers. Missing names for terminal PRs are resolved on
+inspector demand. Metadata-only unknown updates must not erase browser-local
+on-demand activity; fresh execution evidence and workspace changes retain
+precedence.
+
+[ADR 004](adr-004-persist-on-demand-activity.md) extends the original activity
+lifetime with a workspace/session cache in a separate SQLite sidecar. API
+snapshots, detail and SSE restore those runtime fields onto current metadata;
+the durable journal and raw replay readers remain unchanged. Collector
+execution watermarks invalidate older cached outcomes even across missed
+updates. Refreshes and process restarts retain failures and supplied
+diagnostics without creating events or collector evidence generations.
+
+## Batched cold reads and restart cues
+
+[ADR 005](adr-005-batched-activity-and-update-cues.md) adds progressive batched
+activity reads with four shared observer slots. Metadata-only revision changes
+retain pending reads; actual execution watermarks invalidate them. The browser
+establishes a quiet baseline during collector startup and compares meaningful
+facts for subsequent pulses. Restart replay remains in the journal without
+creating a flood of update animations.
+
+## Logical session families
+
+[ADR 007](adr-007-session-tab-families.md) accepts one board entry per root
+session family, linked only by `parentSessionId`. The root supplies PR, branch,
+title, and workflow context; each actual tab retains its own runtime state,
+errors, agent details, and CLI identity. `SessionFamily` is a presentation view
+and leaves journal, API, and cache identities untouched. Inspector URLs retain
+the root route and add `?tab=session:<actual-member-id>` for a selected tab.
+
+Visible families receive bounded per-member `latestHistoryAt` reads. Exact
+history time selects activity only when all member reads are available. While
+reads are pending or unavailable, running is the provisional choice under the
+one-active-tab-per-logical-family assumption; successful empty history uses
+`createdAt` for comparison. Workspace, member, and execution-watermark checks
+reject late facts. Selection-only recency changes are quiet, while meaningful
+runtime changes pulse the family after a quiet startup baseline.
+
+The shared session-show reader serves recency and inspector agent metadata
+through at most two CLI children, identity and watermark singleflight, bounded
+LRU/TTL caches, and a 45-second queue-inclusive deadline. It is process-local;
+an API restart re-enriches visible families and does not alter durable activity
+facts. Board and resource integration have passed the repository gates and
+local browser acceptance checks; hosted Chromium evidence is not available. The
+ExecPlan records candidate revisions and the remaining review work.

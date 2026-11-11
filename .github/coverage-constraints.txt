@@ -1,0 +1,7 @@
+# SlipCover 1.1.0 expects pytest's source_stat assertion-cache signature.
+# Revisit pytest after upstream compatibility and migration-hit checks pass:
+# https://github.com/leynos/ishiban/pull/9#issuecomment-6771868675
+pytest==9.1.0
+slipcover==1.1.0
+pytest-xdist==3.8.0
+coverage==7.17.2

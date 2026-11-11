@@ -411,9 +411,6 @@ src/
 5. Test in modern browsers only
 6. Use the official upgrade tool: `npx @tailwindcss/upgrade`
 
-For a fuller walkthrough of breaking changes and upgrade steps, see the
-[Tailwind v3 to v4 migration guide](tailwind-v3-v4-migration-guide.md).
-
 ## Complete Utility Class Reference
 
 ### Layout

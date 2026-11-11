@@ -56,6 +56,91 @@
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
 
+## Engineering workflow
+
+For non-trivial changes, identify the affected contracts, invariants and
+failure modes before choosing an implementation. Use an ExecPlan when it helps
+make milestones and observable acceptance criteria clear; avoid adding planning
+overhead to small changes. Keep domain decisions in the domain layer and
+process, filesystem, network and framework effects at their existing
+boundaries. Make errors, side effects and partial outcomes explicit. For
+subprocesses, streams, retries and caches, preserve their size and time bounds,
+ownership, cancellation and cleanup.
+
+Before review, inspect the complete diff, including fixtures, documentation,
+comments and assertion messages. Check new helpers against existing repository
+and dependency support, document their reuse scope, and record consequential
+architecture choices in the indexed design documents. Treat automated review
+findings as evidence to verify; keep or reject each with a reason rather than
+applying suggestions without checking their assumptions.
+
+## Project invariants
+
+### Evidence and journal
+
+- Lody observations and associated GitHub pull-request lookups are read-only.
+  Never add task dispatch, session mutation or transcript scraping to the
+  observer.
+- Derive workflow stage only from the explicit PR evidence in
+  [ADR 002](docs/adr-002-workflow-evidence.md). Agent activity, collector
+  connectivity and evidence freshness are separate facts; for example,
+  `running` does not imply `Building`, and `waiting` does not imply a workflow
+  dependency is blocked.
+- Keep the source journal append-only. Deduplicate Lody events by workspace,
+  stream and sequence. Its durable cursor identifies committed Ishiban journal
+  order, not a Lody sequence. Duplicate replay must not append an event or
+  advance that cursor.
+- On-demand activity is derived runtime evidence. Persist it in the separate
+  activity sidecar and overlay it on current metadata; do not write it into the
+  observation journal. A newer execution watermark wins, while metadata-only
+  refreshes preserve a valid last-known result. See
+  [ADR 004](docs/adr-004-persist-on-demand-activity.md).
+
+### Process and API boundaries
+
+- Validate CLI protocol version, workspace identity, session identity and
+  state before using returned data. Keep subprocess input, output size and
+  lifetime bounded; cancellation must clean up the child and its waiters.
+  Preserve partial-result semantics where a failure in one member should not
+  discard successful members. Keep request and response schemas typed and
+  reject stale or foreign browser results.
+- The app is a local, single-workspace proof of concept, served on loopback by
+  one API worker. Treat multi-user sharing, authentication and horizontal API
+  scaling as out of scope until their boundaries are designed explicitly.
+- Application database access uses async SQLAlchemy with `aiosqlite`. Startup
+  schema migrations bridge to Alembic's synchronous API through
+  `AsyncConnection.run_sync`; keep that bridge at schema initialization.
+- `ishiban` invokes Lody through its bounded async process adapter. Prefer the
+  installed `cmd-mox` pytest fixture for ordinary command-response fixtures,
+  including calls through the native adapter or a Cuprum catalogue. Keep a
+  dedicated child executable for tests of chunking, delayed EOF, transport
+  teardown, deadlines or cancellation. See
+  [scripting standards](docs/scripting-standards.md) for command-fixture
+  conventions.
+
+### Browser and presentation
+
+- Resolve unknown activity only for visible real-session marks. Batch requests,
+  validate each response frame, and apply it only to its current workspace and
+  session revision. Lazy enrichment preserves the durable cursor and does not
+  pulse. Establish a quiet semantic baseline on collector startup; animate
+  meaningful task changes only. See the update and batching bounds in
+  [ADR 005](docs/adr-005-batched-activity-and-update-cues.md).
+- Store only density and presentation in the signed MessagePack interface
+  cookie. Do not move journal data or task selection into browser preferences.
+  Keep synthetic demo sessions separate from live subscriptions and on-demand
+  reads.
+- Preserve accessible semantic controls and the users' guide's board
+  behaviour: the inspector is docked and hidden initially; horizontal scrolling
+  remains available while it is open; the sticky first column stays `12rem` in
+  every density; empty cells are inert. See the
+  [users' guide](docs/users-guide.md).
+- Use Bun 1.4.x for browser bundling and tests. Build the React interface with
+  Effect v4 schemas at untrusted data boundaries, Tailwind v4 utilities and
+  daisyUI v5 semantic styles. Keep controls keyboard-accessible and use
+  semantic HTML. Validate frontend changes with the relevant `make build-web`,
+  `make check-fmt`, `make lint`, `make typecheck` and `make test` gates.
+
 ## Change quality and committing
 
 - **Atomicity:** Aim for small, focused, atomic changes. Each change (and
@@ -88,8 +173,9 @@
       hidden action directories. The base Pylint sweep covers
       `$(PYLINT_TARGETS)` using the interpreter selected for the baseline:
       uv-managed CPython 3.14.
-      The minimum Python baseline is 3.12. DF12 Python Lints is pinned to
-      v0.4.0; it and Ambrleaks, Skylos, Vulture, and the duplication detector
+      The package runtime baseline is Python 3.14+, as declared in
+      `pyproject.toml`. DF12 Python Lints is pinned to v0.4.0; it and
+      Ambrleaks, Skylos, Vulture, and the duplication detector
       run as isolated tools on Python 3.14. Ambrleaks checks `tests/`, Skylos
       checks the repository, and Vulture checks test helpers. The strict
       Skylos and Vulture dead-code checks, shared Nose duplication gate, and
@@ -156,10 +242,15 @@
 ## Python verification and testing
 
 - For Python work, use `pytest` for unit tests and `pytest-bdd` for behavioural
-  tests. Cover happy paths, unhappy paths, and relevant edge cases.
+  tests. Cover happy paths, unhappy paths, and relevant edge cases. Use the
+  installed `cmd-mox` fixture for ordinary command-response fixtures through
+  the native process adapter or a Cuprum catalogue. Do not replace dedicated
+  child-process tests where chunking, delayed EOF, transport framing, timeout,
+  cancellation or cleanup is the contract.
 - Keep pytest tests in the top-level `tests/` tree. Do not place unit tests in
-  package module directories or `unittests/` subdirectories, because CI
-  coverage uses xdist-backed SlipCover support.
+  package module directories or `unittests/` subdirectories. Ordinary tests use
+  xdist; CI coverage uses the serial SlipCover lane so dynamically loaded
+  Alembic migration hits remain visible.
 - Snapshot tests (using `syrupy`) should be provided where multivariant output
   format consistency is relevant to the requirements. Snapshot tests must
   capture meaningful, reviewer-useful contracts rather than generic dumps of
@@ -226,7 +317,8 @@ For Python development, refer to the detailed guidelines in the `.rules/`
 directory:
 
 - [Python code style guidelines](.rules/python-00.md) - Core Python 3.12+ style
-  conventions.
+  conventions. The package runtime currently requires Python 3.14+ in
+  `pyproject.toml`.
 - [Python context managers](.rules/python-context-managers.md) - Best practices
   for context managers.
 - [Python exceptions and logging][python-exceptions] -
@@ -248,42 +340,6 @@ Additional docs:
   allowlisting, and command mocking patterns with `cmd-mox`.
 - Before adding or updating helper scripts, read the scripting standards guide
   and follow its `Cyclopts`, `cuprum`, `pathlib`, and `cmd-mox` conventions.
-
-## Additional tooling
-
-The following tooling is available in this environment:
-
-- `mbake` — A Makefile validator. Run using `mbake validate Makefile`.
-- `strace` — Traces system calls and signals made by a process; useful for
-  debugging runtime behaviour and syscalls.
-- `gdb` — The GNU Debugger, for inspecting and controlling programs as they
-  execute (or post-mortem via core dumps).
-- `ripgrep` — Fast, recursive text search tool (`grep` alternative) that
-  respects `.gitignore` files.
-- `ltrace` — Traces calls to dynamic library functions made by a process.
-- `valgrind` — Suite for detecting memory leaks, profiling, and debugging
-  low-level memory errors.
-- `bpftrace` — High-level tracing tool for eBPF, using a custom scripting
-  language for kernel and application tracing.
-- `lsof` — Lists open files and the processes using them.
-- `htop` — Interactive process viewer (visual upgrade to `top`).
-- `iotop` — Displays and monitors I/O usage by processes.
-- `ncdu` — NCurses-based disk usage viewer for finding large files/folders.
-- `tree` — Displays directory structure as a tree.
-- `bat` — `cat` clone with syntax highlighting, Git integration, and paging.
-- `delta` — Syntax-highlighted pager for Git and diff output.
-- `tcpdump` — Captures and analyses network traffic at the packet level.
-- `nmap` — Network scanner for host discovery, port scanning, and service
-  identification.
-- `lldb` — LLVM debugger, alternative to `gdb`.
-- `eza` — Modern `ls` replacement with more features and better defaults.
-- `fzf` — Interactive fuzzy finder for selecting files and commands.
-- `hyperfine` — Command-line benchmarking tool with statistical output.
-- `shellcheck` — Linter for shell scripts.
-- `fd` — Fast user-friendly `find` alternative with sensible defaults.
-- `checkmake` — Linter for `Makefile`s, ensuring best practices.
-- `srgn` — Structural grep and syntax-tree pattern editing.
-- `difft` **(Difftastic)** — Semantic diff tool that compares code structure.
 
 ## Key takeaway
 

@@ -1,0 +1,9 @@
+# serializer version: 1
+# name: test_serve_binds_loopback_with_the_saved_workspace
+  dict({
+    'host': '127.0.0.1',
+    'port': 8877,
+    'timeout_graceful_shutdown': 3,
+    'workers': 1,
+  })
+# ---
