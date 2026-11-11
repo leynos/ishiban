@@ -15,6 +15,49 @@ export interface ActivityFetchFixture {
 }
 
 /**
+ * Require one captured activity request at a known index.
+ * @param requests Held requests from the activity fetch fixture.
+ * @param index Zero-based request position.
+ * @returns The captured request, or a clear fixture failure.
+ * @throws {Error} When the requested batch has not started.
+ * @example
+ * const first = activityRequestAt(fetchFixture.requests, 0);
+ */
+export function activityRequestAt(requests: readonly ActivityFetchRequest[], index: number): ActivityFetchRequest {
+  const request = requests[index];
+  if (!request) throw new Error(`Expected activity request ${index} to start.`);
+  return request;
+}
+
+/**
+ * Complete one activity batch as newline-delimited JSON frames.
+ * @param request The captured POST whose response is held.
+ * @param frames Valid or deliberately invalid frames chosen by the caller.
+ * @example
+ * resolveActivityBatch(first, [{workspaceId: 'w1', sessionId: 's1', session: null}]);
+ */
+export function resolveActivityBatch(request: ActivityFetchRequest, frames: readonly unknown[]): void {
+  request.response.resolve(new Response(`${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`));
+}
+
+/**
+ * Render raw activity marks before starting the visibility observer.
+ * @param sessions Distinct sessions whose raw identities reach the activity scanner.
+ * @returns The rendered marks for explicit viewport transitions.
+ * @example
+ * activityMarks([{sessionId: 's1'}])[0]?.getAttribute('data-session-id'); // 's1'
+ */
+export function activityMarks(sessions: readonly {readonly sessionId: string}[]): HTMLButtonElement[] {
+  const marks = sessions.map((session) => {
+    const mark = document.createElement('button');
+    mark.setAttribute('data-session-id', session.sessionId);
+    return mark;
+  });
+  document.body.replaceChildren(...marks);
+  return marks;
+}
+
+/**
  * Replace fetch with held responses; for example, release NDJSON only after its fallback starts.
  * @param capacity Number of request-start signals reserved for one deterministic test.
  * @returns Requests, their start signals, and a restoration function for afterEach.

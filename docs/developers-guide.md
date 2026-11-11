@@ -799,6 +799,14 @@ stable across decoding and evidence checks.
 `storage.activity_cache` retains SQLite lifecycle and transaction ownership.
 The pure helpers are confined to this derived-runtime feature.
 
+The activity test fixtures share held fetch responses, NDJSON completion and
+controlled viewport setup. Generated lifecycle cases vary visibility histories,
+revision placement and completion order through the real scanner, checking
+request bounds, eligible identities, stale-result rejection and rediscovery.
+They are bounded generated scenarios with explicit controls, not an unbounded
+state-machine proof. The typed request accessor remains distinct from recency
+DOM-mark lookup; their reviewed duplicate guard has no shared scenario logic.
+
 The batch API partitions current projections once before cache restoration and
 pending observations. Browser `ActivityVisibility` owns mark discovery and DOM
 observer cleanup, while the PR-title lookup owns its timeout and cancellation.

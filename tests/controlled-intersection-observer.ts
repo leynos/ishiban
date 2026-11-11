@@ -1,4 +1,7 @@
 /** @file Deterministic viewport driver for activity lookup tests. */
+import type {BoardStore} from '../src/client';
+import {startLazyActivity} from '../src/lazy-activity';
+
 /** Deliver exact viewport transitions while retaining the real rendered marks. */
 export class ControlledIntersectionObserver implements IntersectionObserver {
   static instances: ControlledIntersectionObserver[] = [];
@@ -73,4 +76,24 @@ export function installControlledIntersectionObserver(): () => void {
     else Reflect.deleteProperty(globalThis, 'IntersectionObserver');
     ControlledIntersectionObserver.instances = [];
   };
+}
+
+/**
+ * Start real activity scanning against the installed controlled observer.
+ * @param store The board store whose unknown sessions can be resolved.
+ * @returns The observer for viewport transitions and the scanner cleanup.
+ * @throws {Error} When the controlled observer was not installed first.
+ * @example
+ * const {observer, stop} = startControlledActivity(store);
+ * observer.setVisibility(mark, true);
+ * stop();
+ */
+export function startControlledActivity(store: BoardStore) {
+  const stop = startLazyActivity(store);
+  const observer = ControlledIntersectionObserver.instances.at(-1);
+  if (!observer) {
+    stop();
+    throw new Error('The activity scanner needs its controlled viewport observer.');
+  }
+  return {observer, stop};
 }

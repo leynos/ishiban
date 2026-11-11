@@ -608,11 +608,7 @@ members = ["tests/recency-request-contract.test.tsx", "tests/session-recency-tra
 reason = "Keep explicit imports for the cross-runtime payload capture and isolated transport rejection tests; their shared browser-global/fetch setup is already extracted, and their assertions protect different boundaries. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["tests/lazy-activity-fallback.test.ts", "tests/lazy-activity-identity.test.tsx"]
-reason = "Keep explicit imports for independent oversized-response recovery and unsupported-source-ID admission tests. The reviewed nine-line declaration fragment contains six shared import lines; browser observation, fetch ownership and snapshot fixtures are already shared. An import-only facade would obscure each test's dependencies. See docs/developers-guide.md#duplication-review."
-
-[[tool.duplication_gate.allow]]
-members = ["tests/lazy-activity-fallback.test.ts::requestAt", "tests/session-recency-pressure.test.tsx::familyMarkAt"]
+members = ["tests/activity-fetch-fixture.ts::activityRequestAt", "tests/session-recency-pressure.test.tsx::familyMarkAt"]
 reason = "Keep typed network-request and DOM-mark fixture accessors local, with distinct invariant failure messages. The five-line guards share one shallow line and no scenario algorithm; their fetch and browser plumbing already uses shared fixtures. A generic indexed-assertion layer would couple unrelated test capabilities. See docs/developers-guide.md#duplication-review."
 
 

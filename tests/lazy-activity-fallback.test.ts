@@ -3,13 +3,14 @@ import {afterEach, expect, it} from 'bun:test';
 import {waitFor} from '@testing-library/react';
 import type {Session, SessionActivityFrame, Snapshot} from '../src/contracts';
 import {createBoardStore} from '../src/client';
-import {startLazyActivity} from '../src/lazy-activity';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
-import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
 import {
-  ControlledIntersectionObserver,
-  installControlledIntersectionObserver
-} from './controlled-intersection-observer';
+  activityRequestAt as requestAt,
+  activityMarks,
+  installActivityFetch,
+  resolveActivityBatch as resolveBatch
+} from './activity-fetch-fixture';
+import {installControlledIntersectionObserver, startControlledActivity} from './controlled-intersection-observer';
 import type {Deferred} from './deferred';
 import {
   applyStaleFallbackChange,
@@ -52,30 +53,17 @@ function scenario(sessionIds: readonly string[]) {
   };
   const store = createBoardStore(() => {});
   store.replace(snapshot);
-  document.body.replaceChildren(
-    ...sessionIds.map((sessionId) => {
-      const mark = document.createElement('button');
-      mark.setAttribute('data-session-id', sessionId);
-      return mark;
-    })
-  );
+  const marks = activityMarks(snapshot.sessions);
 
   const fetchFixture = installActivityFetch(12);
   const {requests, started} = fetchFixture;
   restoreFetch = fetchFixture.restore;
 
-  stopRequests = startLazyActivity(store);
-  const observer = ControlledIntersectionObserver.instances.at(-1);
-  if (!observer) throw new Error('The visible activity scanner must install an observer.');
-  for (const mark of document.querySelectorAll('button[data-session-id]')) observer.setVisibility(mark, true);
+  const activity = startControlledActivity(store);
+  stopRequests = activity.stop;
+  const {observer} = activity;
+  for (const mark of marks) observer.setVisibility(mark, true);
   return {snapshot, store, requests, started, observer};
-}
-
-/** Return one controlled network request; for example, POST then the GET fallback. */
-function requestAt(requests: readonly ActivityFetchRequest[], index: number): ActivityFetchRequest {
-  const request = requests[index];
-  if (!request) throw new Error(`Expected request ${index} to start.`);
-  return request;
 }
 
 /** Read one seeded session; for example, select the marked member from a batch. */
@@ -83,11 +71,6 @@ function sessionAt(snapshot: Snapshot, index = 0): Session {
   const session = snapshot.sessions[index];
   if (!session) throw new Error(`Expected test session ${index} to exist.`);
   return session;
-}
-
-/** Resolve one batch as NDJSON without coupling tests to network chunk boundaries. */
-function resolveBatch(request: ActivityFetchRequest, frames: readonly unknown[]): void {
-  request.response.resolve(new Response(`${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`));
 }
 
 /** Build the exact backend marker shape; no session member may fit this response. */
