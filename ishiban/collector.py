@@ -7,6 +7,7 @@ failure without manufacturing successful or failed turns.
 import asyncio
 import contextlib
 import fcntl
+import functools
 import logging
 import secrets
 import typing as typ
@@ -136,32 +137,84 @@ class Collector:
         visible through a separately persisted collector event.
         """
         delay = 1.0
+        has_confirmed_generation = False
         try:
             while True:
-                self.generation = await self.store.begin_generation()
-                try:
-                    catalogue = initial
-                    initial = None
-                    await self._follow(catalogue)
-                except (
-                    OSError,
-                    TimeoutError,
-                    ValueError,
-                    msgspec.DecodeError,
-                ) as error:
-                    summary = (
-                        f"Lody source failure ({type(error).__name__}); reconnecting."
-                    )
-                    if isinstance(error, ProtocolError):
-                        summary = str(error)
-                    await self.store.health("disconnected", self.generation, summary)
+                has_confirmed_generation = False
+                self.generation = await self._retry_lifecycle_write(
+                    "generation", self.store.begin_generation
+                )
+                has_confirmed_generation = True
+                catalogue = initial
+                initial = None
+                await self._observe_generation(catalogue)
                 await asyncio.sleep(delay + secrets.randbelow(1000) / 1000)
                 delay = min(delay * 2, 30)
         finally:
+            await self._stop_if_confirmed(
+                has_confirmed_generation=has_confirmed_generation
+            )
+
+    async def _observe_generation(self, catalogue: Catalogue | None) -> None:
+        """Follow one acknowledged generation and persist source loss.
+
+        For example, an observer exit records disconnected health before the
+        next generation starts.
+        """
+        try:
+            await self._follow(catalogue)
+        except (OSError, TimeoutError, ValueError, msgspec.DecodeError) as error:
+            summary = f"Lody source failure ({type(error).__name__}); reconnecting."
+            if isinstance(error, ProtocolError):
+                summary = str(error)
+            await self._retry_lifecycle_write(
+                "disconnected health",
+                functools.partial(
+                    self.store.health, "disconnected", self.generation, summary
+                ),
+            )
+
+    async def _stop_if_confirmed(self, *, has_confirmed_generation: bool) -> None:
+        """Avoid a stale stopped write after an unacknowledged generation.
+
+        For example, cancellation after a lost generation acknowledgement
+        leaves the committed connecting state visible as a partial outcome.
+        """
+        if not has_confirmed_generation:
+            logger.warning("Collector stopped health skipped; generation unconfirmed.")
+            return
+        try:
+            await self.store.health("stopped", self.generation)
+        except OperationalError:
+            logger.warning("Collector stopped health could not be persisted.")
+
+    @staticmethod
+    async def _retry_lifecycle_write(
+        operation: typ.Literal["generation", "disconnected health"],
+        write: cabc.Callable[[], cabc.Awaitable[int]],
+    ) -> int:
+        """Retry collector generation or disconnect writes before advancing.
+
+        For example, a generation whose commit lost its acknowledgement is not
+        used by an observer; only a later returned generation is confirmed.
+
+        Returns
+        -------
+        int
+            The acknowledged generation or health cursor.
+        """
+        retry_delay = 1.0
+        while True:
             try:
-                await self.store.health("stopped", self.generation)
+                return await write()
             except OperationalError:
-                logger.warning("Collector stopped health could not be persisted.")
+                logger.warning(
+                    "Collector %s storage unavailable; retrying in %s seconds.",
+                    operation,
+                    retry_delay,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30)
 
     async def _follow(self, initial: Catalogue | None = None) -> None:
         """Attach one workspace observer and a periodic catalogue refresher.
