@@ -83,27 +83,41 @@ agent-browser for keyboard/inspector/filter/reconnect checks and accessibility
 audits; use css-view to verify computed semantic tokens and five-column mark
 grids rather than assuming CSS source declarations took effect.
 
-The opt-in Chromium geometry suite requires `agent-browser` and a built bundle:
+The opt-in Chromium suites require `agent-browser`, the Python environment and
+a built bundle:
 
 ```sh
-make build-web
-ISHIBAN_BROWSER_TESTS=1 bun test tests/board-layout.browser.test.ts
+make build build-web
+ISHIBAN_BROWSER_TESTS=1 bun test tests/board-layout.browser.test.ts tests/board-interface-state.browser.test.ts
 ```
 
-Scope that environment flag to this file. The suite restores Bun's native HTTP
-globals after the Happy DOM preload, serves built assets with synthetic
-snapshots and real SSE, and closes its own server and browser. Its fixture
-helpers belong only to these browser layout scenarios. Default unit-test runs
-skip the browser cases. Geometry checks cover the pane's horizontal overflow
-with and without the inspector, compact evidence visibility, and task-bounded
-list pulses with reduced-motion support.
+Scope that environment flag to these files. The geometry suite serves built
+assets with synthetic snapshots and real SSE. Its fixture helpers belong only
+to these layout scenarios. The preference suite starts the real Falcon server
+with a private migrated database, ephemeral loopback port and unique browser
+session. It saves visible controls, reloads through the actual snapshot
+endpoint and checks restored controls, plus absent and tampered-cookie
+defaults. It starts no collector or Lody read. Its server watchdog derives from
+the same setup, sequential test and cleanup budgets: 10 minutes 20 seconds in
+total, with bounded shutdown. Setup failure also releases its private state.
+Both suites close their own browser/server resources and skip by default.
+Geometry checks cover horizontal overflow with and without the inspector,
+compact evidence visibility, and task-bounded list pulses with reduced-motion
+support.
 
-`tests/browser-command.ts` owns only the layout suite's CLI children and its
-real-child regressions. It caps each output pipe at 64 KiB, gives commands a
-20-second lifetime in the layout wrapper, and bounds reaping separately to two
-seconds. Hook and test budgets allow the wrapper's teardown to run before the
-runner expires. Keep this helper out of browser application code and use the
-production process adapter for Python-owned commands.
+`tests/native-browser-environment.ts` owns the shared opt-in switch and
+restores Bun's native globals once after the Happy DOM preload. Both native
+suites use it: independently unregistering Happy DOM failed when they ran
+together in one Bun process. Keep this setup confined to the native browser
+suites so normal renderer tests retain Happy DOM.
+
+`tests/browser-command.ts` owns the native suites' CLI children, the preference
+suite's one-shot database bootstrap and its real-child regressions. It caps
+each output pipe at 64 KiB, gives commands a 20-second lifetime in these
+wrappers, and bounds reaping separately to two seconds. Hook and test budgets
+allow teardown before the runner expires. Keep this helper out of browser
+application code and use the production process adapter for Python-owned
+commands.
 
 ## Local workflow
 
@@ -362,6 +376,15 @@ their normal cues. The local subscription wrapper in
 `tests/board-startup-updates.test.tsx` connects the real board to sequential
 `BoardStore` updates, testing that same startup order without relying on React
 to batch frames. Keep that wrapper local to this regression.
+
+The public-preview and turn-transition property modules keep their own explicit
+copy, typing and Hypothesis imports. Their exact file-pair exception covers a
+reviewed seven-line declaration fragment, with no scenario or oracle logic. Do
+not replace these dependencies with an import-only facade or extend that
+exception to algorithms. The public-preview generator, typed preview reader and
+fixed boundary witness stay local to
+`tests/test_public_projection_properties.py`; they independently pin the public
+100-turn limit and do not reuse the production digest implementation.
 
 Each exception in `pyproject.toml` records its participating units or exact
 files and its reason. Nose reports anonymous fragments without enclosing unit

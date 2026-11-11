@@ -1341,3 +1341,43 @@ makes the second fail. Both production files were restored byte for byte after
 these negative controls. This is test coverage for existing behaviour; it adds
 no runtime change or formal proof. Candidate-bound aggregate validation and
 assessment confirmation remain separate steps.
+
+### Full preference workflow and public-preview properties, 11 November 2026
+
+The saved assessment still described the older cookie/hook tests after the
+snapshot and Board integration tests landed; those two missing-link claims are
+now contradicted by direct regressions. Its separate request for a complete
+browser workflow and generated public-preview invariants remains applicable.
+
+The real-browser preference suite now starts the production Falcon server over
+a private migrated database and built interface. It exercises visible control
+changes, actual signed-cookie persistence, reload through the snapshot API and
+visible restoration. Missing and tampered cookies restore the default
+Overview/Panorama controls. The actual browser suite passed three cases.
+Running it with the existing four layout cases exposed a shared Happy DOM
+unregister failure; a common native-browser setup fixes environment ownership,
+and all seven cases then passed together. Child, request, server and hook
+budgets leave time for cleanup; no user services or Lody sessions are touched.
+
+Local review identified that the first fixed server watchdog was shorter than
+the sequential cases' permitted lifetimes. It now derives from the same named
+setup, default-case, saved-case and cleanup budgets used by the hooks and
+tests. Its bounded lifetime is 10 minutes 20 seconds, covering valid sequential
+cases and cleanup. Both browser suites pass together after this repair.
+
+Three Hypothesis properties generate unique-ID turn sets from zero to 120,
+including boundaries around 100, arbitrary input permutations and hidden-tail
+changes. Independent assertions pin the public limit at 100, exact counts,
+truncation, member provenance and private-input preservation. Preview and
+revision remain stable under reordering; hidden state/error and membership
+changes alter the full-set revision while preserving the preview. Removing
+canonical ordering and hashing only the visible preview each made its targeted
+assertion fail; the production source was restored exactly. These are finite
+tests, not a proof that cryptographic collisions are impossible.
+
+One new reasoned duplication exception names the exact Python property-module
+pair whose reviewed clone contains only import declarations. The matcher is
+file-based, so future changes to either file require re-auditing it for
+executable duplication; no threshold changed. The native browser setup is
+shared for actual lifecycle ownership. Candidate-bound gates and assessment
+confirmation remain separate acceptance steps.
