@@ -1,10 +1,12 @@
 """The read API serves a consistent cursor and immutable replay projections."""
 
+import sqlite3
 import typing as typ
 
 import falcon
 import pytest
 from falcon import testing
+from sqlalchemy.exc import OperationalError
 
 from ishiban.api import EventsResource, create_app, parse_cursor
 from ishiban.storage import Store
@@ -73,6 +75,67 @@ async def test_snapshot_and_replay_share_the_same_committed_boundary(
         assert (await conductor.simulate_get("/ready")).status_code == 200, (
             "Readiness must succeed for a readable migrated database."
         )
+
+
+@pytest.mark.asyncio
+async def test_readiness_fails_when_the_store_read_fails_but_liveness_survives(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed journal read makes readiness fail without hiding process liveness."""
+    store = Store(f"sqlite+aiosqlite:///{tmp_path / 'unreadable.sqlite3'}", "workspace")
+    await store.initialize()
+    original_events = store.events
+
+    async def failed_read(after: int, limit: int = 100) -> list[dict[str, object]]:
+        """Model the store's database-read failure at the readiness boundary.
+
+        Raises
+        ------
+        OperationalError
+            The database cannot satisfy the readiness query.
+        """
+        assert (after, limit) == (0, 1), "Readiness must perform its bounded read."
+        await original_events(after, limit)
+        raise OperationalError("read", {}, sqlite3.OperationalError())
+
+    monkeypatch.setattr(store, "events", failed_read)
+    try:
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            readiness = await conductor.simulate_get("/ready")
+            liveness = await conductor.simulate_get("/health")
+            assert readiness.status_code >= 500, (
+                "An unreadable journal must not report a ready API."
+            )
+            assert liveness.status_code == 200, (
+                "Database failure must not make process liveness fail."
+            )
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_disconnected_collector_does_not_fail_database_readiness(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Readiness reports the migrated database independently of source health."""
+    store = Store(
+        f"sqlite+aiosqlite:///{tmp_path / 'disconnected.sqlite3'}", "workspace"
+    )
+    await store.initialize()
+    try:
+        generation = await store.begin_generation()
+        await store.health("disconnected", generation)
+        async with testing.ASGIConductor(create_app(store)) as conductor:
+            snapshot = await conductor.simulate_get("/api/v1/snapshot")
+            assert snapshot.json["collector"]["state"] == "disconnected", (
+                "The readiness scenario must retain disconnected source health."
+            )
+            readiness = await conductor.simulate_get("/ready")
+            assert readiness.status_code == 200, (
+                "A readable database remains ready while Lody is disconnected."
+            )
+    finally:
+        await store.close()
 
 
 @pytest.mark.asyncio
