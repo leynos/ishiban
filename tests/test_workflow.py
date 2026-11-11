@@ -64,6 +64,30 @@ def test_old_merged_pr_does_not_hide_the_live_association() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        (("merged", "closed"), "unclassified"),
+        (("closed", "merged"), "unclassified"),
+        (("merged", "merged", "merged"), "merged"),
+        (("closed", "closed", "closed"), "closed"),
+    ],
+)
+def test_terminal_prs_require_one_unanimous_lifecycle(
+    statuses: tuple[str, ...], expected: str
+) -> None:
+    """Terminal associations classify only when all outcomes agree."""
+    prs = [
+        PullRequest(
+            url=f"https://github.com/leynos/ishiban/pull/{number}", status=status
+        )
+        for number, status in enumerate(statuses, start=1)
+    ]
+    assert classify(prs).stage == expected, (
+        "Mixed merged and closed evidence cannot choose one terminal outcome."
+    )
+
+
 @pytest.mark.parametrize("status", ["draft", "open"])
 def test_unknown_association_prevents_a_definite_active_stage(status: str) -> None:
     """An unknown association may be a second active PR."""
