@@ -266,26 +266,44 @@ it('keeps provisional running activity when that member lookup becomes unavailab
   expect(groupSessions([root, child], historyUnavailable)[0]?.activity).toBe(child);
 });
 
-it('keeps a running tab provisional across generated retained timestamp orderings', () => {
+it('selects exact settled history and provisional running activity across generated uncertainty', () => {
   const root = sessionRecord('root', {state: 'idle'});
   const child = sessionRecord('child', {parentSessionId: 'root', state: 'running'});
-  fc.assert(
-    fc.property(
-      fc.integer({min: 0, max: 100_000}),
-      fc.integer({min: 0, max: 100_000}),
-      fc.constantFrom('pending', 'unavailable'),
-      (rootMinute, childMinute, outcome) => {
-        const rootTime = new Date(Date.UTC(2026, 10, 1) + rootMinute * 60_000).toISOString();
-        const childTime = new Date(Date.UTC(2026, 10, 1) + childMinute * 60_000).toISOString();
-        const facts: ReadonlyMap<string, RecencyFact> = new Map([
-          ['root', {outcome, lastKnownHistoryAt: rootTime}],
-          ['child', available(childTime)]
-        ]);
-        const family = groupSessions([root, child], facts)[0];
-        expect(family?.activity.sessionId).toBe('child');
-        expect(family?.recencyIncomplete).toBe(true);
-      }
+  const scenario = fc.record({
+    offsetMinutes: fc.integer({min: 0, max: 100_000}),
+    leadMinutes: fc.integer({min: 1, max: 1000}),
+    isRootNewer: fc.boolean(),
+    uncertainty: fc.constantFrom(
+      {outcome: 'pending', limitedRoots: []} as const,
+      {outcome: 'unavailable', limitedRoots: []} as const,
+      {outcome: 'budget-limited', limitedRoots: ['root']} as const
     )
+  });
+  fc.assert(
+    fc.property(scenario, ({offsetMinutes, leadMinutes, isRootNewer, uncertainty}) => {
+      const base = Date.UTC(2026, 10, 1) + offsetMinutes * 60_000;
+      const earlier = new Date(base).toISOString();
+      const later = new Date(base + leadMinutes * 60_000).toISOString();
+      const [rootTime, childTime] = isRootNewer ? [later, earlier] : [earlier, later];
+      const facts: ReadonlyMap<string, RecencyFact> = new Map([
+        ['root', available(rootTime)],
+        ['child', available(childTime)]
+      ]);
+      const settled = groupSessions([root, child], facts)[0];
+      expect(settled?.activity.sessionId === 'root').toBe(isRootNewer);
+      expect(settled?.recencyIncomplete).toBe(false);
+      const uncertainFacts: ReadonlyMap<string, RecencyFact> =
+        uncertainty.outcome === 'budget-limited'
+          ? facts
+          : new Map([
+              ['root', {outcome: uncertainty.outcome, lastKnownHistoryAt: rootTime}],
+              ['child', available(childTime)]
+            ]);
+      const provisional = groupSessions([root, child], uncertainFacts, new Set(uncertainty.limitedRoots))[0];
+      expect(provisional?.activity.sessionId).toBe('child');
+      expect(provisional?.recencyIncomplete).toBe(true);
+      expect(provisional?.recencyBudgetLimited).toBe(uncertainty.outcome === 'budget-limited');
+    })
   );
 });
 

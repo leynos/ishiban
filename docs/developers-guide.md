@@ -587,6 +587,12 @@ inspector. Successful admitted families can settle without having their facts
 evicted by another visible family. Hidden facts remain cached while space
 allows; only non-admitted facts yield space to new admitted reads. Queue and
 in-flight ownership are checked again when visibility or execution changes.
+
+`groupSessions` receives the current budget-limited root set and treats it as
+provisional selection evidence even when every retained member fact is still
+`available`. This lets a warm excluded family prefer its known running member
+until capacity returns, without deleting useful cached history.
+
 This admission policy is specific to history recency, not the separate durable
 activity cache or server-side session-show cache.
 

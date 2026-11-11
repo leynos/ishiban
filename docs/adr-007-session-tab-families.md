@@ -7,8 +7,10 @@ acceptance and the `b26d0ba` hosted CI and Act Validation runs passed. Three
 newly assessed recency edge cases are repaired and pass full local gates and
 focused follow-up validation. Assessment 5 identified refresh-status and
 unsupported-ID cases now implemented and covered by full local gates and
-rendered browser geometry checks. Candidate-specific hosted checks and
-reassessment are tracked in [PR #9](https://github.com/leynos/ishiban/pull/9).
+rendered browser geometry checks. Assessment 6's warm budget-limited family
+selection is repaired and passes full local gates. Candidate-specific hosted
+checks and reassessment are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
 
 ## Context
 
@@ -51,15 +53,17 @@ the saved root context and visible child when the root is no longer present.
 Recency is the exact `latestHistoryAt` returned for each member's own
 `lody session show` result. Never propagate a child timestamp onto the root
 record or use `lastMessageAt`, read time, or heartbeat time as a substitute.
-While any member's read is pending or unavailable, a running tab is the
-provisional activity member under the assumption that each logical family has
-one active tab at a time. When every member is available, choose the exact
-newest history timestamp. For a successfully read session with no history, use
-`createdAt` as its effective comparison time. Break ties and handle malformed
-links deterministically. Resolve roots only through parent records present in
-the current projection. If a parent record is missing, that session becomes the
-root of its present-record chain; otherwise unrelated children of the same
-missing ID remain separate families. Cycles are resolved deterministically.
+While any member's read is pending or unavailable, or the family cannot fit the
+current lookup budget, a running tab is the provisional activity member under
+the assumption that each logical family has one active tab at a time. When
+every member is available and the family is not budget-limited, choose the
+exact newest history timestamp. For a successfully read session with no
+history, use `createdAt` as its effective comparison time. Break ties and
+handle malformed links deterministically. Resolve roots only through parent
+records present in the current projection. If a parent record is missing, that
+session becomes the root of its present-record chain; otherwise unrelated
+children of the same missing ID remain separate families. Cycles are resolved
+deterministically.
 
 A lookup's current status is distinct from its last-known history timestamp. On
 the next bounded revisit after a successful fact expires, mark it pending once,
@@ -96,7 +100,10 @@ families that have lost admission. Derive budget status from current visible
 families, without a persistent negative cache. This bound belongs to the
 browser recency owner; the source catalogue and private journal are unchanged.
 An open inspector stays provisional if a hidden family's facts are evicted to
-make room for visible work.
+make room for visible work. Previously settled facts can also remain in cache
+when a warm family loses admission to an earlier-sorted visible family. That
+warm family still prefers its running tab until admission returns; available
+cached timestamps alone do not make its selection conclusive.
 
 Pack each request by both member count and actual UTF-8 JSON bytes. Accepted
 256-code-point IDs may occupy up to 1,024 UTF-8 bytes before JSON framing;

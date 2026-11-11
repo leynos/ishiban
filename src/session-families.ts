@@ -84,7 +84,7 @@ export function groupSessions(
       return {
         rootId,
         context,
-        activity: selectActivity(members, recency),
+        activity: selectActivity(members, recency, recencyBudgetLimited),
         members,
         recencyIncomplete,
         recencyBudgetLimited
@@ -143,9 +143,13 @@ function parentIdOf(sessionId: string, sessionsById: ReadonlyMap<string, Session
 }
 
 /** Select the raw member that supplies activity presentation for one family. */
-function selectActivity(members: readonly Session[], recency: ReadonlyMap<string, RecencyFact>): Session {
+function selectActivity(
+  members: readonly Session[],
+  recency: ReadonlyMap<string, RecencyFact>,
+  isBudgetLimited: boolean
+): Session {
   const allLookupsAvailable = members.every((member) => recency.get(member.sessionId)?.outcome === 'available');
-  const shouldPreferRunning = !allLookupsAvailable;
+  const shouldPreferRunning = isBudgetLimited || !allLookupsAvailable;
 
   const selected = members.toSorted((left, right) =>
     compareActivityCandidates(left, right, recency, shouldPreferRunning)

@@ -3,8 +3,8 @@ import {afterEach, expect, it} from 'bun:test';
 import {act, cleanup, render, renderHook, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {Session, Snapshot} from '../src/contracts';
-import {useSessionRecency} from '../src/session-recency';
-import {groupSessions} from '../src/session-families';
+import {useSessionRecency, type RecencyState} from '../src/session-recency';
+import {groupSessions, type SessionFamily} from '../src/session-families';
 import {Board} from '../src/ui/board';
 import {createFamilySnapshot} from './board-fixtures';
 import {installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
@@ -28,8 +28,25 @@ function largeFamilies(memberCounts: readonly number[]): Snapshot {
   return {...baseline, sessions};
 }
 
+/** Keep one B child running while making all other B members idle. */
+function warmFamilySnapshot(): Snapshot {
+  const baseline = largeFamilies([300, 300]);
+  return {
+    ...baseline,
+    sessions: baseline.sessions.map((session) => {
+      if (session.parentSessionId !== 'root-1') return session;
+      if (session.sessionId === 'child-1') return session;
+      return {...session, state: 'idle' as const};
+    })
+  };
+}
+
 /** Return one schema-valid frame per requested raw member. */
-function available(snapshot: Snapshot, sessionIds: readonly string[]): Response {
+function available(
+  snapshot: Snapshot,
+  sessionIds: readonly string[],
+  historyTimes: ReadonlyMap<string, string> = new Map()
+): Response {
   const frames = sessionIds.map((sessionId) => {
     const session = snapshot.sessions.find((member) => member.sessionId === sessionId);
     if (!session) throw new Error(`Unknown request member ${sessionId}.`);
@@ -38,7 +55,7 @@ function available(snapshot: Snapshot, sessionIds: readonly string[]): Response 
       sessionId,
       lastActivityEventId: session.lastActivityEventId ?? 0,
       outcome: 'available',
-      latestHistoryAt: session.createdAt
+      latestHistoryAt: historyTimes.get(sessionId) ?? session.createdAt
     });
   });
   return new Response(`${frames.join('\n')}\n`);
@@ -53,11 +70,20 @@ function familyMemberIds(snapshot: Snapshot, rootId: string): ReadonlySet<string
   );
 }
 
-/** Require the first generated mark before changing its viewport state. */
-function firstFamilyMark(marks: readonly HTMLButtonElement[]): HTMLButtonElement {
-  const mark = marks[0];
-  if (!mark) throw new Error('The family fixture must provide its first mark.');
+/** Require a generated mark before changing its viewport state. */
+function familyMarkAt(marks: readonly HTMLButtonElement[], index = 0): HTMLButtonElement {
+  const mark = marks[index];
+  if (!mark) throw new Error(`The family fixture must provide mark ${index}.`);
   return mark;
+}
+
+/** Require one named family in the current recency projection. */
+function familyAt(snapshot: Snapshot, state: RecencyState, rootId: string): SessionFamily {
+  const family = groupSessions(snapshot.sessions, state.facts, state.limitedRoots).find(
+    (item) => item.rootId === rootId
+  );
+  if (!family) throw new Error(`The recency fixture must contain family ${rootId}.`);
+  return family;
 }
 
 afterEach(() => {
@@ -70,7 +96,7 @@ afterEach(() => {
 it('reports a 513-tab family as incomplete without starting an unfinishable sweep', async () => {
   const snapshot = largeFamilies([513]);
   const marks = installFamilyMarks(1);
-  const mark = firstFamilyMark(marks);
+  const mark = familyMarkAt(marks);
   const requests: string[][] = [];
   browser = installFamilyBrowser(async (_input, init) => {
     requests.push(JSON.parse(String(init?.body)).sessionIds);
@@ -103,7 +129,7 @@ it('admits complete families within the shared budget and releases it on hide', 
   const firstFamilyIds = familyMemberIds(snapshot, 'root-0');
   const secondFamilyIds = familyMemberIds(snapshot, 'root-1');
   const marks = installFamilyMarks(2);
-  const firstMark = firstFamilyMark(marks);
+  const firstMark = familyMarkAt(marks);
   const requests: string[][] = [];
   browser = installFamilyBrowser(async (_input, init) => {
     const ids: string[] = JSON.parse(String(init?.body)).sessionIds;
@@ -141,7 +167,7 @@ it('ignores an in-flight family after its slot transfers to another visible fami
   const snapshot = largeFamilies([300, 300]);
   const secondFamilyIds = familyMemberIds(snapshot, 'root-1');
   const marks = installFamilyMarks(2);
-  const firstMark = firstFamilyMark(marks);
+  const firstMark = familyMarkAt(marks);
   const requests: string[][] = [];
   const gates: Deferred<Response>[] = [];
   browser = installFamilyBrowser(async (_input, init) => {
@@ -161,4 +187,48 @@ it('ignores an in-flight family after its slot transfers to another visible fami
   expect(result.current.facts.size).toBe(0);
   await waitFor(() => expect(gates.length).toBe(3));
   expect(requests[2]?.every((id) => secondFamilyIds.has(id))).toBe(true);
+});
+
+it('prefers a warm limited family running tab until lookup capacity returns', async () => {
+  const snapshot = warmFamilySnapshot();
+  const warmFamilyIds = familyMemberIds(snapshot, 'root-1');
+  const historyTimes = new Map([
+    ['root-1', '2026-11-10T18:41:02.707Z'],
+    ['child-1', '2026-11-03T22:05:49.972Z']
+  ]);
+  const marks = installFamilyMarks(2);
+  const firstMark = familyMarkAt(marks);
+  const secondMark = familyMarkAt(marks, 1);
+  const heldFirstFamily: Deferred<Response>[] = [];
+  const requests: string[][] = [];
+  browser = installFamilyBrowser(async (_input, init) => {
+    const ids: string[] = JSON.parse(String(init?.body)).sessionIds;
+    requests.push(ids);
+    if (ids.every((id) => warmFamilyIds.has(id))) return available(snapshot, ids, historyTimes);
+    const gate = deferred<Response>();
+    heldFirstFamily.push(gate);
+    return gate.promise;
+  });
+  const {result} = renderHook(() => useSessionRecency(snapshot));
+  act(() => browser?.visibility(secondMark, true));
+  await waitFor(() => expect([...result.current.facts.keys()].filter((id) => warmFamilyIds.has(id)).length).toBe(300), {
+    timeout: 10_000
+  });
+  expect(familyAt(snapshot, result.current, 'root-1').activity.sessionId).toBe('root-1');
+  const warmRequestCount = requests.length;
+
+  act(() => browser?.visibility(firstMark, true));
+  await waitFor(() => expect(result.current.limitedRoots.has('root-1')).toBe(true));
+  await waitFor(() => expect(heldFirstFamily.length).toBe(2));
+  expect([...result.current.facts.keys()].filter((id) => warmFamilyIds.has(id))).toHaveLength(300);
+  const limited = familyAt(snapshot, result.current, 'root-1');
+  expect(limited.recencyIncomplete).toBe(true);
+  expect(limited.activity.sessionId).toBe('child-1');
+
+  act(() => browser?.visibility(firstMark, false));
+  await waitFor(() => expect(result.current.limitedRoots.has('root-1')).toBe(false));
+  const recovered = familyAt(snapshot, result.current, 'root-1');
+  expect(recovered.recencyIncomplete).toBe(false);
+  expect(recovered.activity.sessionId).toBe('root-1');
+  expect(requests.filter((ids) => ids.every((id) => warmFamilyIds.has(id))).length).toBe(warmRequestCount);
 });

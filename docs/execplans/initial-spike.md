@@ -7,9 +7,10 @@ passed on `b26d0ba` and the assessment-4 repair head `461ea91`. The
 assessment-5 refresh-status and unsupported-ID fixes now pass full local gates,
 including 249 Python tests, 151 Bun tests and four Chromium geometry cases.
 Current publication, hosted evidence and review convergence are tracked in the
-PR. The original publication restriction is superseded by the user's PR
-creation and babysitting requests. Lody writes remain forbidden; no merge has
-been authorized.
+PR. Assessment 6's warm capacity-limited selection repair passes full local
+gates; its exact-head validation is tracked in the PR. The original publication
+restriction is superseded by the user's PR creation and babysitting requests.
+Lody writes remain forbidden; no merge has been authorized.
 
 ## Purpose
 
@@ -873,3 +874,24 @@ new helper and test files score 10.0 in direct reviews. These are local
 results; exact-head hosted checks and reassessment are tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
 introduced.
+
+### Warm family capacity and provisional selection, 11 November 2026
+
+**Surprise and decision.** Assessment 6 found that a previously settled family
+could lose admission when an earlier-sorted family entered the viewport. Its
+cached facts remained available, so the selector chose an idle tab with a newer
+timestamp despite a known running tab and a provisional budget label. Pass the
+budget-limited flag into the pure family selector. Retain cached facts,
+visible-only reads, and the existing 512-member admission policy.
+
+**Progress and verification.** The warm 300-member B family regression failed
+before the fix while A held the lookup slots. It now selects B's running tab
+while B is limited and returns to its newer idle history winner when A hides. A
+generated timestamp property exercises the selector with all facts available
+and both budget states. The 16 focused family and pressure cases pass. Full
+local validation passes 249 Python tests, 152 Bun tests with nine opt-in skips,
+and four Chromium cases with 24 assertions. Build, formatting, lint, types,
+audit, Markdown, spelling, diagrams and Makefile validation pass. The working
+CodeScene delta reports no issues. Exact-head gate and review status belongs to
+[PR #9](https://github.com/leynos/ishiban/pull/9).
+No formal proof is added.
