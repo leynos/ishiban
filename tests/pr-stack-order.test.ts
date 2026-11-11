@@ -36,6 +36,17 @@ it.each([false, true])('uses a same-repository branch edge with trailing slash %
   expect(selectStackTop([lower, upper], facts)).toEqual(upper);
 });
 
+it.each([false, true])('recognizes a mixed-case GitHub repository in catalogue order %s', (isReversed) => {
+  const lower = {...prerequisite, url: 'https://github.com/Leynos/Axinite/pull/100', status: 'open'};
+  const upper = {...dependent, url: 'https://github.com/leynos/axinite/pull/200', status: 'open'};
+  const facts = {
+    [lower.url]: {...prerequisiteFacts, headRefName: 'shared-branch'},
+    [upper.url]: {...dependentFacts, baseRefName: 'shared-branch'}
+  };
+  const order = isReversed ? [upper, lower] : [lower, upper];
+  expect(selectStackTop(order, facts)).toEqual(upper);
+});
+
 it('chooses an unrelated active tip over a closed tip of a deeper historical chain', () => {
   const middle = {...dependent, url: 'https://github.com/leynos/axinite/pull/741', status: 'merged'};
   const closedTip = {...dependent, url: 'https://github.com/leynos/axinite/pull/742', status: 'closed'};

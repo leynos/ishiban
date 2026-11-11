@@ -14,26 +14,22 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u;
 /** Read repository identity only from canonical GitHub PR URLs. */
 function repositoryOf(url: string): string | null {
   const match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/pull\/[1-9]\d*\/?$/u.exec(url);
-  return match?.[1] ?? null;
+  return match?.[1]?.toLowerCase() ?? null;
 }
 
-/** Require both PRs to belong to the same canonical GitHub repository. */
-function sharesRepository(lower: Pr, upper: Pr): boolean {
-  const repository = repositoryOf(lower.url);
-  return repository !== null && repository === repositoryOf(upper.url);
+/** Require an explicit non-fork fact before using a branch identity. */
+function hasLocalStackFacts(facts: PrStackFacts | undefined): facts is PrStackFacts {
+  return facts?.isCrossRepository === false;
 }
 
 /** Accept branch edges only for same-repository, non-forked PRs. */
 function isPrerequisite(lower: Pr, upper: Pr, facts: Readonly<Record<string, PrStackFacts>>): boolean {
   const lowerFacts = facts[lower.url];
   const upperFacts = facts[upper.url];
-  return (
-    sharesRepository(lower, upper) &&
-    lowerFacts?.isCrossRepository === false &&
-    upperFacts?.isCrossRepository === false &&
-    Boolean(lowerFacts.headRefName) &&
-    lowerFacts.headRefName === upperFacts.baseRefName
-  );
+  const repository = repositoryOf(lower.url);
+  if (repository === null || repository !== repositoryOf(upper.url)) return false;
+  if (!hasLocalStackFacts(lowerFacts) || !hasLocalStackFacts(upperFacts)) return false;
+  return Boolean(lowerFacts.headRefName) && lowerFacts.headRefName === upperFacts.baseRefName;
 }
 
 /** Exclude a PR only when another associated PR demonstrably depends on it. */
