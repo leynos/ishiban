@@ -1324,3 +1324,20 @@ continues throughout. Historical source records carry phase transitions in
 journal order, so all bootstrap catalogue records precede `following` and stay
 quiet independently of React batching. Later meaningful changes keep their
 pulses. This adds no public schema flag or journal rewrite.
+
+### Saved-preference snapshot integration, 11 November 2026
+
+The next saved testing assessment identified a coverage gap across two
+integration points. Existing cookie-endpoint round-trips and direct hook tests
+did not establish that a saved cookie reaches the real snapshot response, or
+that the board passes snapshot preferences into its controls.
+
+The production `create_app` test now saves non-default `roomy`/`matrix`
+preferences, carries the issued cookie into `/api/v1/snapshot`, and checks both
+restored fields. The rendered Board test checks selected controls, board
+attributes and the matrix table. Replacing the API cookie read with defaults
+makes the first test fail; removing the Board's snapshot preference argument
+makes the second fail. Both production files were restored byte for byte after
+these negative controls. This is test coverage for existing behaviour; it adds
+no runtime change or formal proof. Candidate-bound aggregate validation and
+assessment confirmation remain separate steps.

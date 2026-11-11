@@ -484,6 +484,13 @@ responses restore preferences from that cookie. The React preference hook owns
 ordered writes and save status; no initial-render write or localStorage cache
 is needed.
 
+The production-app test in `tests/test_interface_state.py` carries an actual
+saved cookie into the snapshot endpoint and checks both non-default values.
+`tests/board-saved-preferences.test.tsx` checks those values through the
+rendered controls, board attributes and selected presentation. These cases
+complement the endpoint round-trip and hook tests: removing either snapshot
+integration step makes its corresponding regression fail.
+
 The lazy activity service owns bounded read-only CLI observations, a four-child
 limit, execution-watermark-keyed caching and shared in-flight requests. The
 API's `session_projection` read reuses the existing projection query without

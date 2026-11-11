@@ -14,6 +14,7 @@ import pytest
 from falcon import asgi, testing
 from itsdangerous import TimestampSigner
 
+from ishiban.api import create_app
 from ishiban.interface_state import (
     COOKIE_NAME,
     SIGNING_KEY_FILENAME,
@@ -22,6 +23,7 @@ from ishiban.interface_state import (
     InterfaceStateResource,
     load_signing_key,
 )
+from tests.storage_support import opened_store
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -29,6 +31,35 @@ if typ.TYPE_CHECKING:
 
 SECRET = b"i" * 32
 DEFAULT_STATE = {"density": "overview", "presentation": "panorama"}
+
+
+@pytest.mark.asyncio
+async def test_saved_cookie_initializes_snapshot_preferences(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The real API snapshot restores both preferences from a new browser's cookie."""
+    async with (
+        opened_store(tmp_path) as store,
+        testing.ASGIConductor(create_app(store, cookie_secret=SECRET)) as conductor,
+    ):
+        saved = await conductor.simulate_post(
+            "/api/v1/interface-state",
+            body=json.dumps({"density": "roomy", "presentation": "matrix"}),
+            headers={"content-type": "application/json"},
+        )
+        set_cookie = saved.headers.get("set-cookie")
+        assert saved.status == falcon.HTTP_200, "The preference update must succeed."
+        assert set_cookie is not None, "The preference update must issue a cookie."
+        snapshot = await conductor.simulate_get(
+            "/api/v1/snapshot",
+            headers={"cookie": f"{COOKIE_NAME}={parse_cookie(set_cookie).value}"},
+        )
+
+    assert snapshot.status == falcon.HTTP_200, "The snapshot must be readable."
+    assert snapshot.json["interfaceState"] == {
+        "density": "roomy",
+        "presentation": "matrix",
+    }, "The snapshot must restore both saved controls."
 
 
 def make_app(cookies: InterfaceStateCookies) -> asgi.App:
