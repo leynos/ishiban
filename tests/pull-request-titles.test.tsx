@@ -32,7 +32,7 @@ it('resolves a merged PR name lazily while retaining the session title and stage
     await waitFor(() => expect(result.current.pullRequests[0]?.title).toBe('A merged pull request'));
     expect(result.current.title).toBe(session.title);
     expect(result.current.stage).toBe('merged');
-    expect(fetchSpy.mock.calls[0]?.[0]).toContain('/pull-requests');
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(`/api/v1/session-pull-requests?sessionId=${session.sessionId}`);
     rerender({selected: {...session, pullRequests: [{url, title: 'Newer catalogue title', status: 'merged'}]}});
     expect(result.current.pullRequests[0]?.title).toBe('Newer catalogue title');
   } finally {

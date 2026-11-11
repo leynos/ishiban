@@ -615,3 +615,8 @@ reason = "Keep explicit imports for independent oversized-response recovery and 
 [[tool.duplication_gate.allow]]
 members = ["tests/lazy-activity-fallback.test.ts::requestAt", "tests/session-recency-pressure.test.tsx::familyMarkAt"]
 reason = "Keep typed network-request and DOM-mark fixture accessors local, with distinct invariant failure messages. The five-line guards share one shallow line and no scenario algorithm; their fetch and browser plumbing already uses shared fixtures. A generic indexed-assertion layer would couple unrelated test capabilities. See docs/developers-guide.md#duplication-review."
+
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_activity_query_api.py", "tests/test_inspector_request_contract.py"]
+reason = "Keep read-only GET journal invariants local to independent path-rejection and query-detail tests. The reviewed nine/seven-line shallow fragment shares five lines of Store/Falcon setup and before/after evidence capture; opened_store already owns the common lifecycle. A generic GET wrapper returning response and state would obscure the boundaries asserted by these tests. See docs/developers-guide.md#duplication-review."

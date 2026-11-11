@@ -251,10 +251,15 @@ WAL checkpoint starvation.
 | `collector_state` | Singleton per workspace: `generation`, `state` (`connecting`, `catalogue_ready`, `following`, `disconnected`, `error`, `stopped`), `started_at`, `last_received_at`, `last_error_summary`, `last_event_id`.                                                                                                                                                                                                                                                                                |
 
 All timestamps are UTC or original Lody Unix milliseconds, with explicit
-conversion. Never use `observedAt` as the underlying turn execution time: it is
-the observer's timestamp. `source_events.id` increases on each committed local
-update, including catalogue enrichment and source-health events; it does not
-attempt to preserve Lody process sequence across generations.
+conversion. Validate observer epoch milliseconds in the inclusive range
+`0..8_640_000_000_000_000` before consuming a stream position, so newly
+accepted evidence remains representable by the browser date API. Previously
+retained values are not rewritten; invalid date conversion renders an explicit
+unavailable label while preserving the session. Never use `observedAt` as the
+underlying turn execution time: it is the observer's timestamp.
+`source_events.id` increases on each committed local update, including
+catalogue enrichment and source-health events; it does not attempt to preserve
+Lody process sequence across generations.
 
 Store the original validated JSON payload for inspection and forward
 compatibility, but expose only bounded, normalized fields via the public API.

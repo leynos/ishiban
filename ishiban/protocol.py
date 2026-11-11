@@ -34,6 +34,7 @@ TURN_STATES = frozenset({
     "canceled",
 })
 MAX_LINE_BYTES = 1_048_576
+MAX_OBSERVED_AT_MS = 8_640_000_000_000_000
 
 
 class ProtocolError(ValueError):
@@ -120,6 +121,7 @@ def decode_event(data: bytes, workspace_id: str, position: StreamPosition) -> En
     """Validate one v1 observer record before advancing its process position.
 
     For example, a sequence jump from one to three raises ``ProtocolError``.
+    Timestamps must fit the JavaScript ``Date`` millisecond range.
 
     Returns
     -------
@@ -174,8 +176,8 @@ def _validate_identity(
         message = "Unknown version or foreign workspace in observer stream."
         raise ProtocolError(message)
     _validate_stream_position(event, position)
-    if event.observed_at < 0:
-        message = "Observer timestamp must be nonnegative."
+    if not 0 <= event.observed_at <= MAX_OBSERVED_AT_MS:
+        message = "Observer timestamp is outside the supported date range."
         raise ProtocolError(message)
 
 

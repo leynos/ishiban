@@ -131,7 +131,13 @@ session IDs containing path syntax do not depend on web path normalization:
 `GET /api/v1/session-activity?sessionId=<encoded-id>&includeKnown=true`. Keep
 the existing path-based route for compatible IDs. Both routes use the same
 exact identity validation and preserve the existing response, body,
-cancellation, and revision limits.
+cancellation, and revision limits. Inspector agent and PR-title requests, and
+paged session details, expose equivalent query-carried identities through
+`/api/v1/session-agent`, `/api/v1/session-pull-requests` and
+`/api/v1/session-detail`, preserving their existing path routes. The Lody
+website's root path is external: dot-segment root IDs receive an explicit
+unavailable-link notice while the raw copyable ID remains usable. A selected
+child ID stays safe in the web link's tab query.
 
 ## Consequences
 

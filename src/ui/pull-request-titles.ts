@@ -15,7 +15,7 @@ interface Titles {
 
 /** Read only the selected session's titles; for example, reject a stale workspace response. */
 async function readTitles(workspaceId: string, sessionId: string, signal: AbortSignal) {
-  const response = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/pull-requests`, {
+  const response = await fetch(`/api/v1/session-pull-requests?${new URLSearchParams({sessionId})}`, {
     signal,
     cache: 'no-store'
   });

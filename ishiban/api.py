@@ -16,7 +16,11 @@ from falcon import asgi
 from ishiban.activity_api import SessionActivityResource
 from ishiban.batch_activity_api import BatchSessionActivityResource
 from ishiban.detail_pagination import parse_turn_cursor
-from ishiban.inspector_api import AgentDetailsResource, PullRequestDetailsResource
+from ishiban.inspector_api import (
+    AgentDetailsResource,
+    PullRequestDetailsResource,
+    requested_session_id,
+)
 from ishiban.interface_state import InterfaceStateCookies, InterfaceStateResource
 from ishiban.lazy_activity import LazyActivity
 from ishiban.public_projection import public_session
@@ -138,7 +142,7 @@ class SessionResource:
         self.store = store
 
     async def on_get(
-        self, req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str | None = None
     ) -> None:
         """Read a session; for example, unknown identities return HTTP 404.
 
@@ -149,6 +153,7 @@ class SessionResource:
         falcon.HTTPBadRequest
             If the supplied turn continuation is invalid or foreign.
         """
+        session_id = requested_session_id(req, session_id)
         try:
             after = parse_turn_cursor(
                 req.get_param("turnCursor"), self.store.workspace_id, session_id
@@ -278,6 +283,7 @@ def create_app(
     app: asgi.App = asgi.App(middleware=[Lifecycle(store, activity, show_reader)])
     app.add_route("/api/v1/snapshot", SnapshotResource(store, workspace_slug, cookies))
     app.add_route("/api/v1/sessions/{session_id}", SessionResource(store))
+    app.add_route("/api/v1/session-detail", SessionResource(store))
     app.add_route(
         "/api/v1/sessions/{session_id}/activity",
         SessionActivityResource(store, activity),
@@ -292,9 +298,13 @@ def create_app(
     app.add_route(
         "/api/v1/sessions/{session_id}/agent", AgentDetailsResource(store, agent_reader)
     )
+    app.add_route("/api/v1/session-agent", AgentDetailsResource(store, agent_reader))
     app.add_route(
         "/api/v1/sessions/{session_id}/pull-requests",
         PullRequestDetailsResource(store, title_reader),
+    )
+    app.add_route(
+        "/api/v1/session-pull-requests", PullRequestDetailsResource(store, title_reader)
     )
     app.add_route("/api/v1/interface-state", InterfaceStateResource(cookies))
     app.add_route("/api/v1/events", EventsResource(store))

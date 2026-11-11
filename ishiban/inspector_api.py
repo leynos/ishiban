@@ -10,6 +10,7 @@ import falcon
 import msgspec
 
 from ishiban.domain import PullRequest
+from ishiban.session_identity import is_safe_session_id
 
 if typ.TYPE_CHECKING:
     from falcon import asgi
@@ -17,6 +18,32 @@ if typ.TYPE_CHECKING:
     from ishiban.pull_request_details import PullRequestTitles
     from ishiban.session_agent import SessionAgentDetails
     from ishiban.storage import Store
+
+
+def requested_session_id(req: asgi.Request, session_id: str | None) -> str:
+    """Resolve a path identity or require one bounded raw query identity.
+
+    For example, ``?sessionId=..`` reaches the same inspector reader as a
+    normal path ID without browser URL path normalization.
+
+    Returns
+    -------
+    str
+        The exact raw ID requested by this inspector or detail read.
+
+    Raises
+    ------
+    falcon.HTTPBadRequest
+        If a query request omits or exceeds the accepted ID contract.
+    """
+    if session_id is not None:
+        return session_id
+    query_id = req.get_param("sessionId")
+    if query_id is None or not is_safe_session_id(query_id):
+        raise falcon.HTTPBadRequest(
+            description="A bounded sessionId query parameter is required."
+        )
+    return query_id
 
 
 async def _existing_session(store: Store, session_id: str) -> dict[str, object]:
@@ -67,13 +94,14 @@ class AgentDetailsResource:
         self.reader = reader
 
     async def on_get(
-        self, _req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str | None = None
     ) -> None:
         """Return inspector metadata for an existing workspace session.
 
         For example, an unreadable configuration leaves its name unavailable.
 
         """
+        session_id = requested_session_id(req, session_id)
         projection = await _existing_session(self.store, session_id)
         basis = int(str(projection.get("lastActivityEventId") or 0))
         agent = await self.reader.read(session_id, basis)
@@ -94,13 +122,14 @@ class PullRequestDetailsResource:
         self.reader = reader
 
     async def on_get(
-        self, _req: asgi.Request, resp: asgi.Response, session_id: str
+        self, req: asgi.Request, resp: asgi.Response, session_id: str | None = None
     ) -> None:
         """Read missing titles without changing stored workflow classification.
 
         For example, a merged PR keeps its stage while gaining a display name.
 
         """
+        session_id = requested_session_id(req, session_id)
         projection = await _existing_session(self.store, session_id)
         prs = msgspec.convert(
             projection.get("pullRequests", []), type=list[PullRequest]

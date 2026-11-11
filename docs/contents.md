@@ -19,8 +19,9 @@ reference material.
   the durable observation journal.
 
 - [Observation proof-of-concept plan](execplans/initial-spike.md) records the
-  implementation milestones, validation evidence, and remaining limits,
-  including pending session-family acceptance checks.
+  implementation milestones, validation evidence, and remaining limits.
+  Candidate-specific acceptance and review status is tracked in
+  [PR #9](https://github.com/leynos/ishiban/pull/9).
 - [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
   PR-based stages and independent activity/freshness semantics.
 

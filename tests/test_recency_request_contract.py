@@ -1,13 +1,11 @@
 """Exercise the actual browser request against Falcon's strict batch decoder."""
 
-import asyncio
 import json
-import os
-import pathlib
 import typing as typ
 
 import pytest
 from batch_activity_support import seed_unknown_sessions
+from bun_test_capture import capture_bun_test_output
 from cmd_mox import Invocation, Response
 from falcon import testing
 from storage_support import opened_store
@@ -15,9 +13,9 @@ from storage_support import opened_store
 from ishiban.api import create_app
 
 if typ.TYPE_CHECKING:
-    from cmd_mox import CmdMox
+    import pathlib
 
-REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
+    from cmd_mox import CmdMox
 
 
 async def _capture_browser_request(
@@ -35,26 +33,11 @@ async def _capture_browser_request(
     bytes
         The browser controller's actual JSON request body.
     """
-    capture = directory / f"{variable.lower()}.json"
-    environment = {**os.environ, variable: str(capture)}
-    process = await asyncio.create_subprocess_exec(
-        "bun",
-        "test",
-        "tests/recency-request-contract.test.tsx",
-        cwd=REPOSITORY_ROOT,
-        env=environment,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+    return await capture_bun_test_output(
+        directory,
+        test_file="tests/recency-request-contract.test.tsx",
+        variable=variable,
     )
-    try:
-        async with asyncio.timeout(20):
-            output, _ = await process.communicate()
-        assert process.returncode == 0, output.decode(errors="replace")
-    finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
-    return await asyncio.to_thread(capture.read_bytes)
 
 
 def _show_member(invocation: Invocation) -> Response:

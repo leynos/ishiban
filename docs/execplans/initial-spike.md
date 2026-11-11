@@ -895,3 +895,32 @@ audit, Markdown, spelling, diagrams and Makefile validation pass. The working
 CodeScene delta reports no issues. Exact-head gate and review status belongs to
 [PR #9](https://github.com/leynos/ishiban/pull/9).
 No formal proof is added.
+
+### Inspector identity and timestamp boundaries, 11 November 2026
+
+**Surprise and decision.** The broader assessment exposed two supported-input
+boundaries: browser path normalization changed dot-segment inspector IDs, and
+an observer timestamp beyond the JavaScript date limit could crash rendering.
+Inspector metadata and paged detail now accept raw IDs in query parameters,
+while preserving legacy routes. External Lody links cannot invent a query
+contract for root identities, so dot-segment path IDs get an explicit
+unavailable-link notice while the copyable CLI ID remains available. Child IDs
+in the web link's tab query remain intact.
+
+Validate new observer timestamps against the inclusive nonnegative JavaScript
+date range before consuming a stream position. Guard rendering separately for
+older retained values without changing journal history. The shared bounded Bun
+capture fixture serves the recency, inspector and timestamp cross-runtime
+contracts. It bounds child output and capture files to one MiB each, retains a
+20-second deadline, and verifies overflow rejection and child cleanup with real
+Bun processes. Application subprocess adapters retain their separate ownership.
+
+**Progress and verification.** The inspector lookup regression failed with a
+404 before the query aliases, and the retained timestamp regression failed with
+a date-formatting exception. Focused browser-to-Falcon cases preserve dot,
+slash and percent IDs, validate bad query identities, and leave journal
+evidence unchanged. The timestamp contract carries the accepted maximum through
+protocol validation, storage, schema decoding and the real inspector.
+Candidate-specific final gates and review status are tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
+introduced.

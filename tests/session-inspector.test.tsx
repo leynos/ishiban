@@ -49,12 +49,104 @@ it('explains when Lody omitted the underlying error instead of inventing one', (
   );
 });
 
+it('keeps session evidence visible when a retained observation timestamp is invalid', () => {
+  const session = {
+    ...firstSession(createBoardSnapshot()),
+    lastObservedAt: 8_640_000_000_000_001
+  };
+  render(
+    <SessionInspector
+      session={session}
+      currentGeneration={1}
+      onClose={() => {}}
+      workspaceId="workspace-1"
+      workspaceSlug="leynos"
+    />
+  );
+
+  expect(screen.getByRole('heading', {name: 'Synthetic planning task 01 for demo/repository-001'})).toBeTruthy();
+  expect(screen.getByText('Timestamp unavailable')).toBeTruthy();
+});
+
 it('uses the canonical native link when no workspace slug is configured', () => {
   const session = {...firstSession(createBoardSnapshot()), source: 'persisted' as const};
   render(<SessionInspector session={session} currentGeneration={1} onClose={() => {}} workspaceId="workspace-1" />);
   expect(screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href')).toBe(
     'lody://session/demo-session-001-01?workspace=workspace-1'
   );
+});
+
+// A failed boolean check avoids serializing a large happy-dom link object.
+it.each([
+  {route: 'web', sessionId: '.'},
+  {route: 'web', sessionId: '..'},
+  {route: 'native', sessionId: '.'},
+  {route: 'native', sessionId: '..'}
+])('explains unavailable $route links for dot-segment ID $sessionId', ({route, sessionId}) => {
+  const baseline = firstSession(createBoardSnapshot());
+  const context = {
+    ...baseline,
+    sessionId: route === 'web' ? sessionId : 'root-session',
+    source: 'persisted' as const
+  };
+  render(
+    <SessionInspector
+      session={context}
+      activitySession={{...context, sessionId}}
+      currentGeneration={1}
+      onClose={() => {}}
+      workspaceId="workspace-1"
+      {...(route === 'web' ? {workspaceSlug: 'leynos'} : {})}
+    />
+  );
+
+  expect(screen.queryByRole('link', {name: 'Open in Lody'}) === null).toBe(true);
+  expect(screen.getByText('Lody link unavailable for this session identifier.')).toBeTruthy();
+  expect(screen.getByRole('button', {name: 'Copy session ID'})).toBeTruthy();
+});
+
+it('keeps a dot-segment selected tab in the query of a valid web root link', () => {
+  const baseline = firstSession(createBoardSnapshot());
+  const context = {...baseline, sessionId: 'root-session', source: 'persisted' as const};
+  const activity = {...context, sessionId: '..'};
+  render(
+    <SessionInspector
+      session={context}
+      activitySession={activity}
+      currentGeneration={1}
+      onClose={() => {}}
+      workspaceId="workspace-1"
+      workspaceSlug="leynos"
+    />
+  );
+
+  const href = screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href');
+  expect(href).toBe('https://lody.ai/leynos/sessions/root-session?tab=session%3A..');
+  expect(new URL(String(href)).searchParams.get('tab')).toBe('session:..');
+});
+
+it('keeps slash and percent session identities encoded in Lody links', () => {
+  const baseline = firstSession(createBoardSnapshot());
+  const routes = [
+    {sessionId: 'a/b', workspaceSlug: 'leynos', href: 'https://lody.ai/leynos/sessions/a%2Fb'},
+    {sessionId: '100%?', workspaceSlug: 'leynos', href: 'https://lody.ai/leynos/sessions/100%25%3F'},
+    {sessionId: 'a/b', workspaceSlug: undefined, href: 'lody://session/a%2Fb?workspace=workspace-1'},
+    {sessionId: '100%?', workspaceSlug: undefined, href: 'lody://session/100%25%3F?workspace=workspace-1'}
+  ];
+  for (const {sessionId, workspaceSlug, href} of routes) {
+    render(
+      <SessionInspector
+        session={{...baseline, sessionId, source: 'persisted'}}
+        currentGeneration={1}
+        onClose={() => {}}
+        workspaceId="workspace-1"
+        {...(workspaceSlug === undefined ? {} : {workspaceSlug})}
+      />
+    );
+
+    expect(screen.getByRole('link', {name: 'Open in Lody'}).getAttribute('href')).toBe(href);
+    cleanup();
+  }
 });
 
 it('does not present a synthetic demo session as an actual Lody session', () => {
@@ -275,7 +367,7 @@ it('reads and copies the selected tab identity rather than the parent identity',
     expect(await screen.findByText('Review configuration')).toBeTruthy();
     expect(screen.getByText('claude')).toBeTruthy();
     expect(screen.getByText(activity.sessionId).tagName).toBe('CODE');
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/v1/sessions/latest-tab/agent');
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/v1/session-agent?sessionId=latest-tab');
     await user.click(screen.getByRole('button', {name: 'Copy session ID'}));
     expect(write).toHaveBeenCalledWith(activity.sessionId);
   } finally {

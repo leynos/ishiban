@@ -39,6 +39,7 @@ def event_line(**changes: object) -> bytes:
         {"sequence": 3},
         {"type": "error"},
         {"observedAt": -1},
+        {"observedAt": 8_640_000_000_000_001},
     ],
 )
 def test_invalid_envelope_does_not_advance_position(changes: dict[str, object]) -> None:
@@ -48,6 +49,22 @@ def test_invalid_envelope_does_not_advance_position(changes: dict[str, object]) 
         decode_event(event_line(**changes), "workspace", position)
     assert position.sequence == 0, (
         "Invalid input must leave the stream position unchanged."
+    )
+
+
+@pytest.mark.parametrize(
+    "observed_at", [0, 8_640_000_000_000_000], ids=["epoch", "date-limit"]
+)
+def test_supported_timestamp_boundaries_advance_the_stream(observed_at: int) -> None:
+    """Accept JavaScript Date limits, including the final millisecond."""
+    position = StreamPosition()
+    event = decode_event(event_line(observedAt=observed_at), "workspace", position)
+
+    assert event.observed_at == observed_at, (
+        "The accepted timestamp must be retained exactly."
+    )
+    assert (position.stream_id, position.sequence) == ("stream", 1), (
+        "An accepted timestamp must advance the validated stream position."
     )
 
 

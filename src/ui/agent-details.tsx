@@ -20,7 +20,10 @@ interface AgentDetailsProps {
 
 /** Read a matching identity only; for example, reject another session's cached response. */
 async function readAgentDetails(workspaceId: string, sessionId: string, signal: AbortSignal) {
-  const response = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/agent`, {signal, cache: 'no-store'});
+  const response = await fetch(`/api/v1/session-agent?${new URLSearchParams({sessionId})}`, {
+    signal,
+    cache: 'no-store'
+  });
   if (!response.ok) throw new Error('Agent metadata unavailable');
   const details = Schema.decodeUnknownSync(DetailsSchema)(await response.json());
   if (details.workspaceId !== workspaceId) throw new Error('Foreign workspace metadata');

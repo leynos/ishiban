@@ -117,7 +117,16 @@ previous PR facts may be cached and stale.
   page. A `null` cursor ends the turn list. Invalid, foreign, or older version
   1 continuations return HTTP 400; restart at the first page after an upgrade.
   A missing session returns HTTP 404. Each request reads current state, so
-  concurrent updates can change later pages.
+  concurrent updates can change later pages. For opaque IDs containing path
+  syntax, use `GET /api/v1/session-detail?sessionId=<encoded-id>` and append
+  `&turnCursor=<nextTurnCursor>` for continuation. The existing path route
+  remains available.
+- `GET /api/v1/session-agent?sessionId=<encoded-id>` and
+  `GET /api/v1/session-pull-requests?sessionId=<encoded-id>` return lazy
+  inspector metadata. The browser uses these query routes to preserve opaque
+  IDs; the existing `/sessions/{session_id}/agent` and
+  `/sessions/{session_id}/pull-requests` routes remain available under
+  `/api/v1` for compatible clients.
 - `GET /api/v1/events?after=N` replays committed projections after cursor `N`
   and then follows new commits. Browser reconnect uses `Last-Event-ID` in
   preference to the original URL cursor.
@@ -140,7 +149,10 @@ previous PR facts may be cached and stale.
 A replacement database can invalidate a cursor. The stream then sends
 `reset_required`, and the browser takes a new snapshot. Malformed or foreign
 workspace observations stop the affected collector generation; they are not
-silently dropped.
+silently dropped. Observer timestamps must be nonnegative epoch milliseconds
+within the JavaScript date range (at most 8,640,000,000,000,000). Older stored
+values outside the date range display **Timestamp unavailable** in the
+inspector while the session evidence remains visible.
 
 ## Understand the proof of concept's limits
 
@@ -375,8 +387,12 @@ optional and nullable.
 Agent type and configuration display name are collected when the inspector
 opens and cached for five minutes. Configuration secrets are never requested.
 Unavailable metadata is labelled explicitly; demo IDs are not offered for CLI
-copying. Resolved on-demand activity survives metadata-only collector refreshes
-and reconnect snapshots; newer execution evidence still replaces it.
+copying. If a session identifier is `.` or `..` in the Lody link path, the
+inspector shows an unavailable-link notice instead of opening a different
+destination. Its copyable ID remains available. A selected tab carried in the
+web link's query keeps its exact ID. Resolved on-demand activity survives
+metadata-only collector refreshes and reconnect snapshots; newer execution
+evidence still replaces it.
 
 Visible unknown sessions are requested automatically in small batches. Each
 result appears as soon as it is available, so a slow session does not hold up

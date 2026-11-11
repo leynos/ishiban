@@ -32,7 +32,7 @@ it('collects agent type and configuration name when the inspector mounts', async
   render(<AgentDetails workspaceId="workspace-1" sessionId="lody-session-1" isDemo={false} />);
   expect(await screen.findByText('My Codex configuration')).toBeTruthy();
   expect(screen.getByText('codex')).toBeTruthy();
-  expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/v1/sessions/lody-session-1/agent');
+  expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/v1/session-agent?sessionId=lody-session-1');
 });
 
 it('copies the Lody CLI session ID rather than the provider conversation ID', async () => {

@@ -17,27 +17,58 @@ interface SessionInspectorProps {
 }
 
 const WEB_PROTOCOLS = new Set(['http:', 'https:']);
+// URL parsers normalize dot-segment paths, even when IDs are percent-encoded.
+const URL_NORMALIZED_PATH_SEGMENTS = new Set(['.', '..']);
+const OBSERVED_AT_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC'
+});
 
-/** Link real sessions only; for example, an unknown slug uses Lody's native URI. */
-function SessionLink({
+type SessionLinkTarget =
+  | {readonly kind: 'synthetic'}
+  | {readonly kind: 'unavailable'}
+  | {readonly kind: 'link'; readonly href: string};
+
+/** Keep child identity in the query; for example, root/child uses /sessions/root?tab=session%3Achild. */
+function webSessionLinkTarget(context: Session, activity: Session, slug: string): SessionLinkTarget {
+  if (URL_NORMALIZED_PATH_SEGMENTS.has(context.sessionId)) return {kind: 'unavailable'};
+  const tabQuery =
+    activity.sessionId === context.sessionId ? '' : `?${new URLSearchParams({tab: `session:${activity.sessionId}`})}`;
+  return {
+    kind: 'link',
+    href: `https://lody.ai/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(context.sessionId)}${tabQuery}`
+  };
+}
+
+/** Resolve a safe Lody destination; for example, a native dot path is unavailable. */
+function resolveSessionLinkTarget({
   session,
   activitySession = session,
   workspaceId,
   workspaceSlug
-}: SessionInspectorProps): ReactElement {
-  if (activitySession.source === 'demo') return <p>Synthetic demo session</p>;
+}: SessionInspectorProps): SessionLinkTarget {
+  if (activitySession.source === 'demo') return {kind: 'synthetic'};
   const hasSlug = workspaceSlug !== undefined && workspaceSlug !== workspaceId;
   const hasWebRoute = hasSlug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(workspaceSlug);
-  const tabQuery =
-    activitySession.sessionId === session.sessionId
-      ? ''
-      : `?${new URLSearchParams({tab: `session:${activitySession.sessionId}`})}`;
-  const href = hasWebRoute
-    ? `https://lody.ai/${encodeURIComponent(workspaceSlug)}/sessions/${encodeURIComponent(session.sessionId)}${tabQuery}`
-    : `lody://session/${encodeURIComponent(activitySession.sessionId)}?workspace=${encodeURIComponent(workspaceId)}`;
+  if (hasWebRoute) return webSessionLinkTarget(session, activitySession, workspaceSlug);
+  if (URL_NORMALIZED_PATH_SEGMENTS.has(activitySession.sessionId)) return {kind: 'unavailable'};
+  return {
+    kind: 'link',
+    href: `lody://session/${encodeURIComponent(activitySession.sessionId)}?workspace=${encodeURIComponent(workspaceId)}`
+  };
+}
+
+/** Link real sessions only; for example, an unknown slug uses Lody's native URI. */
+function SessionLink(props: SessionInspectorProps): ReactElement {
+  const target = resolveSessionLinkTarget(props);
+  if (target.kind === 'synthetic') return <p>Synthetic demo session</p>;
+  if (target.kind === 'unavailable') {
+    return <p>Lody link unavailable for this session identifier.</p>;
+  }
   return (
     <p>
-      <a className="link link-hover" href={href} target="_blank" rel="noreferrer">
+      <a className="link link-hover" href={target.href} target="_blank" rel="noreferrer">
         Open in Lody
       </a>
     </p>
@@ -135,14 +166,10 @@ function PullRequestRow({pullRequest}: {readonly pullRequest: Session['pullReque
 
 /** Render a timestamp in an explicit, stable locale and timezone. */
 function observedAtLabel(timestamp: number | null): string {
-  if (timestamp === null) {
-    return 'Not observed';
-  }
-  return new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC'
-  }).format(timestamp);
+  if (timestamp === null) return 'Not observed';
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return 'Timestamp unavailable';
+  return OBSERVED_AT_FORMATTER.format(date);
 }
 
 /** Describe only the supplied latest turn, retaining its identity. */

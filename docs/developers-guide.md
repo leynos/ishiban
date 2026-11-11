@@ -34,6 +34,13 @@ by snapshot reads and `Store.current_cursor`; use the latter when a caller only
 needs the replay boundary, such as SSE reset validation. Metadata and durable-
 evidence generations remain separate during reconciliation.
 
+Observer protocol validation admits only nonnegative epoch milliseconds within
+the JavaScript date range, including the upper bound `8_640_000_000_000_000`.
+Reject invalid values before advancing the stream position. The inspector also
+guards date conversion for previously retained values; a safe numeric value can
+still be outside the supported date range. This display fallback leaves stored
+evidence unchanged.
+
 The storage serialization module owns decoded JSON string-field access and UTC
 journal timestamps. These helpers are private to persistence; reuse them for
 storage readers and writers, rather than introducing a general application
@@ -432,6 +439,21 @@ active. Discarded queued work releases only its own retry marker, so a task
 revealed again can be read immediately without clearing a newer attempt's
 backoff.
 
+Inspector browser requests use query-carried identities:
+`/api/v1/session-agent?sessionId=<encoded-id>` and
+`/api/v1/session-pull-requests?sessionId=<encoded-id>`. Paged details expose
+`/api/v1/session-detail?sessionId=<encoded-id>` with the existing optional
+`turnCursor`. These routes reuse the existing responders and exact session-ID
+validation, preserving bounded reads, partial outcomes and legacy path routes.
+Do not interpolate opaque IDs into browser URL path segments: dot segments are
+normalized even after `encodeURIComponent`. Lody web links retain a selected
+tab in the query; if their root path ID, or a native link's selected ID, is a
+dot segment, show an unavailable-link notice instead of guessing an external
+route. The inspector keeps web-root/tab-query construction in its private web
+link resolver and native URI construction in the target resolver. These helpers
+belong only to inspector navigation, not general URL rewriting. Copying the raw
+CLI identity remains supported.
+
 Inspector agent metadata uses a separate bounded reader and 128-entry TTL
 cache. The only exported fields are agent type, configuration ID and
 configuration name; configuration commands never use `--show-secrets`. The copy
@@ -491,6 +513,13 @@ tests; they are not application data contracts.
 reading between those two reader suites. Each suite retains its own protocol
 fixtures and assertions. `tests/deferred.ts` supplies controlled asynchronous
 completion for browser-hook tests without production timing delays.
+`tests/bun_test_capture.py` owns the bounded Bun child lifecycle shared by the
+recency, inspector-request and observed-timestamp cross-runtime contracts. It
+limits merged child output and capture files to one MiB each, preserves the
+20-second timeout, and kills and reaps incomplete children. Real-child tests
+exercise both size limits and cleanup. Callers retain their own input fixtures
+and semantic assertions; this helper is only for test-file capture, not
+application subprocesses.
 
 [ADR 005](adr-005-batched-activity-and-update-cues.md) defines streaming batch
 activity and semantic pulse comparisons. `batch_activity_api` owns only bounded
