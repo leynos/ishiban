@@ -415,6 +415,23 @@ real-store lifecycle tests reuse `RefreshClock` from the collector storage
 suite, as do the ingestion tests. It controls only these collector retry and
 periodic waits; production clocks and browser scheduling remain separate.
 
+The metadata-only restart BDD scenario runs two native read-only observers
+through `Collector.run`, reaping the first before closing and reopening the
+same journal. A distinct second stream must commit metadata under the new
+generation before the real Falcon snapshot is checked for retained completion
+and its original evidence generation. The scenario owns its runner, stores,
+frame file and child processes; it does not call ingestion directly.
+
+`tests/test_collector_ingestion_properties.py` runs 25 generated finite streams
+and explicit controls through `_follow` and the real store. Each record has
+independent repeated faults before and after commit. The reader refuses to
+advance before acknowledgement; assertions check identical raw bytes on every
+attempt, one committed row per sequence, source order and unknown v1 fields in
+decoded journal payloads. It reuses the startup suite's controlled child and
+the protocol suite's `event_line` only within these observer tests. Keep its
+probe and fault model local to this property; native transport, cancellation
+and backoff tests remain separate.
+
 `tests/test_runtime_evidence_properties.py` drives the real store through 40
 generated histories of at most 12 actions, plus explicit mixed-source and
 restart examples. Its independent model checks every committed prefix across
@@ -433,6 +450,12 @@ the next valid record must still accept the unconsumed sequence. The
 independent model tracks only accepted stream identity and sequence. Keep its
 perturbation builders local to this decoder contract rather than duplicating
 validation policy in production.
+
+Rendered Board search tests use distinct family titles, IDs, repositories and
+branches. Repository-only and branch-only queries must leave exactly the
+matching family mark visible. Removing either matching field makes its
+corresponding regression fail; the production search source is restored after
+each control.
 
 The readiness tests in `tests/test_api.py` inject SQLAlchemy read failures at
 the bounded journal query: `/ready` must fail while `/health` remains live.

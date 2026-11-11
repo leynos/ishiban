@@ -1463,7 +1463,7 @@ independent expected map checks exact accepted timestamps after each action,
 with explicit controls for valid out-of-order results, discarded stale facts
 and a newer workspace result surviving an older response. A stream-consumption
 witness keeps assertions after frame handling. These remain finite tests.
-Aggregate gates, publication and affected confirmation remain separate steps.
+Aggregate gates, publication, and affected confirmation remain separate steps.
 
 ### Confirmed collector lifecycle writes, 11 November 2026
 
@@ -1486,7 +1486,7 @@ sides of commit, transient disconnected-health failure, and persistent
 generation or health failure with capped backoff and cancellation. The old
 implementation failed the retry and stale-generation controls; the new cases
 and adjacent collector tests pass. Existing journal generation checks and quiet
-browser baselines remain unchanged. Aggregate gates, publication and affected
+browser baselines remain unchanged. Aggregate gates, publication, and affected
 confirmation are separate acceptance steps.
 
 The persistent reconnect case begins with an acknowledged generation, then
@@ -1496,3 +1496,28 @@ the confirmation reset at each loop makes this case fail with a stale-generation
 for byte after that negative control. The case preserves the prior acknowledged
 generation in memory and the later durable connecting state without starting a
 second observer.
+
+### Search and collector boundary coverage, 11 November 2026
+
+The lifecycle assessment accepted the repair without a further defect in that
+scope. Three separately acknowledged testing requests are now implemented.
+Rendered Board cases independently search repository and branch terms that do
+not occur in titles or IDs, requiring the matching family to remain and the
+other to disappear. Removing either matching predicate makes its test fail; the
+production source was restored exactly.
+
+The metadata-restart behaviour scenario now runs and reaps two native
+`Collector.run` observers across the same closed and reopened journal. The
+second stream differs from the first and must commit metadata in generation
+two. A real Falcon snapshot then retains the earlier completed turn and
+generation-one evidence. The former store-only scenario fails the new owned
+child boundary assertion; the revised end-to-end path passes.
+
+The ingestion property runs 25 generated streams of one to six records plus
+explicit fault-free and repeated-failure controls. Per-record faults before and
+after commit check read acknowledgement, identical raw attempts, exactly one
+source row per sequence, order, and retained unknown v1 fields. Dropping the
+raw argument makes the property fail; the collector source was restored byte
+for byte. This is bounded evidence alongside the retained native cancellation
+and backoff cases. Aggregate gates, publication, and affected confirmation
+remain separate acceptance steps.
