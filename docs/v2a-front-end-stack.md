@@ -57,8 +57,7 @@ The full application tier adds:
 
 In other words, the mockup tier shows the presentation and navigation layer
 already working, while the full application tier includes a richer local-first
-state and data architecture. The guide to
-[local-first React](local-first-react.md) covers that combination in depth.
+state and data architecture.
 
 ## Runtime and build toolchain
 

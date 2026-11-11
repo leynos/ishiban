@@ -1,5 +1,6 @@
 """Stream bounded, read-only history recency for visible session families."""
 
+import logging
 import typing as typ
 
 import msgspec
@@ -13,6 +14,7 @@ from ishiban.bounded_batch import (
 from ishiban.task_ownership import cancel_and_reap
 
 MAX_SQLITE_EVENT_ID = 9_223_372_036_854_775_807
+LOGGER = logging.getLogger(__name__)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -110,6 +112,7 @@ class SessionRecencyResource:
             basis = int(str(projection.get("lastActivityEventId") or 0))
             metadata = await self.reader.read(session_id, basis)
         except OperationalError:
+            LOGGER.warning("Session recency unavailable category=storage")
             metadata = None
         if metadata is None:
             return _frame(identity, basis, "unavailable")

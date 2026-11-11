@@ -3,6 +3,7 @@
 import asyncio
 import collections
 import dataclasses
+import logging
 import typing as typ
 
 import msgspec
@@ -10,6 +11,9 @@ import msgspec
 from ishiban import lody
 from ishiban.cache_entries import fresh_cache_entry, remember_cache_entry
 from ishiban.task_ownership import cancel_and_reap, singleflight_task
+
+LOGGER = logging.getLogger(__name__)
+CAPACITY_WARNING_INTERVAL_SECONDS = 30.0
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -56,6 +60,8 @@ class CachedLodyReads[Key, Value]:
         )
         self._inflight: dict[Key, asyncio.Task[Value | None]] = {}
         self._is_closed = False
+        self._next_capacity_warning_at: float | None = None
+        self._suppressed_capacity_warnings = 0
 
     async def read(self, key: Key) -> Value | None:
         """Return a cached or shared verified result, without waiter ownership.
@@ -80,8 +86,30 @@ class CachedLodyReads[Key, Value]:
             load=self._load,
         )
         if task is None:
+            self._warn_capacity()
             return None
         return await asyncio.shield(task)
+
+    def _warn_capacity(self) -> None:
+        """Log one fixed-category warning per interval for this reader.
+
+        For example, three rejections at one instant log once; the next
+        interval reports the two suppressed warnings without revealing keys.
+        """
+        now = self._clock()
+        next_warning = self._next_capacity_warning_at
+        if next_warning is not None and now < next_warning:
+            self._suppressed_capacity_warnings += 1
+            return
+        if self._suppressed_capacity_warnings:
+            LOGGER.warning(
+                "Lody metadata unavailable category=capacity suppressed=%d",
+                self._suppressed_capacity_warnings,
+            )
+        else:
+            LOGGER.warning("Lody metadata unavailable category=capacity")
+        self._next_capacity_warning_at = now + CAPACITY_WARNING_INTERVAL_SECONDS
+        self._suppressed_capacity_warnings = 0
 
     async def close(self) -> None:
         """Stop admission, then cancel and reap every owned pending CLI read."""
@@ -100,10 +128,16 @@ class CachedLodyReads[Key, Value]:
         Value or None
             Verified adapter output or a bounded failure marker.
         """
+        # Exception text can contain credentials or source payloads.
+        value = None
         try:
             value = await self._loader(key)
-        except OSError, TimeoutError, lody.ProtocolError, msgspec.DecodeError:
-            value = None
+        except TimeoutError:
+            LOGGER.warning("Lody metadata unavailable category=deadline")
+        except lody.ProtocolError, msgspec.DecodeError:
+            LOGGER.warning("Lody metadata unavailable category=protocol")
+        except OSError:
+            LOGGER.warning("Lody metadata unavailable category=cli")
         lifetime = (
             self._policy.success_seconds
             if value is not None

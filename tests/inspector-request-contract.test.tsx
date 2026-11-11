@@ -5,6 +5,7 @@ import type {Session} from '../src/contracts';
 import {AgentDetails} from '../src/ui/agent-details';
 import {usePullRequestTitles} from '../src/ui/pull-request-titles';
 import {createBoardSnapshot, firstSession} from './board-fixtures';
+import {writeCapturedText} from './capture-writer';
 
 const {ISHIBAN_INSPECTOR_REQUEST_CAPTURE: capturePath} = Bun.env;
 const prUrl = 'https://github.com/example/project/pull/123';
@@ -51,5 +52,5 @@ it.skipIf(!capturePath)('captures inspector URLs for exact source session identi
       fetchSpy.mockRestore();
     }
   }
-  await Bun.write(capturePath, JSON.stringify(requests));
+  writeCapturedText(capturePath, JSON.stringify(requests));
 });

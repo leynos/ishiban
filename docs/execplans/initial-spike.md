@@ -894,7 +894,6 @@ and four Chromium cases with 24 assertions. Build, formatting, lint, types,
 audit, Markdown, spelling, diagrams and Makefile validation pass. The working
 CodeScene delta reports no issues. Exact-head gate and review status belongs to
 [PR #9](https://github.com/leynos/ishiban/pull/9).
-No formal proof is added.
 
 ### Inspector identity and timestamp boundaries, 11 November 2026
 
@@ -909,11 +908,12 @@ in the web link's tab query remain intact.
 
 Validate new observer timestamps against the inclusive nonnegative JavaScript
 date range before consuming a stream position. Guard rendering separately for
-older retained values without changing journal history. The shared bounded Bun
-capture fixture serves the recency, inspector and timestamp cross-runtime
-contracts. It bounds child output and capture files to one MiB each, retains a
-20-second deadline, and verifies overflow rejection and child cleanup with real
-Bun processes. Application subprocess adapters retain their separate ownership.
+older retained values without changing journal history. The shared Bun capture
+fixture serves the recency, inspector and timestamp cross-runtime contracts.
+Its initial one-MiB stdout and capture-read limits retained a 20-second
+deadline; the follow-up below replaces capture files with a FIFO bounded while
+the child writes. Application subprocess adapters retain their separate
+ownership.
 
 **Progress and verification.** The inspector lookup regression failed with a
 404 before the query aliases, and the retained timestamp regression failed with
@@ -924,3 +924,61 @@ protocol validation, storage, schema decoding and the real inspector.
 Candidate-specific final gates and review status are tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is
 introduced.
+
+### Remaining acceptance and diagnostic gaps, 11 November 2026
+
+**Surprise and scope.** Assessment 9 confirmed the inspector runtime repairs
+but found that a capture-file read limit did not bound a still-running writer.
+A real child wrote two MiB then hung until the outer test deadline. The shared
+fixture now uses a private POSIX FIFO, retaining at most one MiB plus the first
+overflow byte, rejecting promptly and reaping the child. Tests cover empty and
+exact-limit payloads, both overflow channels, cancellation and cleanup.
+
+The first full run exposed duplicated multibyte capture bytes under FIFO
+backpressure. Independent probes isolated Bun 1.4.3's `Bun.write` path and
+excluded the tested final-drain ordering. An explicit byte-offset writer
+preserved both probe payloads. A small-pipe real-child regression now uses
+patterned content so repeated bytes cannot hide behind a zero-filled fixture;
+the
+[debugging record](../debugging/debugging-plan-2026-11-11-multibyte-capture.md)
+retains the finite experiment's scope.
+
+The published users' guide now supplies marked examples loaded by shared
+integration and behaviour-driven tests. External setup and Act invocation are
+mocked; collect and serve use the real command parser with isolated runtime
+edges, and a bounded Make dry-run verifies the documented environment flag. The
+guide corrects the Python baseline, serial coverage lane and sidecar path.
+Stale developer instructions and two absent imported-reference links are
+corrected without importing unrelated guides or inventing a release target.
+
+A collector integration case now emits a distinct persisted activity event
+following catalogue metadata, then checks both the live projection and durable
+journal. A subprocess-local negative control that discards observer ingestion
+fails this case. A finite generated test checks independent NDJSON records
+across UTF-8 byte partitions and malformed siblings. Compile-only public
+preference-callback assertions reject mismatched values. The existing board
+status assertions now include a focused, stable snapshot of accessible labels
+and failure/blocked attributes.
+
+**Diagnostic boundary.** CodeRabbit confirmed that API-owned on-demand cache
+writes and bounded read-only enrichment are the accepted architecture. It
+withdrew the unplanned 0.2.0 migration and telemetry-stack requirements. Fixed
+failure categories now distinguish capacity, CLI, deadline, protocol and
+storage failures without identifiers, payloads or provider error text. PR-title
+partial results retain successful siblings and emit a diagnostic; negative
+cache hits do not repeat the source failure. Embedded migrations preserve host
+logging handlers. Separate pure-policy alignment and the remaining measured
+spike report precede final review convergence, as tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
+
+**Verification.** The completed deterministic run passed 298 Python tests, 160
+Bun tests with 11 default opt-in skips, formatting, lint, type checking,
+dependency audits, Markdown and spelling, diagrams, and Makefile validation.
+The cross-runtime tests explicitly invoke the otherwise skipped capture cases.
+CodeScene reported no new issues; all 20 changed code files scored 10.0
+directly. The local review inspected the 30-path repair and identified platform
+skipping, two documentation corrections and capacity-warning flooding. The
+warning regression failed before its interval bound and passed afterwards;
+warnings retain only a suppressed count. The forced small-pipe tests skip
+explicitly when the Linux sizing operation is unavailable. No formal proof is
+added.

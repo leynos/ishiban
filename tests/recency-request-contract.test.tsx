@@ -3,6 +3,7 @@ import {expect, it} from 'bun:test';
 import {act, cleanup, renderHook, waitFor} from '@testing-library/react';
 import {useSessionRecency} from '../src/session-recency';
 import {createFamilySnapshot, createMultibyteFamilySnapshot} from './board-fixtures';
+import {writeCapturedText} from './capture-writer';
 import {deferred} from './deferred';
 import {installFamilyBrowser, installFamilyMarks} from './family-browser-fixture';
 
@@ -25,7 +26,7 @@ it.skipIf(!capturePath)('captures the browser request consumed by the real ASGI 
     act(() => browser.visibility(mark, true));
     const body = await captured.promise;
     expect(JSON.parse(body).sessionIds).toEqual(['child-0', 'root-0']);
-    await Bun.write(capturePath, body);
+    writeCapturedText(capturePath, body);
   } finally {
     cleanup();
     browser.restore();
@@ -60,7 +61,7 @@ it.skipIf(!multibyteCapturePath)('captures all byte-packed multibyte requests fo
     mark.setAttribute('data-family-id', root.sessionId);
     act(() => browser.visibility(mark, true));
     await waitFor(() => expect(bodies.length).toBe(2));
-    await Bun.write(multibyteCapturePath, JSON.stringify(bodies));
+    writeCapturedText(multibyteCapturePath, JSON.stringify(bodies));
   } finally {
     cleanup();
     browser.restore();
@@ -92,7 +93,7 @@ it.skipIf(!unsupportedCapturePath)('captures only the requestable sibling of a 2
     act(() => browser.visibility(mark, true));
     const body = await captured.promise;
     expect(JSON.parse(body).sessionIds).toEqual(['root-0']);
-    await Bun.write(unsupportedCapturePath, body);
+    writeCapturedText(unsupportedCapturePath, body);
   } finally {
     cleanup();
     browser.restore();

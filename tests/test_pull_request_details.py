@@ -49,6 +49,80 @@ def lookup_result(
     )
 
 
+@pytest.mark.parametrize(
+    ("outcome", "category"),
+    [
+        ("complete", None),
+        ("empty", None),
+        ("partial", "partial"),
+        ("failed", "cli"),
+        ("deadline", "deadline"),
+        ("protocol", "protocol"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_lookup_diagnostics_preserve_partial_titles_and_cache_outcomes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    outcome: str,
+    category: str | None,
+) -> None:
+    """A partial lookup remains visible diagnostically without losing its titles."""
+    requested = [url(1), url(2)]
+    retained = requested if outcome == "complete" else requested[:1]
+    records = (
+        lookup_result(retained).records if outcome in {"complete", "partial"} else {}
+    )
+    failures = {
+        "failed": OSError("DO_NOT_LOG_PROVIDER_PAYLOAD"),
+        "deadline": TimeoutError("DO_NOT_LOG_PROVIDER_PAYLOAD"),
+        "protocol": ProtocolError("DO_NOT_LOG_PROVIDER_PAYLOAD"),
+    }
+    read = mock.AsyncMock(
+        return_value=_PullRequestLookup(
+            records=records, is_partial=outcome == "partial"
+        ),
+        side_effect=failures.get(outcome),
+    )
+    monkeypatch.setattr(details, "read_pull_requests", read)
+    reader = PullRequestTitles()
+
+    first = await reader.read(requested)
+
+    expected = {request_url: record.title for request_url, record in records.items()}
+    assert first == await reader.read(requested) == expected, (
+        "Complete, partial and empty results must retain exactly their known "
+        "sibling titles."
+    )
+    assert read.await_count == 1, (
+        "Positive and negative cache hits must avoid another lookup."
+    )
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == details.__name__
+    ]
+    expected_messages = (
+        []
+        if category is None
+        else [
+            (
+                f"PR titles {'incomplete' if category == 'partial' else 'unavailable'} "
+                f"category={category}"
+            )
+        ]
+    )
+    assert messages == expected_messages, (
+        "Only an incomplete or failed external read needs a diagnostic."
+    )
+    assert "DO_NOT_LOG_PROVIDER_PAYLOAD" not in caplog.text, (
+        "Diagnostics must not include provider errors or credentials."
+    )
+    assert all(request_url not in caplog.text for request_url in requested), (
+        "Diagnostic categories must not include pull-request identities."
+    )
+
+
 @pytest.mark.asyncio
 async def test_reads_titles_for_terminal_and_active_pull_requests(
     monkeypatch: pytest.MonkeyPatch,

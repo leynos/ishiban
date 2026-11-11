@@ -7,6 +7,7 @@ reclassifying sessions or writing to the observation journal.
 import asyncio
 import collections
 import dataclasses as dc
+import logging
 import time
 import typing as typ
 
@@ -26,6 +27,7 @@ MAX_CACHE_ENTRIES = 256
 POSITIVE_TTL_SECONDS = 300.0
 NEGATIVE_TTL_SECONDS = 30.0
 LOOKUP_TIMEOUT_SECONDS = 20.0
+LOGGER = logging.getLogger(__name__)
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -116,11 +118,21 @@ class PullRequestTitles:
         dict[str, PullRequest]
             Available adapter records; expected failures produce an empty map.
         """
+        # Preserve useful titles without exposing provider diagnostics.
         try:
             async with asyncio.timeout(self._lookup_timeout):
                 lookup = await read_pull_requests(urls)
-        except OSError, TimeoutError, msgspec.DecodeError, ProtocolError:
+        except TimeoutError:
+            LOGGER.warning("PR titles unavailable category=deadline")
             return {}
+        except msgspec.DecodeError, ProtocolError:
+            LOGGER.warning("PR titles unavailable category=protocol")
+            return {}
+        except OSError:
+            LOGGER.warning("PR titles unavailable category=cli")
+            return {}
+        if lookup.is_partial:
+            LOGGER.warning("PR titles incomplete category=partial")
         return lookup.records
 
     def _cache_titles(

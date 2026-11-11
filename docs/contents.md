@@ -49,6 +49,8 @@ reference material.
 
 ## Engineering practice
 
+- [Multibyte capture investigation](debugging/debugging-plan-2026-11-11-multibyte-capture.md)
+  records falsifiable tests for the bounded cross-runtime fixture.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   explains cognitive complexity, the bumpy-road antipattern, and refactoring
   approaches for maintainable code.

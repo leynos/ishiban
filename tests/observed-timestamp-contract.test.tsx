@@ -4,9 +4,10 @@ import {cleanup, render, screen} from '@testing-library/react';
 import {Schema} from 'effect';
 import {SessionSchema} from '../src/contracts';
 import {SessionInspector} from '../src/ui/session-inspector';
+import {writeCapturedText} from './capture-writer';
 
-const sessionPath = Bun.env['ISHIBAN_OBSERVED_TIMESTAMP_SESSION'];
-const resultPath = Bun.env['ISHIBAN_OBSERVED_TIMESTAMP_RESULT'];
+const {ISHIBAN_OBSERVED_TIMESTAMP_SESSION: sessionPath} = Bun.env;
+const {ISHIBAN_OBSERVED_TIMESTAMP_RESULT: resultPath} = Bun.env;
 
 afterEach(cleanup);
 
@@ -31,7 +32,7 @@ it.skipIf(!sessionPath || !resultPath)('renders the protocol timestamp persisted
     timeZone: 'UTC'
   }).format(new Date(session.lastObservedAt ?? Number.NaN));
   expect(screen.getByText(visibleTimestamp)).toBeTruthy();
-  await Bun.write(
+  writeCapturedText(
     resultPath,
     JSON.stringify({sessionId: session.sessionId, lastObservedAt: session.lastObservedAt, visibleTimestamp})
   );

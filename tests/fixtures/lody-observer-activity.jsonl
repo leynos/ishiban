@@ -1,0 +1,1 @@
+{"version":1,"streamId":"fake","observedAt":2,"workspaceId":"workspace","sequence":3,"type":"session.changed","sessionId":"session","session":{"sessionId":"session","machineId":"machine","title":"Observer activity transition","source":"persisted","state":"running","freshness":"synced","archived":false,"activeTurns":[]}}

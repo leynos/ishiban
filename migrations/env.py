@@ -7,7 +7,11 @@ from alembic import context
 
 from ishiban.storage.models import metadata
 
-if context.config.config_file_name is not None:
+# Embedded migrations must preserve the API or collector's logging handlers.
+if (
+    context.config.config_file_name is not None
+    and "connection" not in context.config.attributes
+):
     fileConfig(context.config.config_file_name)
 
 

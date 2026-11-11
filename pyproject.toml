@@ -620,3 +620,8 @@ reason = "Keep typed network-request and DOM-mark fixture accessors local, with 
 [[tool.duplication_gate.allow]]
 members = ["tests/test_activity_query_api.py", "tests/test_inspector_request_contract.py"]
 reason = "Keep read-only GET journal invariants local to independent path-rejection and query-detail tests. The reviewed nine/seven-line shallow fragment shares five lines of Store/Falcon setup and before/after evidence capture; opened_store already owns the common lifecycle. A generic GET wrapper returning response and state would obscure the boundaries asserted by these tests. See docs/developers-guide.md#duplication-review."
+
+
+[[tool.duplication_gate.allow]]
+unit = "tests/interface-state.type-test.ts"
+reason = "Keep literal positive and intentionally invalid preference callbacks separate in this compile-only fixture. The two reviewed hidden one-line families share zero source lines; distinct value types and mandatory ts-expect-error assertions are the contract. Abstracting these calls would erase the exact rejection sites. This exception is confined to the type-test file; see docs/developers-guide.md#duplication-review."

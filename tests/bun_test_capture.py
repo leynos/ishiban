@@ -8,6 +8,64 @@ REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_CAPTURE_BYTES = 1024 * 1024
 
 
+class _CapturePipe:
+    """Drain a private FIFO as Bun writes, retaining at most one excess byte."""
+
+    def __init__(self, path: pathlib.Path) -> None:
+        """Open both FIFO ends so a Bun writer can connect without blocking."""
+        os.mkfifo(path, 0o600)
+        self.path = path
+        self.fd = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+        self.loop = asyncio.get_running_loop()
+        self.overflow: asyncio.Future[None] = self.loop.create_future()
+        self.content = bytearray()
+        self.loop.add_reader(self.fd, self._drain)
+
+    def _drain(self) -> None:
+        """Consume pending bytes; for example, signal at the first excess byte."""
+        while True:
+            remaining = MAX_CAPTURE_BYTES + 1 - len(self.content)
+            try:
+                chunk = os.read(self.fd, min(65536, remaining))
+            except BlockingIOError:
+                return
+            if not chunk:
+                return
+            self.content.extend(chunk)
+            if len(self.content) > MAX_CAPTURE_BYTES:
+                self.loop.remove_reader(self.fd)
+                self.overflow.set_result(None)
+                return
+
+    def finish(self) -> bytes:
+        """Return bounded bytes after Bun exits, including the final pipe buffer.
+
+        For example, a short JSON body remains byte-for-byte unchanged.
+
+        Returns
+        -------
+        bytes
+            The complete captured payload within the one MiB limit.
+
+        Raises
+        ------
+        AssertionError
+            If the captured payload exceeded the limit.
+        """
+        if not self.overflow.done():
+            self._drain()
+        if self.overflow.done():
+            message = "capture > 1 MiB"
+            raise AssertionError(message)
+        return bytes(self.content)
+
+    def close(self) -> None:
+        """Release the reader and remove its private FIFO after the child exits."""
+        self.loop.remove_reader(self.fd)
+        os.close(self.fd)
+        self.path.unlink()
+
+
 async def capture_bun_test_output(
     directory: pathlib.Path, *, test_file: str, variable: str
 ) -> bytes:
@@ -23,20 +81,30 @@ async def capture_bun_test_output(
 
     """
     capture = directory / f"{variable.lower()}.json"
-    environment = {**os.environ, variable: str(capture)}
-    await _run_bun_test(test_file, environment)
-    return _read_capture(capture)
+    pipe = _CapturePipe(capture)
+    try:
+        environment = {**os.environ, variable: str(capture)}
+        return await _run_bun_test(test_file, environment, pipe)
+    finally:
+        pipe.close()
 
 
-async def _run_bun_test(test_file: str, environment: dict[str, str]) -> None:
+async def _run_bun_test(
+    test_file: str, environment: dict[str, str], capture: _CapturePipe
+) -> bytes:
     """Run one Bun test with bounded merged output and process lifetime.
 
     For example, a flooding test is killed and reaped before it can fill memory.
 
+    Returns
+    -------
+    bytes
+        The complete FIFO payload after the Bun child exits successfully.
+
     Raises
     ------
     AssertionError
-        If Bun fails or prints more than 1 MiB.
+        If Bun fails or either channel exceeds one MiB.
     """
     process = await asyncio.create_subprocess_exec(
         "bun",
@@ -49,10 +117,24 @@ async def _run_bun_test(test_file: str, environment: dict[str, str]) -> None:
     )
     try:
         async with asyncio.timeout(20):
-            output = await _read_bun_stdout(process.stdout)
-            await process.wait()
+            completion = asyncio.gather(
+                _read_bun_stdout(process.stdout), process.wait()
+            )
+            try:
+                done, _pending = await asyncio.wait(
+                    {completion, capture.overflow}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if capture.overflow in done:
+                    message = "capture > 1 MiB"
+                    raise AssertionError(message)
+                output, _status = completion.result()
+                captured = capture.finish()
+            finally:
+                completion.cancel()
+                await asyncio.gather(completion, return_exceptions=True)
         if process.returncode != 0:
             raise AssertionError(output.decode(errors="replace"))
+        return captured
     finally:
         if process.returncode is None:
             process.kill()
@@ -85,29 +167,3 @@ async def _read_bun_stdout(stdout: asyncio.StreamReader | None) -> bytes:
         message = "stdout > 1 MiB"
         raise AssertionError(message)
     return output
-
-
-def _read_capture(capture: pathlib.Path) -> bytes:
-    """Read one bounded completed capture without trusting its stat alone.
-
-    For example, a test writing more than 1 MiB is rejected before reading.
-
-    Returns
-    -------
-    bytes
-        At most 1 MiB of captured test output.
-
-    Raises
-    ------
-    AssertionError
-        If the captured file exceeds the configured byte limit.
-    """
-    if capture.stat().st_size > MAX_CAPTURE_BYTES:
-        message = "capture > 1 MiB"
-        raise AssertionError(message)
-    with capture.open("rb") as captured:
-        content = captured.read(MAX_CAPTURE_BYTES + 1)
-    if len(content) > MAX_CAPTURE_BYTES:
-        message = "capture > 1 MiB"
-        raise AssertionError(message)
-    return content

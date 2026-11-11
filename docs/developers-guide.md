@@ -6,9 +6,11 @@ This guide explains the contributor workflow for the Ishiban proof of concept.
 
 The [repository layout](repository-layout.md) locates the Python runtime,
 frontend, and tests. Run the collector and Falcon API as separate processes
-sharing one ignored state directory. The collector is the only writer, with a
-local process lock and serialized SQLAlchemy transactions. Falcon serves the
-Bun-built `dist/` directory and reads short SQLite transactions.
+sharing one ignored state directory. The collector is the sole source-journal
+writer, with a local process lock and serialized SQLAlchemy transactions.
+Falcon serves the Bun-built `dist/` directory and reads short SQLite
+transactions; on-demand API activity persists in its separate sidecar, as
+recorded in [ADR 004](adr-004-persist-on-demand-activity.md).
 
 Use `msgspec` at the CLI boundary, Effect Schema at the browser boundary, and
 keep workflow classification in `ishiban/workflow.py`. The browser applies
@@ -27,12 +29,14 @@ helper or public adapter is introduced by these private runtime modules.
 
 SQLite WAL, foreign keys, busy timeout, and explicit transaction isolation are
 configured by `ishiban/storage/`. Alembic applies the initial schema on
-startup. Do not delete a journal to resolve a transient source error. Source
-stream/sequence identity deduplicates replay; the independent local journal ID
-is the public SSE cursor. The workspace-filtered `read_cursor` query is shared
-by snapshot reads and `Store.current_cursor`; use the latter when a caller only
-needs the replay boundary, such as SSE reset validation. Metadata and durable-
-evidence generations remain separate during reconciliation.
+startup. Embedded Alembic migrations preserve the application's logging
+handlers; standalone Alembic commands retain their own console setup. Do not
+delete a journal to resolve a transient source error. Source stream/sequence
+identity deduplicates replay; the independent local journal ID is the public
+SSE cursor. The workspace-filtered `read_cursor` query is shared by snapshot
+reads and `Store.current_cursor`; use the latter when a caller only needs the
+replay boundary, such as SSE reset validation. Metadata and durable evidence
+generations remain separate during reconciliation.
 
 Observer protocol validation admits only nonnegative epoch milliseconds within
 the JavaScript date range, including the upper bound `8_640_000_000_000_000`.
@@ -170,9 +174,9 @@ MIT licence when copying it elsewhere. The
 dependency pins, and scope.
 
 Bun 1.4.x owns JavaScript testing and bundling. The tooling suite verifies the
-bundle API using a disposable TypeScript entrypoint. Add an application bundle
-target when a real frontend entrypoint exists; no application bundle is
-produced by the current Python `make build` target.
+bundle API using a disposable TypeScript entrypoint. `make build-web` bundles
+the application entrypoint and semantic stylesheet into `dist/`; the Python
+`make build` target installs the Python package separately.
 
 ## Automation scripts
 
@@ -454,6 +458,16 @@ link resolver and native URI construction in the target resolver. These helpers
 belong only to inspector navigation, not general URL rewriting. Copying the raw
 CLI identity remains supported.
 
+Metadata-cache warnings use fixed `capacity`, `deadline`, `protocol` and `cli`
+categories. Recency storage failures use `storage`; incomplete GitHub title
+lookups use `partial` while preserving successful sibling titles and normal
+positive/negative caching. These diagnostic messages omit session IDs, PR URLs,
+payloads, exception messages and tracebacks. They do not infer authentication
+failures from an ambiguous CLI failure. This is local diagnostic logging,
+without a metrics or tracing backend. Capacity warnings are limited to one per
+reader in each 30-second monotonic interval; the next warning counts suppressed
+rejections without retaining their identities.
+
 Inspector agent metadata uses a separate bounded reader and 128-entry TTL
 cache. The only exported fields are agent type, configuration ID and
 configuration name; configuration commands never use `--show-secrets`. The copy
@@ -513,13 +527,28 @@ tests; they are not application data contracts.
 reading between those two reader suites. Each suite retains its own protocol
 fixtures and assertions. `tests/deferred.ts` supplies controlled asynchronous
 completion for browser-hook tests without production timing delays.
+`tests/documentation_examples.py` loads marked fences from the published users'
+guide for integration and behaviour-driven tests. It enforces this guide's
+strict marker/fence contract, not general Markdown rendering. External setup
+tools are mocked; collect and serve use the real parser with isolated runtime
+edges. A Make dry-run checks the Act environment flag without running Act.
+`tests/interface-state.type-test.ts` supplies compile-only positive and
+negative assertions for public preference callbacks; it is never executed. The
+bounded-frame property exercises finite UTF-8 chunk partitions and malformed
+siblings, complementing the named limit tests without claiming a formal proof.
+
 `tests/bun_test_capture.py` owns the bounded Bun child lifecycle shared by the
 recency, inspector-request and observed-timestamp cross-runtime contracts. It
-limits merged child output and capture files to one MiB each, preserves the
-20-second timeout, and kills and reaps incomplete children. Real-child tests
-exercise both size limits and cleanup. Callers retain their own input fixtures
-and semantic assertions; this helper is only for test-file capture, not
-application subprocesses.
+limits merged child output and a private POSIX FIFO to one MiB each while the
+child runs, preserves the 20-second timeout, and kills and reaps incomplete
+children. `tests/capture-writer.ts` writes these private contract payloads with
+an explicit byte-offset loop: Bun 1.4.3's `Bun.write` duplicated bytes under
+FIFO backpressure. Real-child tests exercise both size limits, cleanup and
+patterned multibyte payloads through a small pipe. Callers retain their own
+input fixtures and semantic assertions; these helpers serve cross-runtime test
+capture, not application subprocesses. See the
+[capture debugging record](debugging/debugging-plan-2026-11-11-multibyte-capture.md)
+for the bounded counterexample and transport comparison.
 
 [ADR 005](adr-005-batched-activity-and-update-cues.md) defines streaming batch
 activity and semantic pulse comparisons. `batch_activity_api` owns only bounded

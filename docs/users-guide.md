@@ -3,7 +3,8 @@
 Ishiban is a local read-only proof of concept for observing one Lody Cloud
 workspace. The interface combines observed session activity with independently
 classified PR workflow stages. It never sends prompts, acknowledges messages,
-answers permissions, cancels sessions, or modifies GitHub PRs.
+answers permissions, cancels sessions, or modifies GitHub PRs. The 0.1.0 proof
+of concept is not yet released; no upgrade path is published.
 
 ## Run the observatory
 
@@ -14,6 +15,7 @@ titles produce Unclassified sessions rather than guessed workflow stages.
 
 From the repository root, install and build the interface:
 
+<!-- tested-example: setup -->
 ```bash
 uv sync --group dev
 bun install --frozen-lockfile
@@ -22,12 +24,14 @@ bun run build
 
 Start the collector in one terminal:
 
+<!-- tested-example: collect -->
 ```bash
 uv run ishiban collect --workspace leynos
 ```
 
 After its workspace identity is saved, start Falcon in another terminal:
 
+<!-- tested-example: serve -->
 ```bash
 uv run ishiban serve
 ```
@@ -208,7 +212,7 @@ formatting. For JavaScript-only work, use `make fmt-js`, `make check-fmt-js`,
 [developers' guide](developers-guide.md#typescript-tooling) explains the rules
 and checked source directories.
 
-The Python baseline is `3.14` (minimum: 3.12).
+The Python baseline and minimum supported version are both `3.14`.
 
 Git discovers Python sources from tracked and untracked files, including hidden
 action directories. `lint-python` runs Ruff 0.16.8 and Interrogate for 100%
@@ -240,8 +244,9 @@ remains usable when the shared source is temporarily offline.
 
 Pytest discovery is limited to the top-level `tests/` tree. Keep generated
 project unit tests there rather than in package module directories or
-`unittests/` subdirectories, because CI coverage runs through xdist-backed
-SlipCover support.
+`unittests/` subdirectories. Ordinary `make test` runs pytest through xdist;
+the CI coverage lane runs SlipCover serially so Alembic migration hits remain
+visible.
 
 When the Rust extension is enabled, `lint-rust` runs:
 
@@ -290,6 +295,7 @@ The generated Makefile supports optional local workflow validation using
 [`act`](https://github.com/nektos/act). When `act` is installed and Docker is
 available, pass `WITH_ACT=1` to the `test` target:
 
+<!-- tested-example: act-validation -->
 ```bash
 make test WITH_ACT=1
 ```
@@ -338,9 +344,10 @@ refreshes and API or collector restarts. They are stored in a local SQLite
 sidecar, shared by windows viewing the same workspace. Newer execution evidence
 replaces them; metadata or unknown startup snapshots retain them. The displayed
 observation time describes when the runtime facts were read. To clear these
-last-known observations, stop the API and collector, remove the sidecar, then
-restart both processes and refresh the browser. Previously lost browser-only
-results need to be collected again.
+last-known observations, stop the API and collector, remove
+`.ishiban/observatory.sqlite3.activity.sqlite3` (or the same filename under the
+shared `--state-directory`), then restart both processes and refresh the
+browser. Previously lost browser-only results need to be collected again.
 
 The inspector prefers a known PR name as its linked heading, with the session
 title underneath. Missing PR names, including already merged PRs, are loaded on
@@ -409,3 +416,8 @@ execution, and does not pulse the task. It is not a session error.
 Restarting the collector establishes a fresh pulse baseline. Replayed metadata,
 unchanged runtime facts and on-demand enrichment do not pulse. Meaningful task
 changes received after startup continue to pulse.
+
+API warning categories distinguish capacity, deadline, CLI, protocol and
+storage failures. A `partial` PR-title warning retains known sibling titles
+while some requested titles remain unavailable. Diagnostic messages omit source
+payloads and provider error text.

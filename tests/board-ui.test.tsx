@@ -108,30 +108,6 @@ describe('Ishiban board renderer', () => {
     expect(markup).not.toContain('last known turn failed');
   });
 
-  it('keeps last-known turn failures separate from waiting and workflow stage', () => {
-    const snapshot = makeSnapshot();
-    const failedSession = makeSession({
-      latestTurn: {userTurnId: 'turn-failed-001', state: 'failed'},
-      stage: 'planning'
-    });
-    const blockedSession = makeSession({
-      sessionId: 'session-blocked-001',
-      title: 'Waiting on review',
-      state: 'waiting',
-      latestTurn: {userTurnId: 'turn-failed-002', state: 'failed'},
-      stage: 'building',
-      stageReason: 'The supplied pull request remains a draft.'
-    });
-    const markup = renderBoard({...snapshot, sessions: [failedSession, blockedSession]});
-
-    expect(markup).toContain('last known turn failed');
-    expect(markup).toContain('blocked');
-    expect(markup).toContain('data-last-turn-failed="true"');
-    expect(markup).toContain('data-blocked="true"');
-    expect(markup).toContain('data-stage="planning"');
-    expect(markup).toContain('data-stage="building"');
-  });
-
   it('renders 120 repositories and exposes the 6, 10, and 13 mark stage totals', () => {
     const markup = renderBoard(createDemoSnapshot());
     const repositoryRows = markup.match(/data-repository-row=/gu) ?? [];
@@ -153,4 +129,52 @@ describe('Ishiban board renderer', () => {
     expect(markup).toContain('last known turn failed');
     expect(markup).toContain('data-stage="planning"');
   });
+});
+
+it('keeps board evidence failures separate from waiting and workflow stage', () => {
+  const snapshot = makeSnapshot();
+  const failedSession = makeSession({
+    latestTurn: {userTurnId: 'turn-failed-001', state: 'failed'},
+    stage: 'planning'
+  });
+  const blockedSession = makeSession({
+    sessionId: 'session-blocked-001',
+    title: 'Waiting on review',
+    state: 'waiting',
+    latestTurn: {userTurnId: 'turn-failed-002', state: 'failed'},
+    stage: 'building',
+    stageReason: 'The supplied pull request remains a draft.'
+  });
+  const markup = renderBoard({...snapshot, sessions: [failedSession, blockedSession]});
+
+  expect(markup).toContain('last known turn failed');
+  expect(markup).toContain('blocked');
+  expect(markup).toContain('data-last-turn-failed="true"');
+  expect(markup).toContain('data-blocked="true"');
+  expect(markup).toContain('data-stage="planning"');
+  expect(markup).toContain('data-stage="building"');
+
+  const document = new DOMParser().parseFromString(markup, 'text/html');
+  const presentedStates = [...document.querySelectorAll('button[data-session-id]')].map((mark) => ({
+    label: mark.getAttribute('aria-label'),
+    stage: mark.getAttribute('data-stage'),
+    hasFailedTurn: mark.getAttribute('data-last-turn-failed') === 'true',
+    isBlocked: mark.getAttribute('data-blocked') === 'true'
+  }));
+  expect(presentedStates).toMatchInlineSnapshot(`
+    [
+      {
+        "hasFailedTurn": true,
+        "isBlocked": false,
+        "label": "leynos/ishiban: Inspect release pipeline; Planning; idle; last known turn failed; Metadata only",
+        "stage": "planning",
+      },
+      {
+        "hasFailedTurn": true,
+        "isBlocked": true,
+        "label": "leynos/ishiban: Waiting on review; Building; waiting; blocked; last known turn failed; Metadata only",
+        "stage": "building",
+      },
+    ]
+  `);
 });
