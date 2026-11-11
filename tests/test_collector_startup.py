@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import functools
-import pathlib
 import typing as typ
 from unittest import mock
 
@@ -16,6 +15,7 @@ from ishiban.task_ownership import cancel_and_reap
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+    import pathlib
 
     from ishiban.storage import Store
     from tests.storage_contracts import Snapshot
@@ -95,22 +95,6 @@ async def _wait_for_catalogue(store: Store) -> Snapshot:
             await asyncio.sleep(0.01)
 
 
-def _fixture_event(name: str) -> bytes:
-    """Use a committed observer frame in the isolated test workspace.
-
-    For example, the ready fixture can be fed before a delayed enrichment read.
-
-    Returns
-    -------
-    bytes
-        A fixture frame with the store's workspace identity.
-    """
-    source = pathlib.Path(__file__).parent / "fixtures" / name
-    return source.read_bytes().replace(
-        b'"workspaceId":"workspace"', b'"workspaceId":"w1"'
-    )
-
-
 def _initial_pr_catalogue() -> Catalogue:
     """Supply stale metadata that requires a delayed GitHub title lookup.
 
@@ -141,7 +125,7 @@ async def test_observer_ingests_transition_during_initial_pr_enrichment(
 ) -> None:
     """Ready observation keeps accepting events before GitHub enrichment finishes."""
     stdout = asyncio.StreamReader()
-    stdout.feed_data(_fixture_event("lody-observer.jsonl"))
+    stdout.feed_data(storage_support.observer_frame("lody-observer.jsonl"))
     enrichment_started = asyncio.Event()
     release_enrichment = asyncio.Event()
     enrichment_finished = asyncio.Event()
@@ -169,7 +153,9 @@ async def test_observer_ingests_transition_during_initial_pr_enrichment(
         )
         try:
             await asyncio.wait_for(enrichment_started.wait(), timeout=2)
-            stdout.feed_data(_fixture_event("lody-observer-activity.jsonl"))
+            stdout.feed_data(
+                storage_support.observer_frame("lody-observer-activity.jsonl")
+            )
             snapshot = await _wait_for_running(store)
             assert not enrichment_finished.is_set(), (
                 "The observer event must commit while initial enrichment is pending."
@@ -221,7 +207,7 @@ async def test_initial_catalogue_failure_finishes_quiet_phase_without_source_los
 ) -> None:
     """An unavailable catalogue reports a warning while observation continues."""
     stdout = asyncio.StreamReader()
-    stdout.feed_data(_fixture_event("lody-observer.jsonl"))
+    stdout.feed_data(storage_support.observer_frame("lody-observer.jsonl"))
     monkeypatch.setattr(
         observation, "child", functools.partial(_controlled_child, stdout=stdout)
     )
@@ -240,7 +226,9 @@ async def test_initial_catalogue_failure_finishes_quiet_phase_without_source_los
                 snapshot["collector"]["lastError"]
             ), "A failed initial read must leave the quiet phase with a warning."
             catalogue_read.assert_awaited_once_with("leynos", "lody")
-            stdout.feed_data(_fixture_event("lody-observer-activity.jsonl"))
+            stdout.feed_data(
+                storage_support.observer_frame("lody-observer-activity.jsonl")
+            )
             snapshot = await _wait_for_running(store)
             assert snapshot["collector"]["state"] == "following", (
                 "Catalogue failure must not disconnect the live observer."

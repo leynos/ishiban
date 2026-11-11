@@ -2,6 +2,7 @@
 
 import contextlib as ctx
 import dataclasses as dc
+import pathlib
 import typing as typ
 
 from ishiban.domain import Envelope, ObservedSession, Turn
@@ -28,6 +29,23 @@ class EventOptions:
 
 
 _DEFAULT_EVENT_OPTIONS = EventOptions()
+
+
+def observer_frame(name: str) -> bytes:
+    """Load a committed observer fixture for the isolated ``w1`` workspace.
+
+    For example, ``observer_frame('lody-observer.jsonl')`` supplies the ready
+    frame to a controlled collector stream.
+
+    Returns
+    -------
+    bytes
+        The fixture frame with its workspace identity adapted to ``w1``.
+    """
+    source = pathlib.Path(__file__).parent / "fixtures" / name
+    return source.read_bytes().replace(
+        b'"workspaceId":"workspace"', b'"workspaceId":"w1"'
+    )
 
 
 def as_snapshot(value: dict[str, object]) -> Snapshot:

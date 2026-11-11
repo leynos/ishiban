@@ -7,16 +7,20 @@ failure without manufacturing successful or failed turns.
 import asyncio
 import contextlib
 import fcntl
+import logging
 import secrets
 import typing as typ
 
 import msgspec
+from sqlalchemy.exc import OperationalError
 
 from ishiban.domain import CatalogueEntry, PullRequest
 from ishiban.lody import PR_URL, child, read_catalogue, read_pull_requests
 from ishiban.protocol import Catalogue, ProtocolError, StreamPosition, decode_event
 from ishiban.task_ownership import cancel_and_reap
 from ishiban.workflow import classify
+
+logger = logging.getLogger(__name__)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -199,12 +203,35 @@ class Collector:
     async def _refresh(
         self, initial: Catalogue | None = None, *, start_immediately: bool = False
     ) -> None:
-        """Reconcile after observer readiness, then every five minutes."""
-        if start_immediately:
-            await self._refresh_once(initial)
-        while True:
+        """Retry storage failures with capped backoff while observation continues."""
+        is_initial = start_immediately
+        retry_delay = 1.0
+        if not start_immediately:
             await asyncio.sleep(300)
-            await self._refresh_once()
+        while True:
+            try:
+                await self._refresh_once(initial)
+            except OperationalError:
+                logger.warning(
+                    "Catalogue storage unavailable; retrying in %s seconds.",
+                    retry_delay,
+                )
+                state = "catalogue_ready" if is_initial else "following"
+                try:
+                    await self.store.health(
+                        state,
+                        self.generation,
+                        "Catalogue storage unavailable; retrying.",
+                    )
+                except OperationalError:
+                    logger.warning("Catalogue storage warning could not be persisted.")
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30)
+            else:
+                initial = None
+                is_initial = False
+                retry_delay = 1.0
+                await asyncio.sleep(300)
 
     async def _refresh_once(self, catalogue: Catalogue | None = None) -> None:
         """Apply one catalogue read, preserving a live observer on failure."""
