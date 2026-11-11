@@ -1,5 +1,6 @@
 """CLI bootstrap preserves workspace identity and closes bounded local resources."""
 
+import errno
 import typing as typ
 from unittest import mock
 
@@ -48,6 +49,45 @@ async def test_collect_persists_identity_and_releases_ownership(
     run.assert_awaited_once()
     with collector_lock(state):
         assert marker["workspaceId"] == "w1", "Collector ownership must be released."
+
+
+@pytest.mark.asyncio
+async def test_collect_rejects_competing_owner_before_observation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cmd_mox: CmdMox,
+) -> None:
+    """A held state-directory lock blocks CLI reads and journal creation."""
+    cmd_mox.mock("lody").with_args(
+        "session", "list", "--workspace", "leynos", "--all", "--json"
+    ).returns(stdout='{"ok":true,"workspaceId":"w1","sessions":[]}')
+    catalogue_reader = mock.AsyncMock(wraps=cli.read_catalogue)
+    monkeypatch.setattr(cli, "read_catalogue", catalogue_reader)
+    run = mock.AsyncMock()
+    monkeypatch.setattr(Collector, "run", run)
+    state = tmp_path / "state"
+
+    with collector_lock(state):
+        with pytest.raises(BlockingIOError) as rejected:
+            await cli.collect(state_directory=state, github=False)
+        assert rejected.value.errno == errno.EWOULDBLOCK, (
+            "A competing CLI collector must fail on the held ownership lock."
+        )
+        catalogue_reader.assert_not_awaited()
+        run.assert_not_awaited()
+        assert not (state / "workspace.json").exists(), (
+            "The rejected collector must not publish a workspace identity."
+        )
+        assert not (state / "observatory.sqlite3").exists(), (
+            "The rejected collector must not initialize or write the journal."
+        )
+
+    await cli.collect(state_directory=state, github=False)
+    catalogue_reader.assert_awaited_once_with("leynos")
+    run.assert_awaited_once()
+    assert (state / "observatory.sqlite3").is_file(), (
+        "A later collector must acquire ownership and initialize the journal."
+    )
 
 
 def test_serve_requires_the_collector_identity(tmp_path: Path) -> None:

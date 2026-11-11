@@ -248,8 +248,9 @@ applying suggestions without checking their assumptions.
   child-process tests where chunking, delayed EOF, transport framing, timeout,
   cancellation or cleanup is the contract.
 - Keep pytest tests in the top-level `tests/` tree. Do not place unit tests in
-  package module directories or `unittests/` subdirectories, because CI
-  coverage uses xdist-backed SlipCover support.
+  package module directories or `unittests/` subdirectories. Ordinary tests use
+  xdist; CI coverage uses the serial SlipCover lane so dynamically loaded
+  Alembic migration hits remain visible.
 - Snapshot tests (using `syrupy`) should be provided where multivariant output
   format consistency is relevant to the requirements. Snapshot tests must
   capture meaningful, reviewer-useful contracts rather than generic dumps of

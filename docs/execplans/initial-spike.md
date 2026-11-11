@@ -1088,3 +1088,23 @@ unmatched finishes, repeated starts, reopening and interleaving. The suite runs
 formal proof. Runtime source remains unchanged from `34fdfbf`; final candidate
 validation and review remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Ownership and graph-model acceptance, 11 November 2026
+
+Assessment 10 confirmed the preceding repairs and retained two coverage gaps.
+The CLI contention case now holds the actual state-directory lock while a
+second collection attempt is rejected before a catalogue read, observer start
+or journal initialization. Releasing ownership permits a later attempt. A
+private lock-disabled probe fails the new assertion.
+
+The graph property compares public family roots, context and exact membership
+with an independent transitive-reachability model over 100 generated graphs of
+one to nine nodes. Explicit controls include missing-parent chains, siblings
+sharing an absent parent, self-links, cycles and paths into cycles. ADR 007 now
+states the existing smallest-cycle-ID rule precisely. The reviewed
+import/binding-only detector family has an exact file-pair exception; no graph
+algorithm is shared with production. AGENTS now correctly distinguishes normal
+xdist tests from the serial CI coverage lane. These changes do not alter
+runtime source. A separate activity-clock injection refactor remains before the
+affected final assessment, as tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).

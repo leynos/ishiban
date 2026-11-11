@@ -62,8 +62,10 @@ history, use `createdAt` as its effective comparison time. Break ties and
 handle malformed links deterministically. Resolve roots only through parent
 records present in the current projection. If a parent record is missing, that
 session becomes the root of its present-record chain; otherwise unrelated
-children of the same missing ID remain separate families. Cycles are resolved
-deterministically.
+children of the same missing ID remain separate families. A cycle uses its
+smallest session ID under JavaScript string comparison as the root; paths
+entering that cycle join the same root. This choice does not depend on the
+input record order.
 
 A lookup's current status is distinct from its last-known history timestamp. On
 the next bounded revisit after a successful fact expires, mark it pending once,

@@ -625,3 +625,7 @@ reason = "Keep read-only GET journal invariants local to independent path-reject
 [[tool.duplication_gate.allow]]
 unit = "tests/interface-state.type-test.ts"
 reason = "Keep literal positive and intentionally invalid preference callbacks separate in this compile-only fixture. The two reviewed hidden one-line families share zero source lines; distinct value types and mandatory ts-expect-error assertions are the contract. Abstracting these calls would erase the exact rejection sites. This exception is confined to the type-test file; see docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/session-families.test.ts", "tests/session-family-graphs.test.ts"]
+reason = "Keep explicit dependencies for independent family-selection and graph-oracle tests. The reviewed seven-line shallow declaration fragment shares tool, contract and fixture imports plus a base-session binding; the session factory is already shared. An import-only facade would obscure dependencies and the oracle must not reuse the production root resolver. No scenario or graph algorithm is duplicated. See docs/developers-guide.md#duplication-review."
