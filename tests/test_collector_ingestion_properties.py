@@ -56,7 +56,7 @@ class IngestionProbe:
         self.read_calls = 0
 
     async def readline(self) -> bytes:
-        """Reject any read ahead of the preceding store acknowledgment.
+        """Reject any read ahead of the preceding store acknowledgement.
 
         Returns
         -------
@@ -64,7 +64,7 @@ class IngestionProbe:
             The next buffered observer line, or EOF.
         """
         assert self.read_calls == self.acknowledged, (
-            "Collector must await the current record's store acknowledgment."
+            "Collector must await the current record's store acknowledgement."
         )
         self.read_calls += 1
         return await self.original_readline()
@@ -165,7 +165,7 @@ async def test_observer_stream_retry_preserves_raw_order_and_exactly_once_commit
                 with pytest.raises(ProtocolError, match="Observer exited"):
                     await collector._follow()
             assert probe.acknowledged == len(probe.records), (
-                "Every generated record must receive a store acknowledgment."
+                "Every generated record must receive a store acknowledgement."
             )
             assert probe.read_calls == len(probe.records) + 1, (
                 "The observer must read each line once and then observe EOF."
