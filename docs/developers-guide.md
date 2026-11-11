@@ -20,6 +20,22 @@ closes subscriptions on mode changes, and coalesces React notifications through
 animation frames. PR-stage evidence and its limitations are recorded in
 [ADR 002](adr-002-workflow-evidence.md).
 
+`ishiban/runtime_evidence.py` owns pure observation and turn-transition plans
+over typed source records. Its frozen results use Python field names and have
+no storage, clock or process effects. `storage/projections.py` copies and
+updates public JSON, retains legacy-value handling, and encodes the shared
+optional turn shape. Journal ingestion and sidecar restoration use that same
+adapter. Keep these responsibilities together rather than adding another merge
+implementation. [ADR 008](adr-008-runtime-evidence-policy.md) records this
+session-specific reuse boundary and its compatibility requirements.
+
+`plan_observation` returns either `MetadataObservation` or
+`PersistedObservation`; the former updates metadata provenance while the latter
+supplies replacement runtime facts. `plan_turn` returns a `TurnPlan` with the
+latest turn, identity to retire and optional active replacement. Active
+observations use tuples in plans. The adapter keeps raw legacy values outside
+those typed decisions instead of decoding an entire saved projection.
+
 Observer and catalogue subprocesses use fixed argument vectors without a shell.
 Their protocol lifecycle requires asyncio pipe streaming; the collector owns
 bounded stdout, a draining stderr task, cancellation, termination, and reap.

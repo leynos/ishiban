@@ -982,3 +982,29 @@ warning regression failed before its interval bound and passed afterwards;
 warnings retain only a suppressed count. The forced small-pipe tests skip
 explicitly when the Linux sizing operation is unavailable. No formal proof is
 added.
+
+### Pure runtime policy alignment, 11 November 2026
+
+**Decision.** Move runtime replacement, metadata preservation and named-turn
+transition decisions into `ishiban/runtime_evidence.py`. Frozen typed plans
+carry the decision to the existing storage adapter, which retains public JSON
+encoding and legacy-value handling. Journal ingestion and sidecar restoration
+continue through the shared adapter.
+[ADR 008](../adr-008-runtime-evidence-policy.md) records the session-specific
+boundary; the database schema, public contract and PR workflow classification
+are unchanged.
+
+Pure policy tests cover metadata versus persisted evidence and turn start,
+finish and reopen decisions. Adapter compatibility cases retain malformed
+active-list handling, optional field omission, bounded failed-turn errors,
+unrelated saved values and input immutability. Existing storage, journal,
+turn-error and activity suites provide executable equivalence evidence.
+Candidate-specific final validation and review remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9). No formal proof is added.
+
+**Verification.** The six focused policy, projection, journal, turn-error and
+activity suites passed 22 tests. Full gates passed 302 Python tests and 160 Bun
+tests with 11 default opt-in skips, plus lint, formatting, type checking,
+audits and documentation checks. CodeScene reported no issues and scored the
+three changed code files 10.0 directly. The local review inspected all nine
+refactor paths and completed without findings.

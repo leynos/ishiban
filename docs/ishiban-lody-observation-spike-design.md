@@ -275,6 +275,13 @@ SQL decoding, process memory, or the byte length of individual fields.
 
 ### Projection merge rules
 
+[ADR 008](adr-008-runtime-evidence-policy.md) separates pure runtime transition
+plans from their public-projection encoding. `ishiban/runtime_evidence.py`
+selects replacement, preservation and named-turn transitions from typed source
+records. The shared storage adapter applies those plans for journal ingestion
+and sidecar restoration, preserving legacy projection handling and optional
+field encoding without changing either persistence boundary.
+
 - `snapshot` / `session.changed` with `source: persisted`: update current
   session state and reconcile `latestTurn` and `activeTurns` into `turns`.
 - Metadata-only projection: apply display metadata and retain last durable

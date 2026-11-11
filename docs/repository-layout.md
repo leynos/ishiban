@@ -3,6 +3,7 @@
 This page locates the proof of concept's runtime components and verification.
 
 - `ishiban/domain.py` defines typed observer and catalogue records.
+- `ishiban/runtime_evidence.py` selects pure runtime and turn-transition plans.
 - `ishiban/protocol.py` validates the read-only CLI boundary.
 - `ishiban/workflow.py` classifies explicit PR facts.
 - `ishiban/lody.py` owns bounded Lody and GitHub subprocess lifetimes.
@@ -10,7 +11,7 @@ This page locates the proof of concept's runtime components and verification.
   incrementally, leaving validation to the protocol decoder.
 - `ishiban/collector.py` supervises observation and catalogue reconciliation.
 - `ishiban/storage/` contains SQLAlchemy models, transactional journal writing,
-  snapshot reads, and projection reconciliation.
+  snapshot reads, and adapters that apply runtime plans to public projections.
 - `ishiban/interface_state.py` signs and validates browser preference cookies.
 - `ishiban/lazy_activity.py` bounds and caches per-session activity reads.
 - `ishiban/session_show.py` shares bounded, identity-verified session-show

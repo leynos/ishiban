@@ -2,10 +2,10 @@
 
 import typing as typ
 
-from ishiban.domain import Turn
+from ishiban.runtime_evidence import PersistedObservation, plan_observation, plan_turn
 
 if typ.TYPE_CHECKING:
-    from ishiban.domain import CatalogueEntry, Envelope, ObservedSession
+    from ishiban.domain import CatalogueEntry, Envelope, ObservedSession, Turn
 
 type SessionProjection = dict[str, object]
 
@@ -71,16 +71,17 @@ def apply_observation(
         "freshness": observed.freshness,
     })
 
-    if observed.source == "persisted":
+    plan = plan_observation(observed, generation, observed_at)
+    if isinstance(plan, PersistedObservation):
         projection.update({
-            "state": observed.state,
-            "latestTurn": _turn_projection(observed.latest_turn),
-            "activeTurns": [_turn_projection(turn) for turn in observed.active_turns],
-            "lastEvidenceGeneration": generation,
-            "lastObservedAt": observed_at,
+            "state": plan.state,
+            "latestTurn": _turn_projection(plan.latest_turn),
+            "activeTurns": [_turn_projection(turn) for turn in plan.active_turns],
+            "lastEvidenceGeneration": plan.generation,
+            "lastObservedAt": plan.observed_at,
         })
     else:
-        projection["lastMetadataGeneration"] = generation
+        projection["lastMetadataGeneration"] = plan.generation
         if existing is None:
             projection["state"] = "unknown"
     return projection
@@ -100,24 +101,23 @@ def apply_turn_event(
     """
     session_id = envelope.session_id or ""
     projection = empty_session(session_id) if existing is None else dict(existing)
-    turn = _event_turn(envelope)
-    user_turn_id = envelope.user_turn_id or ""
+    plan = plan_turn(envelope, generation)
     active_turns = [
         item
         for item in _projection_list(projection, "activeTurns")
-        if _projection_string(item, "userTurnId") != user_turn_id
+        if _projection_string(item, "userTurnId") != plan.retire_user_turn_id
     ]
-    if envelope.type == "turn.started":
-        active_turns.append(turn)
+    if plan.active_turn is not None:
+        active_turns.append(_turn_fields(plan.active_turn))
 
     projection.update({
         "removed": False,
         "source": "persisted",
         "freshness": "synced",
-        "latestTurn": turn,
+        "latestTurn": _turn_fields(plan.latest_turn),
         "activeTurns": active_turns,
-        "lastEvidenceGeneration": generation,
-        "lastObservedAt": envelope.observed_at,
+        "lastEvidenceGeneration": plan.generation,
+        "lastObservedAt": plan.observed_at,
     })
     return projection
 
@@ -188,28 +188,6 @@ def _turn_projection(turn: Turn | None) -> dict[str, object] | None:
     if turn is None:
         return None
     return _turn_fields(turn)
-
-
-def _event_turn(envelope: Envelope) -> dict[str, object]:
-    """Build the same public turn shape for a start or finish event.
-
-    Returns
-    -------
-    dict[str, object]
-        The latest known public fields for the event's turn.
-    """
-    state = (
-        "running" if envelope.type == "turn.started" else envelope.outcome or "unknown"
-    )
-    return _turn_fields(
-        Turn(
-            user_turn_id=envelope.user_turn_id or "",
-            state=state,
-            assistant_turn_id=envelope.assistant_turn_id,
-            duration_ms=envelope.duration_ms,
-            error=envelope.error,
-        )
-    )
 
 
 def _turn_fields(turn: Turn) -> dict[str, object]:

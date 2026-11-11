@@ -5,6 +5,8 @@ reference material.
 
 ## Design and reference
 
+- [Runtime evidence transition policy](adr-008-runtime-evidence-policy.md)
+  separates pure merge decisions from compatible public-projection encoding.
 - [Logical session families](adr-007-session-tab-families.md) records the
   approved board grouping, per-tab recency, and bounded metadata-read policy.
 - [Public turn previews and fixed-size cursors](adr-006-public-turn-previews-and-cursors.md)
