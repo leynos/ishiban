@@ -7,6 +7,32 @@ import {isBrowserEnabled} from './native-browser-environment';
 
 const sessionName = `ishiban-layout-${process.pid}`;
 const snapshot = createDemoSnapshot();
+const liveSnapshot = {
+  ...snapshot,
+  workspaceId: 'live-source-fixture',
+  collector: {...snapshot.collector, state: 'following' as const},
+  sessions: [
+    {
+      ...firstSession(snapshot),
+      title: 'Live source task',
+      source: 'metadata' as const,
+      freshness: 'synced' as const,
+      state: 'idle' as const
+    }
+  ]
+};
+interface ModeView {
+  readonly workspace: string;
+  readonly connection: string;
+  readonly mark: string;
+}
+const MODE_VIEW_EXPRESSION = `(()=>({workspace:document.querySelector('.board-workspace')?.textContent,
+  connection:document.querySelector('.source-health span')?.textContent,
+  mark:document.querySelector('button.session-mark')?.getAttribute('aria-label')}))()`;
+const LIVE_CONNECTED_PREDICATE = `(()=>
+  document.querySelector('.board-workspace')?.textContent?.includes('live-source-fixture')&&
+  document.querySelector('.source-health span')?.textContent?.includes('Connected'))()`;
+let servedSnapshot = snapshot;
 const sinks = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encoder = new TextEncoder();
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -22,6 +48,11 @@ async function browser(...args: string[]): Promise<string> {
     throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
   }
   return output.trim();
+}
+
+/** Decode one bounded browser measurement returned by the owned CLI. */
+async function browserJson<Value>(expression: string): Promise<Value> {
+  return JSON.parse(await browser('eval', expression));
 }
 
 /** Keep a real SSE response open; for example, enqueue one observation in a test. */
@@ -43,7 +74,7 @@ function eventResponse(): Response {
 /** Serve built assets and synthetic API boundaries; for example, GET /api/v1/snapshot. */
 function fixtureResponse(request: Request): Response {
   const path = new URL(request.url).pathname;
-  if (path === '/api/v1/snapshot') return Response.json(snapshot);
+  if (path === '/api/v1/snapshot') return Response.json(servedSnapshot);
   if (path === '/api/v1/events') return eventResponse();
   const assets = new Map([
     ['/', 'index.html'],
@@ -94,10 +125,15 @@ async function watchPulse(cursor: number): Promise<void> {
 
 /** Measure rendered board geometry; for example, await assertDockedGeometry(). */
 async function assertDockedGeometry(): Promise<void> {
-  const geometry = JSON.parse(
-    await browser(
-      'eval',
-      `(()=>{
+  const geometry = await browserJson<{
+    mainHeight: number;
+    inspectorHeight: number;
+    mainRight: number;
+    inspectorLeft: number;
+    paddingRight: number;
+    rootFontSize: number;
+  }>(
+    `(()=>{
       const main=document.querySelector('.board-main').getBoundingClientRect();
       const inspector=document.querySelector('.session-inspector').getBoundingClientRect();
       const scroll=document.querySelector('.board-scroll');
@@ -106,7 +142,6 @@ async function assertDockedGeometry(): Promise<void> {
         paddingRight:Number.parseFloat(getComputedStyle(scroll).paddingRight),
         rootFontSize:Number.parseFloat(getComputedStyle(document.documentElement).fontSize)};
     })()`
-    )
   );
   expect(Math.abs(geometry.inspectorHeight - geometry.mainHeight)).toBeLessThan(1);
   expect(Math.abs(geometry.inspectorLeft - geometry.mainRight)).toBeLessThan(1);
@@ -115,23 +150,112 @@ async function assertDockedGeometry(): Promise<void> {
 
 /** Measure the table pane; for example, await measureScrollPane(). */
 async function measureScrollPane() {
-  return JSON.parse(
-    await browser(
-      'eval',
-      `(()=>{const s=document.querySelector('.board-scroll');
+  return browserJson<{left: number; width: number; content: number; page: number; viewport: number}>(
+    `(()=>{const s=document.querySelector('.board-scroll');
         s.scrollLeft=s.scrollWidth;
         return {left:s.scrollLeft,width:s.clientWidth,content:s.scrollWidth,
           page:document.documentElement.scrollWidth,viewport:innerWidth};})()`
-    )
   );
 }
 
+/** Wait for a browser SSE teardown or restart without guessing its timing. */
+async function waitForSinkCount(expected: number): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    if (sinks.size === expected) return;
+    await Bun.sleep(20);
+  }
+  throw new Error(`Expected ${expected} owned SSE streams; found ${sinks.size}.`);
+}
+
+/** Count only observers that actually scan session marks. */
+async function installObserverProbe(): Promise<void> {
+  await browser(
+    'eval',
+    `(()=>{const original=window.IntersectionObserver;
+      window.modeObserver={markObservers:new Set(),closedObservers:new Set(),original};
+      window.IntersectionObserver=function(callback,options){
+        const observer=new original(callback,options);
+        const observe=observer.observe.bind(observer);
+        const disconnect=observer.disconnect.bind(observer);
+        observer.observe=(target)=>{if(target.matches?.('button[data-session-id]')){
+          window.modeObserver.markObservers.add(observer);}return observe(target)};
+        observer.disconnect=()=>{window.modeObserver.closedObservers.add(observer);return disconnect()};
+        return observer};
+      window.IntersectionObserver.prototype=original.prototype;
+      return true;})()`
+  );
+}
+
+/** Release the probe and return to an inert demo view after this case. */
+async function restoreModeFixture(): Promise<void> {
+  servedSnapshot = snapshot;
+  await browser(
+    'eval',
+    `(()=>{const metrics=window.modeObserver;
+      if(metrics)window.IntersectionObserver=metrics.original;
+      const demo=[...document.querySelectorAll('.data-mode button')]
+        .find((button)=>button.textContent?.includes('Demo data'));
+      if(demo?.getAttribute('aria-pressed')==='false')demo.click();})()`
+  );
+  await waitForSinkCount(0);
+}
+
+/** Exercise the real app's source switch through visible browser controls. */
+async function verifyLiveDemoLiveSwitch(): Promise<void> {
+  servedSnapshot = liveSnapshot;
+  try {
+    await browser('reload');
+    await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
+    await waitForSinkCount(1);
+    const live = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    expect(live.workspace).toContain('live-source-fixture');
+    expect(live.connection).toContain('Connected');
+    expect(live.mark).toContain('Live source task');
+
+    await browser('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
+    await browser(
+      'wait',
+      '--fn',
+      'document.querySelector(".source-health")?.textContent?.includes("Demo data — no live connections")'
+    );
+    await waitForSinkCount(0);
+    const demo = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    expect(demo.workspace).toContain('leynos');
+    expect(demo.connection).toContain('Demo data — no live connections');
+    expect(demo.mark).toContain('Synthetic');
+    expect(demo.mark).not.toContain('Live source task');
+    await installObserverProbe();
+
+    await browser('find', 'role', 'button', 'click', '--name', 'Live · leynos', '--exact');
+    await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
+    await browser('wait', '--fn', 'window.modeObserver?.markObservers.size >= 2');
+    await waitForSinkCount(1);
+    const resumed = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    expect(resumed.connection).toContain('Connected');
+    expect(resumed.mark).toContain('Live source task');
+    await browser('eval', 'window.modeObserver.captured=new Set(window.modeObserver.markObservers);true');
+    await browser('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
+    await browser(
+      'wait',
+      '--fn',
+      'Array.from(window.modeObserver?.captured ?? []).every((observer)=>window.modeObserver.closedObservers.has(observer))'
+    );
+    await waitForSinkCount(0);
+  } finally {
+    await restoreModeFixture();
+  }
+}
+
+/** Start the owned loopback fixture and its uniquely named Chromium session. */
+async function startBrowserFixture(): Promise<void> {
+  server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
+  await browser('open', String(server.url));
+  await browser('set', 'viewport', '1280', '1200');
+}
+
 describe.skipIf(!isBrowserEnabled)('real board layout', () => {
-  beforeAll(async () => {
-    server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
-    await browser('open', String(server.url));
-    await browser('set', 'viewport', '1280', '1200');
-  }, 75_000);
+  beforeAll(startBrowserFixture, 75_000);
 
   beforeEach(async () => {
     await browser('reload');
@@ -221,4 +345,6 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(reduced.animation).toBe('none');
     expect(reduced.display).toBe('none');
   }, 240_000);
+
+  it('closes live observation in demo mode and resumes it on return', verifyLiveDemoLiveSwitch, 240_000);
 });
