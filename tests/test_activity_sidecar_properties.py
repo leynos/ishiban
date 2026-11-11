@@ -1,7 +1,7 @@
-"""Generated Store histories protect sidecar activity while cache age stays valid.
+"""Generated Store histories protect durable sidecar activity.
 
-The cache has no time-based expiry. These histories vary execution revisions and
-reopen the database; expiry and pruning have separate focused tests.
+The sidecar has no time-based expiry; the lazy-activity request cache has a
+separate TTL. These histories vary execution revisions and reopen the database.
 """
 
 import dataclasses as dc
