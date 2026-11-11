@@ -98,6 +98,13 @@ skip the browser cases. Geometry checks cover the pane's horizontal overflow
 with and without the inspector, compact evidence visibility, and task-bounded
 list pulses with reduced-motion support.
 
+`tests/browser-command.ts` owns only the layout suite's CLI children and its
+real-child regressions. It caps each output pipe at 64 KiB, gives commands a
+20-second lifetime in the layout wrapper, and bounds reaping separately to two
+seconds. Hook and test budgets allow the wrapper's teardown to run before the
+runner expires. Keep this helper out of browser application code and use the
+production process adapter for Python-owned commands.
+
 ## Local workflow
 
 The public entrypoint for formatting, linting, typechecking, tests, and
@@ -109,12 +116,10 @@ before being considered complete.
 including sources under hidden action directories. It runs Ruff 0.16.8,
 Interrogate for 100% docstring coverage, Pylint, the DF12 Python lint plugin,
 Ambrleaks on `tests/`, the strict Skylos gate and Vulture on test helpers, the
-shared Nose duplication gate, and workflow/action validation. Pylint's base
-sweep runs on PyPy 3.12 when the selected Python baseline is exactly 3.12; for
-a newer baseline it runs on CPython at that baseline. The baseline is the
-selected `python_version`, with 3.12 as the minimum supported version. The DF12
-Python Lints v0.4.0, Ambrleaks, Skylos, Vulture, and duplication tools run as
-isolated tools on Python 3.14.
+shared Nose duplication gate, and workflow/action validation. The application
+requires Python 3.14 or later. Pylint's base sweep runs on managed CPython
+3.14, the selected project baseline. The DF12 Python Lints v0.4.0, Ambrleaks,
+Skylos, Vulture, and duplication tools run as isolated tools on Python 3.14.
 
 With default Git source discovery, `fmt`, `check-fmt`, `lint-python`, and
 `typecheck` stop with a diagnostic before running tools if Git or repository
@@ -217,16 +222,15 @@ The generated repository includes GitHub Actions workflows and local composite
 actions under `.github/`.
 
 - `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. It
-  sets up the selected `python_version` baseline (at least 3.12), installs
-  `uv`, validates the generated `Makefile` with `mbake`, installs CLI tools,
-  then runs `make build`, `make check-fmt`, `make lint`, `make typecheck`,
-  `make markdownlint`, and `make audit` except for Dependabot pull requests via
-  `if: github.actor != 'dependabot[bot]'`. The Markdown target includes
-  repository-wide spelling. CI provisions Go and Rust/Cargo toolchains for
-  installing CLI tools, then delegates coverage generation to the shared
-  coverage action. Rust lint and test tools are installed and
-  `rust_extension/Cargo.toml` is passed to coverage only when the Rust
-  extension is enabled.
+  sets up Python 3.14, installs `uv`, validates the generated `Makefile` with
+  `mbake`, installs CLI tools, then runs `make build`, `make check-fmt`,
+  `make lint`, `make typecheck`, `make markdownlint`, and `make audit` except
+  for Dependabot pull requests via `if: github.actor != 'dependabot[bot]'`. The
+  Markdown target includes repository-wide spelling. CI provisions Go and
+  Rust/Cargo toolchains for installing CLI tools, then delegates coverage
+  generation to the shared coverage action. Rust lint and test tools are
+  installed and `rust_extension/Cargo.toml` is passed to coverage only when the
+  Rust extension is enabled.
 - `.github/workflows/audit.yml` runs `make audit` against the default branch
   weekly as the compensating control for the Dependabot CI bypass.
 - `.github/workflows/act-validation.yml` runs rendered workflow validation in a
@@ -336,6 +340,28 @@ tests share process creation and call-log polling while preserving different
 observer/session-show envelopes. Brief setup and partial-result assertions
 remain independent where the tests distinguish cache expiry, identity
 validation, waiter cancellation, and service shutdown.
+
+`tests/merged_output_process.py` adapts the existing bounded child reaper for
+test command runners that merge stderr into stdout. Bun capture and executable
+guide examples share it after their bounded readers stop. It drains discarded
+output and preserves cancellation during teardown, including for an exited
+child whose pipe is still open. Keep this adapter scoped to merged-output test
+children; production process ownership stays in its existing adapter.
+
+Collector startup tests keep their workspace-adjusted observer frames and
+initial PR catalogue builders, controlled stream and bounded polling helpers
+local to `tests/test_collector_startup.py`. They hold enrichment behind a
+release event while asserting durable live ingestion, then verify that stale
+metadata preserves runtime state. Catalogue metadata may advance a session's
+local cursor after the observer event; the journal row retains its original
+post-event projection. Startup remains `catalogue_ready` until the first
+reconciliation attempt settles. The later `following` source record follows all
+initial catalogue records in durable order; the browser keeps that phase quiet
+while still applying live state. Later metadata and runtime changes retain
+their normal cues. The local subscription wrapper in
+`tests/board-startup-updates.test.tsx` connects the real board to sequential
+`BoardStore` updates, testing that same startup order without relying on React
+to batch frames. Keep that wrapper local to this regression.
 
 Each exception in `pyproject.toml` records its participating units or exact
 files and its reason. Nose reports anonymous fragments without enclosing unit
@@ -514,12 +540,17 @@ journal or browser preferences.
 `src/ui/pr-stack-order.ts` selects known graph tips: a same-repository,
 non-fork base/head branch match identifies a prerequisite. Tips use active,
 merged, then closed/unknown lifecycle priority, chronological merge time and a
-stable URL tie-break. A cycle without tips uses that same fallback. GitHub can
-retarget dependent branches after prerequisites merge, so lifecycle priority is
-a fallback rather than proof of dependency. Selection precedes title lookup,
-preventing a late prerequisite title from replacing the chosen PR. The exact
-title becomes the linked heading, with the session title below it. PR numbers
-are parsed from URLs and rendered separately in neutral text.
+stable URL tie-break. Repository identity ignores owner/name casing while
+branch matching and original URL keys remain exact. A cycle without tips uses
+that same fallback. GitHub can retarget dependent branches after prerequisites
+merge, so lifecycle priority is a fallback rather than proof of dependency.
+Selection precedes title lookup, preventing a late prerequisite title from
+replacing the chosen PR. The exact title becomes the linked heading, with the
+session title below it. PR numbers are parsed from URLs and rendered separately
+in neutral text. The selector's local `hasLocalStackFacts` predicate narrows
+both PRs' facts to an explicit non-fork observation before either branch
+identity is used. It belongs only to stack selection; unknown or missing fork
+evidence cannot prove a dependency.
 
 The shared bounded JSON-object reader belongs only to read-only CLI adapters.
 Catalogue, activity and metadata readers supply their own limits and perform
@@ -698,7 +729,10 @@ cooldown, independent of the bounded per-member fact cache, so an endpoint
 failure cannot cause an immediate retry loop across visible families. Malformed
 or missing HTTP 200 members engage the same cooldown after valid siblings are
 applied. The recency decoder marks malformed members before the shared frame
-reader skips them; activity decoding retains its independent-member policy.
+reader skips them; activity decoding retains its independent-member policy. A
+valid member with a superseded execution watermark settles as unavailable for
+that member's cache interval; it does not engage the transport cooldown or
+delay other visible families.
 
 `src/lookup-session-id.ts` is the one pure client-side admission predicate for
 the recency and lazy-activity producers. It mirrors Falcon's nonempty,
@@ -741,7 +775,11 @@ limits the service to two CLI children, caches successes for 300 seconds and
 failures for 30 seconds, and bounds the queue-inclusive operation to 45
 seconds. Shutdown cancels and reaps outstanding reads. Agent configuration
 display-name lookup remains inspector-triggered. This cache is process-local;
-durable activity facts continue to belong to the separate activity sidecar.
+durable activity facts continue to belong to the separate activity sidecar. The
+CLI argument vector places options before `--` and preserves the exact session
+ID after it. A successful show envelope must explicitly supply
+`latestHistoryAt`; null confirms empty history, while an omitted field makes
+the read unavailable.
 
 `ishiban.bounded_batch` shares only the activity and recency endpoints' bounded
 request-body decoding, frame preflight, and independent waiter start and reap.

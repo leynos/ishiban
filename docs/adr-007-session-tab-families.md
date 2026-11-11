@@ -112,7 +112,10 @@ Pack each request by both member count and actual UTF-8 JSON bytes. Accepted
 count-only batches could exceed the server's 8,192-byte limit. Valid siblings
 from a streamed response remain usable, while malformed or missing members
 trigger the same 30-second transport cooldown as HTTP failure. A normal
-per-member `unavailable` result stays separate from malformed transport.
+per-member `unavailable` result stays separate from malformed transport. A
+valid response with an obsolete execution watermark settles only that member as
+unavailable. It does not count as a missing transport member or start the
+owner-wide cooldown.
 
 The request contains only `sessionIds`; workspace scope stays in request
 ownership and response validation. Transport failures pause further batch
@@ -142,13 +145,15 @@ unavailable-link notice while the raw copyable ID remains usable. A selected
 child ID stays safe in the web link's tab query.
 
 Inspector PR selection retains the family root's associations and chooses a
-stack tip from validated same-repository, non-fork branch relationships.
-Lifecycle, merge-time and stable-URL ordering resolve remaining ambiguity,
-including branches retargeted after a prerequisite merge. Missing or cyclic
-relationships use that fallback; they do not invent dependency evidence. The
-chosen identity is independent of which title arrives first. These facts are
-lazy inspector metadata, shared with the existing title cache, and neither
-change workflow classification nor enter the observation journal.
+stack tip from validated same-repository, non-fork branch relationships. GitHub
+owner and repository identities compare case-insensitively; branch names retain
+their case, and original URLs remain cache keys and link targets. Lifecycle,
+merge-time and stable-URL ordering resolve remaining ambiguity, including
+branches retargeted after a prerequisite merge. Missing or cyclic relationships
+use that fallback; they do not invent dependency evidence. The chosen identity
+is independent of which title arrives first. These facts are lazy inspector
+metadata, shared with the existing title cache, and neither change workflow
+classification nor enter the observation journal.
 
 ## Consequences
 

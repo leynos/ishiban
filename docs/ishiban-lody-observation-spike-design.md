@@ -1,13 +1,13 @@
 # Ishiban: single-workspace Lody observation spike
 
 **Status:** Accepted design; proof of concept implemented and validated
-locally, including the follow-up interface refinements. Reported review
-findings are addressed; the acceptance record documents one CodeScene advisory
-and an unexplained CodeRabbit completion warning.
+locally, including the follow-up interface refinements. Review reconciliation
+is in progress; the acceptance record distinguishes validation evidence from
+pending findings and incomplete external review coverage.
 
-Logical session-family grouping is implemented in the current worktree, with
-full gates and browser acceptance pending; see
-[ADR 007](adr-007-session-tab-families.md).
+Logical session-family grouping has passed the repository gates and local
+browser acceptance checks. Hosted Chromium evidence is not available; review
+reconciliation remains pending. See [ADR 007](adr-007-session-tab-families.md).
 
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
@@ -206,7 +206,18 @@ Python tests stay in the top-level `tests/` tree; the Bun frontend uses `src/`.
    state.
 6. On `ready`, mark *catalogue enumeration* ready, not every session fully
    synchronized. Fetch the optional read-only catalogue snapshot for repository
-   enrichment.
+   enrichment in a separately owned refresh task while stream ingestion
+   continues. The CLI's workspace-identity preflight may provide the initial
+   catalogue, but GitHub enrichment and reconciliation wait for observer
+   readiness. Enrichment failure leaves the live observer attached and records
+   stale-association health; observer teardown cancels and reaps its refresh
+   task. Metadata reconciliation preserves newer execution evidence. Keep
+   `catalogue_ready` until the initial reconciliation attempt completes or
+   fails with a retained warning, then publish `following`. The board includes
+   this phase in its quiet startup baseline: live activity remains visible
+   during initial enrichment, without pulses. Journal order places the
+   `following` source record after all bootstrap catalogue records, so quiet
+   admission does not depend on browser batching.
 7. On EOF, nonzero exit, parse failure or unrecoverable protocol error, record
    source health and last known valid event. Mark the collector disconnected;
    **do not** convert running turns to failed or idle. Restart with bounded
@@ -700,5 +711,6 @@ The shared session-show reader serves recency and inspector agent metadata
 through at most two CLI children, identity and watermark singleflight, bounded
 LRU/TTL caches, and a 45-second queue-inclusive deadline. It is process-local;
 an API restart re-enriches visible families and does not alter durable activity
-facts. Board and resource integration are implemented in the current worktree;
-full repository gates and browser acceptance remain pending.
+facts. Board and resource integration have passed the repository gates and
+local browser acceptance checks; hosted Chromium evidence is not available. The
+ExecPlan records candidate revisions and the remaining review work.

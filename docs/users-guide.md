@@ -164,7 +164,10 @@ Lody provides current materialized evidence, not a replay of every historical
 transition. Transitions missed while the collector was offline cannot be
 recovered from an Ishiban-local cursor. The session catalogue is not a complete
 repository or work-item inventory. GitHub enrichment is periodic, and the
-application does not evaluate CI, review approval, issues, or dependencies.
+application does not evaluate CI, review approval, issues, or dependencies. The
+collector attaches its observer before GitHub enrichment so a slow PR lookup
+does not delay observation. Failed enrichment can leave associations stale
+while live session updates continue.
 
 During validation of the `leynos` workspace, the upstream Lody observer used
 approximately 4.4 GiB of resident memory after hydration; the collector and API
@@ -411,6 +414,10 @@ cached results can appear immediately. The installed Lody CLI still requires an
 individual observation per uncached session, so a cold workspace can take time
 to resolve.
 
+A tab that changes execution while its history lookup is in flight does not
+delay history lookups for other visible families. Its stale result is discarded
+and that tab remains provisional until a later lookup succeeds.
+
 If an activity response exceeds its transfer limit, the inspector shows a quiet
 activity notice and retains known session facts and the Lody link. The notice
 survives metadata-only refresh, clears on successful recovery or newer
@@ -418,7 +425,10 @@ execution, and does not pulse the task. It is not a session error.
 
 Restarting the collector establishes a fresh pulse baseline. Replayed metadata,
 unchanged runtime facts and on-demand enrichment do not pulse. Meaningful task
-changes received after startup continue to pulse.
+changes received after startup continue to pulse. During the initial catalogue
+enrichment attempt, the collector remains `catalogue_ready`. Activity updates
+remain visible without pulses until that attempt finishes or reports a metadata
+warning.
 
 API warning categories distinguish capacity, deadline, CLI, protocol and
 storage failures. A `partial` PR-title warning retains known sibling titles

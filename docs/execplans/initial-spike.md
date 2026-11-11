@@ -1243,3 +1243,84 @@ separately before restoring the exact production source. This adds acceptance
 coverage without changing the runtime contract. Candidate-specific gates and
 post-push disposition remain tracked in
 [PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Python baseline and stack-heading property, 11 November 2026
+
+The developer guide now states the application requirement from
+`pyproject.toml`: Python 3.14 or later. Its Pylint and CI descriptions match
+the actual CPython 3.14 Makefile and workflow configuration; the stale PyPy
+3.12 branch and minimum-version claim are removed.
+
+A bounded fast-check property builds distinct canonical PR URLs from indexed
+branch graphs. Forced branching, closed-cycle and missing/fork topologies, plus
+random graphs, produce 160 cases; each checks original, reversed and generated
+catalogue orders. An independent parent-index oracle selects eligible tips,
+then lifecycle, semantic merge instant and stable URL fallback. Encoded facts
+vary repository, branch, fork, missing and incomplete evidence, merge timestamp
+precision and invalid dates. Missing facts cannot contribute a merge instant.
+The indexed oracle and encoding helpers remain local to this property suite;
+production selection and fixed examples share no model code. Temporarily
+ignoring graph tips or active lifecycle rank made the property fail; the
+selector source was restored exactly. This is sampled graph evidence, not a
+formal proof, and changes no runtime selection behaviour. Candidate-specific
+quality gates and review disposition remain tracked in
+[PR #9](https://github.com/leynos/ishiban/pull/9).
+
+### Observer startup and response ownership repairs, 11 November 2026
+
+The collector now attaches observation before PR enrichment and starts its
+owned catalogue refresher only after a validated `ready` frame. A delayed
+enrichment regression failed before the fix and now proves a running transition
+is durably ingested while enrichment remains pending. Releasing stale metadata
+preserves that runtime state. A separate EOF-before-ready case proves no
+catalogue read starts. The existing workspace-identity preflight remains
+necessary before the collector starts.
+
+Session-show decoding requires an explicit `latestHistoryAt`; null means a
+successful empty history, while omission makes metadata unavailable. CLI
+options precede `--`, preserving even a leading-hyphen session ID. The
+missing-field and argument-vector regressions failed before the repair; the
+affected 33 Python cases pass afterwards. Public `read_show` parameters are
+documented.
+
+A valid recency frame with an obsolete execution watermark now settles only
+that member as unavailable. It no longer appears to be an omitted transport
+member or triggers the owner-wide cooldown. The regression failed with two
+requests instead of the expected next batch; the affected 18 Bun cases pass
+afterwards, including malformed and missing-frame cooldown controls.
+
+Test command runners reuse the production bounded reaper through a
+merged-output adapter. The real 16 MiB Bun flood reproduced the previous hang;
+bounded teardown now drains discarded output and preserves cancellation. The
+guide runner has its own real overflow regression. Cache eviction setup now
+asserts both rows were assigned controlled ages in the actual workspace; that
+assertion failed before correcting the workspace. Four-child concurrency uses a
+bounded ready/release barrier instead of depending on a short sleep. These
+fixture repairs passed 34 focused Python cases. Aggregate gates and
+current-head review confirmation remain separate acceptance steps.
+
+The opt-in browser suite now uses an owned command deadline, bounded pipe
+capture and bounded reaping. Five real-child cases cover output/status,
+deadline rejection, reaping and either pipe's 64 KiB limit. The actual Chromium
+layout suite passed all four cases locally after this repair. This is local
+browser evidence; no hosted Chromium run is claimed.
+
+The affected assessment found one further stack-selection defect: accepted
+GitHub URLs with different owner/repository casing could hide a proven branch
+edge. Both catalogue-order examples and the generated graph property failed
+before repository identity was folded case-insensitively. The fixed selector
+keeps branch names, original fact keys and link targets exact. The generated
+model now varies URL casing independently of repository identity; the affected
+stack suites pass 15 cases. Prior cancellation, activity-queue and heartbeat
+findings were accepted in the assessment replies; the saved architecture gate
+still requires check-owner reconciliation of the accepted scope dispositions.
+
+Integration review identified a startup-cue hazard in the observer-first
+ordering: announcing `following` before delayed catalogue enrichment would make
+initial metadata look like later live changes. Initial reconciliation now
+retains the existing `catalogue_ready` phase until success or handled failure;
+the browser includes that phase in its quiet baseline. Stream ingestion
+continues throughout. Historical source records carry phase transitions in
+journal order, so all bootstrap catalogue records precede `following` and stay
+quiet independently of React batching. Later meaningful changes keep their
+pulses. This adds no public schema flag or journal rewrite.
