@@ -121,12 +121,21 @@ and confirms the inspector and the new browsing context share the child-tab
 destination. It performs a genuine middle-button gesture with `agent-browser`'s
 `mouse move`, `mouse down middle` and `mouse up middle` commands, then checks
 one opener request, no selection, no duplicate tab and an inert empty
-placeholder. It requires the `mouse` and `tab list --json` commands available
-in agent-browser 0.34.x. The browser launches with
-`--allowed-domains 127.0.0.1`; the page's `window.open` is replaced by a probe
-so the external Lody URL is recorded without leaving the loopback origin.
-Ordinary `click` still exercises real left-button selection and the inspector's
-link identity.
+placeholder. It requires the `mouse`, `network route`, `tab <id>`,
+`tab close <id>` and `tab list --json` commands available in agent-browser
+0.34.x. The probe cases replace `window.open` so the exact external Lody URL
+and features are recorded without leaving the loopback origin. A final case
+restores the native `window.open`, middle-clicks the child mark, waits for a
+second real tab at the exact child-tab URL, checks the inspector stayed closed,
+then switches back and closes that tab.
+
+The suite cannot use `--allowed-domains 127.0.0.1`: agent-browser 0.34 fails to
+attach its network controls to a popup created under that restriction, which
+also discards the application tab. It instead installs
+`network route "https://lody.ai/**" --abort`, so the genuine popup keeps the
+canonical destination while no Lody request leaves the machine. Ordinary
+`click` still exercises real left-button selection and the inspector's link
+identity.
 
 `tests/native-browser-environment.ts` owns the shared opt-in switch and
 restores Bun's native globals once after the Happy DOM preload. Both native
