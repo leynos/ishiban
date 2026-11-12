@@ -336,6 +336,48 @@ runtime classes. The test helpers import them only for type checking.
 runtime entry points in the quality configuration; their implementations remain
 subject to linting and behavioural tests.
 
+## Enrichment command and query boundaries
+
+[ADR 0009](adrs/adr-0009-enrichment-command-query-boundary.md) records the
+accepted POC split. Classify every new route by effect, not by HTTP method:
+
+- A retained-data query reads committed journal rows, events, health, the
+  durable cursor or browser-supplied interface state. It may overlay the
+  activity sidecar but must not start an upstream child or write durable state.
+- A bounded enrichment read may start one fixed, read-only `lody` or `gh` child
+  and may write only the activity sidecar. Keep its process, output, time,
+  cache and concurrency bounds explicit.
+- A collector command has no HTTP route. Only the collector writes the journal,
+  advances collector generations and owns evidence generation.
+- `POST` is acceptable for a bounded read that carries a JSON body; it is not
+  permission to add a command, job or task dispatch.
+
+Durable-effect rules:
+
+- Do not append or rewrite journal events, advance the cursor or invent
+  `lastEvidenceGeneration` from an API route.
+- Do not let inspector title or agent reads change workflow stage, stage reason
+  or PR associations; those remain collector evidence under
+  [ADR 002](adr-002-workflow-evidence.md).
+- Keep validation before use: protocol version, workspace identity, session
+  identity, known state and revision.
+- Shared SQLite permissions do not enforce collector-only ownership. Code
+  review and tests enforce it.
+
+Test seams:
+
+- Use `opened_store`, `seed_unknown_sessions` and `remember_idle_activity` from
+  `tests/storage_support.py` and `tests/batch_activity_support.py` for
+  retained-data and sidecar scenarios.
+- For retained-data queries, register `cmd-mox` spies for `lody` and `gh` with
+  no expectations, call the route, then assert no invocations and unchanged
+  journal events, cursor and sidecar row count.
+- Use `ActivityResolutionOptions` for injected clocks and the reader
+  constructors for injected executables.
+- Keep dedicated child executables for chunking, delayed EOF, transport
+  teardown, deadlines and cancellation, where command-response doubles cannot
+  exercise the contract.
+
 ## Duplication review
 
 The spike consolidates decoded string access, UTC timestamps, session lookup,
