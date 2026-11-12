@@ -5,6 +5,9 @@ reference material.
 
 ## Design and reference
 
+- [Enrichment command and query boundaries](adrs/adr-0009-enrichment-command-query-boundary.md)
+  records the accepted split between retained-data queries, bounded enrichment
+  reads and collector commands, including the collector-only journal boundary.
 - [Runtime evidence transition policy](adr-008-runtime-evidence-policy.md)
   separates pure merge decisions from compatible public-projection encoding.
 - [Logical session families](adr-007-session-tab-families.md) records the
