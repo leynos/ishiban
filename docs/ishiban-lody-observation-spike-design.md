@@ -175,6 +175,23 @@ process mutates upstream sessions. This isolates collector restarts from active
 browser connections and avoids the complexity of Falcon lifespan task ownership
 or an extra broker.
 
+### Enrichment command and query boundary
+
+The API classifies its routes by effect. Retained-data queries read committed
+projections, events, health, the durable cursor or browser-supplied interface
+state and may overlay the activity sidecar. Bounded enrichment reads may start
+a fixed read-only Lody or GitHub child and may write only the disposable
+activity sidecar. Collector commands are not HTTP routes: only the collector
+writes the journal, advances collector generations and owns evidence generation.
+[ADR 0009](adrs/adr-0009-enrichment-command-query-boundary.md) records the
+full contract, the accepted safe-method exception and the triggers for a future
+explicit command/query split.
+
+The state-directory lock makes the collector the sole journal writer. API
+startup uses `Store.initialize(migrate=False)`, but shared SQLite file
+permissions do not enforce that ownership; code paths and the recorded contract
+do.
+
 For a handful of browser clients, the API can tail SQLite every 250 ms in
 bounded batches per open SSE connection. The database is the synchronization
 boundary. Do not introduce Redis, Valkey, NATS, a broker or in-process
@@ -382,6 +399,19 @@ HTTP 413 before the stream starts. This transport limit leaves the private
 journal and cache complete; see
 [ADR 005](adrs/adr-0005-batched-activity-and-update-cues.md) and
 [ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md).
+
+[ADR 0009](adrs/adr-0009-enrichment-command-query-boundary.md) classifies these
+routes without changing them. `GET /api/v1/snapshot`, both session detail forms,
+`GET /api/v1/events`, `/health` and `/ready` are retained-data queries that
+start no upstream process and write no durable state. The singular and batch
+activity routes, recency, agent metadata and pull-request title routes are
+bounded enrichment reads: they may start fixed read-only children and may write
+only the activity sidecar. The two batch `POST` routes use a body, not a
+command contract. Collector commands have no HTTP route. Together with
+[ADR 003][adr-003], [ADR 004][adr-004], [ADR 005][adr-005], [ADR 007][adr-007]
+and [ADR 008][adr-008], this boundary separates interface preferences, sidecar
+persistence, batching, family projection and runtime evidence policy from the
+journal. The route table above remains the public contract.
 
 Session detail returns at most 100 retained turns in ascending
 `(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`
@@ -745,3 +775,9 @@ an API restart re-enriches visible families and does not alter durable activity
 facts. Board and resource integration have passed the repository gates and
 local browser acceptance checks; hosted Chromium evidence is not available. The
 ExecPlan records candidate revisions and the remaining review work.
+
+[adr-003]: adrs/adr-003-interface-state-and-lazy-activity.md
+[adr-004]: adrs/adr-004-persist-on-demand-activity.md
+[adr-005]: adrs/adr-005-batched-activity-and-update-cues.md
+[adr-007]: adrs/adr-007-session-tab-families.md
+[adr-008]: adrs/adr-008-runtime-evidence-policy.md
