@@ -34,7 +34,7 @@ class RetainedState:
 
     events: list[dict[str, object]]
     cursor: int
-    sidecar_rows: int
+    sidecar_rows: tuple[tuple[object, ...], ...]
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -44,6 +44,7 @@ class RouteResponses:
     snapshot: testing.Result
     path_detail: testing.Result
     query_detail: testing.Result
+    events: testing.Result
     replayed: dict[str, dict[str, object]]
 
 
@@ -58,22 +59,26 @@ class BoundaryCase:
     gh: SpyCommand
 
 
-def _sidecar_row_count(directory: pathlib.Path) -> int:
-    """Count retained activity rows for the ``w1`` workspace.
+def _sidecar_rows(directory: pathlib.Path) -> tuple[tuple[object, ...], ...]:
+    """Return every retained activity row for the ``w1`` workspace.
+
+    Comparing whole rows, rather than only their count, detects an in-place
+    update or upsert of an existing cached session.
 
     Returns
     -------
-    int
-        Number of cached runtime rows in the sibling sidecar database.
+    tuple of tuple of object
+        Sidecar rows ordered by session identity.
     """
     sidecar = directory / f"{JOURNAL_NAME}{SIDE_CAR_SUFFIX}"
     with sqlite3.connect(sidecar) as connection:
-        row = connection.execute(
-            "SELECT COUNT(*) FROM activity_runtime_cache WHERE workspace_id = ?",
+        rows = connection.execute(
+            "SELECT workspace_id, session_id, base_revision, runtime_json,"
+            " saved_at_ns FROM activity_runtime_cache"
+            " WHERE workspace_id = ? ORDER BY session_id",
             ("w1",),
-        ).fetchone()
-    assert row is not None, "A COUNT query always returns one row."
-    return int(row[0])
+        ).fetchall()
+    return tuple(tuple(row) for row in rows)
 
 
 async def _retained_state(store: Store, directory: pathlib.Path) -> RetainedState:
@@ -82,12 +87,12 @@ async def _retained_state(store: Store, directory: pathlib.Path) -> RetainedStat
     Returns
     -------
     RetainedState
-        Committed events, the durable cursor and the sidecar row count.
+        Committed events, the durable cursor and the sidecar contents.
     """
     return RetainedState(
         events=await store.events(0),
         cursor=await store.current_cursor(),
-        sidecar_rows=_sidecar_row_count(directory),
+        sidecar_rows=_sidecar_rows(directory),
     )
 
 
@@ -157,12 +162,18 @@ async def _exercise_routes(
         The route responses and the state observed before ASGI shutdown.
     """
     async with testing.ASGIConductor(create_app(store)) as conductor:
+        ahead = await store.current_cursor() + 1
         responses = RouteResponses(
             snapshot=await conductor.simulate_get("/api/v1/snapshot"),
             path_detail=await conductor.simulate_get(f"/api/v1/sessions/{CACHED_ID}"),
             query_detail=await conductor.simulate_get(
                 f"/api/v1/session-detail?sessionId={UNCACHED_ID}"
             ),
+            # A cursor ahead of retained order finishes at once, so the route,
+            # its cursor parsing and SSE encoding are exercised over HTTP. The
+            # open-ended live stream is read through ``tail`` below because
+            # Falcon's test client joins a whole response body.
+            events=await conductor.simulate_get(f"/api/v1/events?after={ahead}"),
             replayed=await _replayed_sessions(store, baseline),
         )
         # Read before shutdown closes the store that owns the connections.
@@ -203,7 +214,13 @@ def test_retained_data_queries_use_only_retained_state(
         responses.snapshot.status_code,
         responses.path_detail.status_code,
         responses.query_detail.status_code,
-    ) == (200, 200, 200), "Every retained-data route must serve the committed journal."
+        responses.events.status_code,
+    ) == (200, 200, 200, 200), (
+        "Every retained-data route must serve the committed journal."
+    )
+    assert '"reason": "cursor_ahead"' in responses.events.text, (
+        "The events route rejects a cursor ahead of retained order."
+    )
 
     snapshot = msgspec.convert(responses.snapshot.json, type=dict[str, object])
     cached = _snapshot_session(snapshot, CACHED_ID)
@@ -259,5 +276,5 @@ def test_retained_data_queries_use_only_retained_state(
         "Retained-data queries advance no cursor."
     )
     assert boundary_case.after.sidecar_rows == boundary_case.before.sidecar_rows, (
-        "Retained-data queries write no sidecar row."
+        "Retained-data queries change no retained activity field."
     )
