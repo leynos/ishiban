@@ -15,6 +15,7 @@ import {
   type RepositorySessions,
   type WorkflowStage
 } from './board-model';
+import {threadNavigationHandlers} from './thread-navigation';
 
 const COMPACT_STAGE_LABELS: Record<WorkflowStage, string> = {
   planning: 'Plan',
@@ -33,6 +34,8 @@ export interface SessionSelectionProps {
   readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
+  readonly canOpenThread: (family: SessionFamily) => boolean;
+  readonly onOpenThread: (family: SessionFamily) => boolean;
 }
 
 interface RepositoryTableProps extends SessionSelectionProps {
@@ -119,7 +122,9 @@ function SessionMark({
   selected,
   pulseRevision,
   onSelect,
-  onMarkNode
+  onMarkNode,
+  canOpenThread,
+  onOpenThread
 }: {
   readonly session: SessionFamily;
   readonly repository: string;
@@ -128,6 +133,8 @@ function SessionMark({
   readonly pulseRevision: number | undefined;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
+  readonly canOpenThread: (family: SessionFamily) => boolean;
+  readonly onOpenThread: (family: SessionFamily) => boolean;
 }): ReactElement {
   const activity = activityOf(session.activity.state);
   const provenance = evidenceLabel(session.activity, currentGeneration);
@@ -146,7 +153,11 @@ function SessionMark({
       data-session-id={session.activity.sessionId}
       data-stage={session.context.stage}
       data-update-revision={pulseRevision}
-      onClick={(event) => onSelect(session.rootId, event.currentTarget)}
+      {...threadNavigationHandlers(session, canOpenThread, onOpenThread)}
+      onClick={(event) => {
+        if (event.button !== 0) return;
+        onSelect(session.rootId, event.currentTarget);
+      }}
       ref={(node) => onMarkNode(session.rootId, node)}
       title={label}
       type="button"
@@ -206,7 +217,9 @@ function StageCell({
   selectedSessionId,
   pulseRevisions,
   onSelect,
-  onMarkNode
+  onMarkNode,
+  canOpenThread,
+  onOpenThread
 }: {
   readonly repository: RepositorySessions;
   readonly stage: WorkflowStage;
@@ -215,6 +228,8 @@ function StageCell({
   readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
+  readonly canOpenThread: (family: SessionFamily) => boolean;
+  readonly onOpenThread: (family: SessionFamily) => boolean;
 }): ReactElement {
   const matchingSessions = repository.sessions.filter((session) => session.context.stage === stage);
   const rowSlots = Math.max(5, Math.ceil(matchingSessions.length / 5) * 5);
@@ -227,9 +242,11 @@ function StageCell({
         <legend className="sr-only">{STAGE_LABELS[stage]} sessions</legend>
         {matchingSessions.map((session) => (
           <SessionMark
+            canOpenThread={canOpenThread}
             currentGeneration={currentGeneration}
             key={session.rootId}
             onMarkNode={onMarkNode}
+            onOpenThread={onOpenThread}
             onSelect={onSelect}
             pulseRevision={pulseRevisions.get(session.rootId)}
             repository={repository.name}
@@ -250,7 +267,9 @@ function RepositoryTable({
   selectedSessionId,
   pulseRevisions,
   onSelect,
-  onMarkNode
+  onMarkNode,
+  canOpenThread,
+  onOpenThread
 }: RepositoryTableProps): ReactElement {
   const bankSessions = repositories.flatMap((repository) => repository.sessions);
   return (
@@ -279,9 +298,11 @@ function RepositoryTable({
             </th>
             {WORKFLOW_STAGES.map((stage) => (
               <StageCell
+                canOpenThread={canOpenThread}
                 currentGeneration={currentGeneration}
                 key={stage}
                 onMarkNode={onMarkNode}
+                onOpenThread={onOpenThread}
                 onSelect={onSelect}
                 pulseRevisions={pulseRevisions}
                 repository={repository}
@@ -302,16 +323,27 @@ function RepositoryTable({
  * @returns A semantic repository and workflow stage table.
  */
 export function BoardBanks(props: BoardBanksProps): ReactElement {
-  const {repositories, currentGeneration, selectedSessionId, presentation, pulseRevisions, onSelect, onMarkNode} =
-    props;
+  const {
+    repositories,
+    currentGeneration,
+    selectedSessionId,
+    presentation,
+    pulseRevisions,
+    onSelect,
+    onMarkNode,
+    canOpenThread,
+    onOpenThread
+  } = props;
   const banks = createBanks(repositories, presentation);
   return (
     <div className="board-banks" data-bank-count={banks.length}>
       {banks.map((bank, index) => (
         <div className="board-bank" data-bank={index + 1} key={`bank-${index + 1}`}>
           <RepositoryTable
+            canOpenThread={canOpenThread}
             currentGeneration={currentGeneration}
             onMarkNode={onMarkNode}
+            onOpenThread={onOpenThread}
             onSelect={onSelect}
             pulseRevisions={pulseRevisions}
             repositories={bank}
@@ -330,7 +362,9 @@ function SessionListItem({
   selectedSessionId,
   pulseRevisions,
   onSelect,
-  onMarkNode
+  onMarkNode,
+  canOpenThread,
+  onOpenThread
 }: SessionListItemProps): ReactElement {
   const repository = session.context.repoFullName ?? REPOSITORY_UNAVAILABLE;
   const activity = activityOf(session.activity.state);
@@ -357,7 +391,11 @@ function SessionListItem({
         data-session-id={session.activity.sessionId}
         data-stage={session.context.stage}
         data-update-revision={pulseRevision}
-        onClick={(event) => onSelect(session.rootId, event.currentTarget)}
+        {...threadNavigationHandlers(session, canOpenThread, onOpenThread)}
+        onClick={(event) => {
+          if (event.button !== 0) return;
+          onSelect(session.rootId, event.currentTarget);
+        }}
         ref={(node) => onMarkNode(session.rootId, node)}
         type="button"
       >
@@ -381,14 +419,25 @@ function SessionListItem({
  * @returns A list of keyboard-operable session inspector triggers.
  */
 export function SessionList(props: SessionListProps): ReactElement {
-  const {sessions, currentGeneration, selectedSessionId, pulseRevisions, onSelect, onMarkNode} = props;
+  const {
+    sessions,
+    currentGeneration,
+    selectedSessionId,
+    pulseRevisions,
+    onSelect,
+    onMarkNode,
+    canOpenThread,
+    onOpenThread
+  } = props;
   return (
     <ul className="session-list">
       {sessions.map((session) => (
         <SessionListItem
+          canOpenThread={canOpenThread}
           currentGeneration={currentGeneration}
           key={session.rootId}
           onMarkNode={onMarkNode}
+          onOpenThread={onOpenThread}
           onSelect={onSelect}
           pulseRevisions={pulseRevisions}
           selectedSessionId={selectedSessionId}

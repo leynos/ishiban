@@ -15,6 +15,7 @@ import {useSessionRecency} from '../session-recency';
 import {BoardLayout, type BoardViewState} from './board-layout';
 import {filterSessions, type ActivityFilter, type Presentation} from './board-model';
 import {useInterfaceState} from './interface-state';
+import {openLodyThread, resolveFamilyLodyLink} from './lody-link';
 import {useSessionUpdates} from './session-updates';
 
 interface BoardProps {
@@ -156,6 +157,20 @@ function markForSelectedFamily(
   return markNodes.get(rootId);
 }
 
+/** Bind the canonical thread destination and openability to one workspace snapshot. */
+function useThreadNavigation(snapshot: Snapshot) {
+  const canOpenThread = useCallback(
+    (family: SessionFamily): boolean =>
+      resolveFamilyLodyLink(family, snapshot.workspaceId, snapshot.workspaceSlug).kind === 'link',
+    [snapshot.workspaceId, snapshot.workspaceSlug]
+  );
+  const onOpenThread = useCallback(
+    (family: SessionFamily): boolean => openLodyThread(family, snapshot.workspaceId, snapshot.workspaceSlug),
+    [snapshot.workspaceId, snapshot.workspaceSlug]
+  );
+  return {canOpenThread, onOpenThread};
+}
+
 /** Keep focus on the task; for example, replace a detached child trigger with its current root mark. */
 function focusAfterInspectorClose(
   initiatingTrigger: HTMLButtonElement | null,
@@ -209,6 +224,7 @@ export function Board(props: BoardProps): ReactElement {
     }
     viewState.onSelect(sessionId);
   };
+  const {canOpenThread, onOpenThread} = useThreadNavigation(snapshot);
   const onClose = (): void => {
     viewState.onClose();
     const initiatingTrigger = initiatingTriggerRef.current;
@@ -242,11 +258,13 @@ export function Board(props: BoardProps): ReactElement {
   return (
     <BoardLayout
       boardFallbackRef={boardFallbackRef}
+      canOpenThread={canOpenThread}
       connection={connection}
       inspectorSession={inspectorSession}
       onClose={onClose}
       onFocusCapture={onFocusCapture}
       onMarkNode={onMarkNode}
+      onOpenThread={onOpenThread}
       onSelect={onSelect}
       pulseRevisions={familyPulses}
       snapshot={snapshot}
