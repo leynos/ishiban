@@ -1,11 +1,13 @@
 /** @file Exercise computed board geometry and real SSE pulses in Chromium. */
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
+import {Schema} from 'effect';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
-import {runCapturedCommand} from './browser-command';
+import {createBrowserSession} from './browser-session';
+import {builtAssetResponse, openEventStream} from './fixture-boundaries';
 import {isBrowserEnabled} from './native-browser-environment';
 
-const sessionName = `ishiban-layout-${process.pid}`;
+const {browser, browserJson} = createBrowserSession(`ishiban-layout-${process.pid}`);
 const snapshot = createDemoSnapshot();
 const liveSnapshot = {
   ...snapshot,
@@ -21,14 +23,42 @@ const liveSnapshot = {
     }
   ]
 };
-interface ModeView {
-  readonly workspace: string;
-  readonly connection: string;
-  readonly mark: string;
-}
-const MODE_VIEW_EXPRESSION = `(()=>({workspace:document.querySelector('.board-workspace')?.textContent,
-  connection:document.querySelector('.source-health span')?.textContent,
-  mark:document.querySelector('button.session-mark')?.getAttribute('aria-label')}))()`;
+const ModeViewSchema = Schema.Struct({
+  workspace: Schema.String,
+  connection: Schema.String,
+  mark: Schema.String
+});
+const GeometrySchema = Schema.Struct({
+  mainHeight: Schema.Number,
+  inspectorHeight: Schema.Number,
+  mainRight: Schema.Number,
+  inspectorLeft: Schema.Number,
+  paddingRight: Schema.Number,
+  rootFontSize: Schema.Number
+});
+const ScrollPaneSchema = Schema.Struct({
+  left: Schema.Number,
+  width: Schema.Number,
+  content: Schema.Number,
+  page: Schema.Number,
+  viewport: Schema.Number
+});
+const MarkStylesSchema = Schema.Struct({evidence: Schema.String, activity: Schema.String, label: Schema.String});
+const StickyMarkSchema = Schema.Struct({covered: Schema.Boolean, headingShift: Schema.Number, padding: Schema.String});
+const PulseBoundsSchema = Schema.Struct({
+  cursor: Schema.Number,
+  pulseWidth: Schema.Number,
+  pulseHeight: Schema.Number,
+  taskWidth: Schema.Number,
+  taskHeight: Schema.Number,
+  parentPosition: Schema.String,
+  parentOverflow: Schema.String,
+  display: Schema.String,
+  animation: Schema.String
+});
+const MODE_VIEW_EXPRESSION = `(()=>({workspace:document.querySelector('.board-workspace')?.textContent??'',
+  connection:document.querySelector('.source-health span')?.textContent??'',
+  mark:document.querySelector('button.session-mark')?.getAttribute('aria-label')??''}))()`;
 const LIVE_CONNECTED_PREDICATE = `(()=>
   document.querySelector('.board-workspace')?.textContent?.includes('live-source-fixture')&&
   document.querySelector('.source-health span')?.textContent?.includes('Connected'))()`;
@@ -37,54 +67,12 @@ const sinks = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encoder = new TextEncoder();
 let server: ReturnType<typeof Bun.serve> | undefined;
 
-/** Run the actual browser CLI; for example, browser('eval', 'innerWidth'). */
-async function browser(...args: string[]): Promise<string> {
-  const {
-    stdout: output,
-    stderr: error,
-    status
-  } = await runCapturedCommand(['agent-browser', '--session', sessionName, ...args], 20_000);
-  if (status !== 0) {
-    throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
-  }
-  return output.trim();
-}
-
-/** Decode one bounded browser measurement returned by the owned CLI. */
-async function browserJson<Value>(expression: string): Promise<Value> {
-  return JSON.parse(await browser('eval', expression));
-}
-
-/** Keep a real SSE response open; for example, enqueue one observation in a test. */
-function eventResponse(): Response {
-  let ownedSink: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(sink) {
-      ownedSink = sink;
-      sinks.add(sink);
-      sink.enqueue(encoder.encode(': connected\n\n'));
-    },
-    cancel() {
-      if (ownedSink) sinks.delete(ownedSink);
-    }
-  });
-  return new Response(stream, {headers: {'content-type': 'text/event-stream'}});
-}
-
 /** Serve built assets and synthetic API boundaries; for example, GET /api/v1/snapshot. */
 function fixtureResponse(request: Request): Response {
   const path = new URL(request.url).pathname;
   if (path === '/api/v1/snapshot') return Response.json(servedSnapshot);
-  if (path === '/api/v1/events') return eventResponse();
-  const assets = new Map([
-    ['/', 'index.html'],
-    ['/app.js', 'app.js'],
-    ['/styles.css', 'styles.css']
-  ]);
-  const asset = assets.get(path);
-  return asset
-    ? new Response(Bun.file(new URL(`../dist/${asset}`, import.meta.url)))
-    : new Response(null, {status: 404});
+  if (path === '/api/v1/events') return openEventStream(sinks);
+  return builtAssetResponse(path);
 }
 
 /** Send a synthetic revision; for example, publishObservation(snapshot.cursor + 1). */
@@ -125,14 +113,7 @@ async function watchPulse(cursor: number): Promise<void> {
 
 /** Measure rendered board geometry; for example, await assertDockedGeometry(). */
 async function assertDockedGeometry(): Promise<void> {
-  const geometry = await browserJson<{
-    mainHeight: number;
-    inspectorHeight: number;
-    mainRight: number;
-    inspectorLeft: number;
-    paddingRight: number;
-    rootFontSize: number;
-  }>(
+  const geometry = await browserJson(
     `(()=>{
       const main=document.querySelector('.board-main').getBoundingClientRect();
       const inspector=document.querySelector('.session-inspector').getBoundingClientRect();
@@ -141,7 +122,8 @@ async function assertDockedGeometry(): Promise<void> {
         mainRight:main.right,inspectorLeft:inspector.left,
         paddingRight:Number.parseFloat(getComputedStyle(scroll).paddingRight),
         rootFontSize:Number.parseFloat(getComputedStyle(document.documentElement).fontSize)};
-    })()`
+    })()`,
+    GeometrySchema
   );
   expect(Math.abs(geometry.inspectorHeight - geometry.mainHeight)).toBeLessThan(1);
   expect(Math.abs(geometry.inspectorLeft - geometry.mainRight)).toBeLessThan(1);
@@ -150,11 +132,12 @@ async function assertDockedGeometry(): Promise<void> {
 
 /** Measure the table pane; for example, await measureScrollPane(). */
 async function measureScrollPane() {
-  return browserJson<{left: number; width: number; content: number; page: number; viewport: number}>(
+  return browserJson(
     `(()=>{const s=document.querySelector('.board-scroll');
         s.scrollLeft=s.scrollWidth;
         return {left:s.scrollLeft,width:s.clientWidth,content:s.scrollWidth,
-          page:document.documentElement.scrollWidth,viewport:innerWidth};})()`
+          page:document.documentElement.scrollWidth,viewport:innerWidth};})()`,
+    ScrollPaneSchema
   );
 }
 
@@ -208,7 +191,7 @@ async function verifyLiveDemoLiveSwitch(): Promise<void> {
     await browser('reload');
     await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
     await waitForSinkCount(1);
-    const live = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const live = await browserJson(MODE_VIEW_EXPRESSION, ModeViewSchema);
     expect(live.workspace).toContain('live-source-fixture');
     expect(live.connection).toContain('Connected');
     expect(live.mark).toContain('Live source task');
@@ -220,7 +203,7 @@ async function verifyLiveDemoLiveSwitch(): Promise<void> {
       'document.querySelector(".source-health")?.textContent?.includes("Demo data — no live connections")'
     );
     await waitForSinkCount(0);
-    const demo = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const demo = await browserJson(MODE_VIEW_EXPRESSION, ModeViewSchema);
     expect(demo.workspace).toContain('leynos');
     expect(demo.connection).toContain('Demo data — no live connections');
     expect(demo.mark).toContain('Synthetic');
@@ -231,7 +214,7 @@ async function verifyLiveDemoLiveSwitch(): Promise<void> {
     await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
     await browser('wait', '--fn', 'window.modeObserver?.markObservers.size >= 2');
     await waitForSinkCount(1);
-    const resumed = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const resumed = await browserJson(MODE_VIEW_EXPRESSION, ModeViewSchema);
     expect(resumed.connection).toContain('Connected');
     expect(resumed.mark).toContain('Live source task');
     await browser('eval', 'window.modeObserver.captured=new Set(window.modeObserver.markObservers);true');
@@ -273,16 +256,15 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
 
   it('hides compact evidence without hiding the activity glyph or accessible evidence', async () => {
     await browser('select', 'select[aria-label="Mark density"]', 'compact');
-    const result = await browser(
-      'eval',
+    const styles = await browserJson(
       `(()=>{
       const mark=document.querySelector('button.session-mark');
       return {evidence:getComputedStyle(mark.querySelector('small')).display,
         activity:getComputedStyle(mark.querySelector('span')).display,
         label:mark.getAttribute('aria-label')};
-    })()`
+    })()`,
+      MarkStylesSchema
     );
-    const styles = JSON.parse(result);
     expect(styles.evidence).toBe('none');
     expect(styles.activity).not.toBe('none');
     expect(styles.label).toContain('Synthetic demo record');
@@ -303,8 +285,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
 
   it('hides a selected planning mark beneath the sticky repository column', async () => {
     await browser('eval', "document.querySelector('button.session-mark').click()");
-    const result = await browser(
-      'eval',
+    const state = await browserJson(
       `(()=>{
       const mark=document.querySelector('button.session-mark');
       const pane=document.querySelector('.board-scroll');
@@ -315,9 +296,9 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
       return {covered:Boolean(top?.closest('.repository-name')),
         headingShift:heading.getBoundingClientRect().left-before,
         padding:getComputedStyle(document.querySelector('.board-banks')).paddingInlineStart};
-    })()`
+    })()`,
+      StickyMarkSchema
     );
-    const state = JSON.parse(result);
     expect(state.covered).toBe(true);
     expect(Math.abs(state.headingShift)).toBeLessThan(0.5);
     expect(state.padding).toBe('0px');
@@ -329,7 +310,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(sinks.size).toBeGreaterThan(0);
     publishObservation(snapshot.cursor + 1);
     await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 1}`);
-    const bounds = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    const bounds = await browserJson('window.layoutPulse', PulseBoundsSchema);
     expect(bounds.cursor).toBe(snapshot.cursor + 1);
     expect(bounds.parentPosition).toBe('relative');
     expect(bounds.parentOverflow).toBe('clip');
@@ -340,7 +321,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     await watchPulse(snapshot.cursor + 2);
     publishObservation(snapshot.cursor + 2);
     await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 2}`);
-    const reduced = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    const reduced = await browserJson('window.layoutPulse', PulseBoundsSchema);
     expect(reduced.cursor).toBe(snapshot.cursor + 2);
     expect(reduced.animation).toBe('none');
     expect(reduced.display).toBe('none');
