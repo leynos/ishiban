@@ -2,7 +2,8 @@
 import type {ReactElement} from 'react';
 import type {SessionFamily} from '../session-families';
 import {groupByRepository, STAGE_LABELS, type WorkflowStage} from './board-model';
-import {SessionList, type SessionSelectionProps} from './board-table';
+import type {SessionSelectionProps} from './session-mark';
+import {SessionList} from './session-list';
 
 interface WorkflowExceptionsProps extends SessionSelectionProps {
   readonly sessions: readonly SessionFamily[];
