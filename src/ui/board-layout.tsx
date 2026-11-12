@@ -3,7 +3,8 @@ import {useMemo, type FocusEvent, type ReactElement, type RefObject} from 'react
 import type {Snapshot} from '../contracts';
 import type {SessionFamily} from '../session-families';
 import {BoardControls} from './board-controls';
-import {BoardBanks, SessionList} from './board-table';
+import {BoardBanks} from './board-table';
+import {SessionList} from './session-list';
 import {groupByRepository, type ActivityFilter, type Density, type Presentation, WORKFLOW_STAGES} from './board-model';
 import {SessionInspector} from './session-inspector';
 import {WorkflowExceptions} from './workflow-exceptions';

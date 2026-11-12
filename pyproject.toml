@@ -475,10 +475,6 @@ members = ["ishiban/domain.py::Envelope", "ishiban/domain.py::CatalogueEntry", "
 reason = "Keep inbound observation, catalogue enrichment and normalized journal event contracts independent; repeated typed fields do not share validation, requirements or version boundaries. See docs/developers-guide.md#duplication-review."
 
 [[tool.duplication_gate.allow]]
-members = ["src/ui/board-table.tsx::span", "reference/ishiban-mockup.html::span"]
-reason = "Keep accessible session-list markup separate from supplied static reference markup; similar wrapper tags do not share interaction logic. See docs/developers-guide.md#duplication-review."
-
-[[tool.duplication_gate.allow]]
 members = ["src/ui/board-model.ts", "src/ui/board-table.tsx"]
 reason = "Keep short activity/provenance guards and label/glyph mappings explicit; equal branch shapes return different meanings. Shared selection props have been extracted. See docs/developers-guide.md#duplication-review."
 
