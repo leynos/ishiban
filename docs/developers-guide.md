@@ -76,7 +76,9 @@ utility layer. Session lookup uses the same transaction-bound projection loader
 in detail reads and writes. Snapshot and incremental-turn projections share one
 private turn-field encoder, including optional-key omission. Frontend table,
 list, and exception marks share `SessionSelectionProps` so keyboard trigger
-identity travels through the same callback contract.
+identity and thread openability travel through the same callback contract.
+`src/ui/thread-navigation.ts` maps a middle-button gesture to one open request
+without selecting the mark.
 
 Run `bun run build` after frontend changes; the resulting bundle is what Falcon
 serves and what browser validation must inspect. `make test` includes Python
@@ -91,7 +93,10 @@ a built bundle:
 
 ```sh
 make build build-web
-ISHIBAN_BROWSER_TESTS=1 bun test tests/board-layout.browser.test.ts tests/board-interface-state.browser.test.ts
+ISHIBAN_BROWSER_TESTS=1 bun test \
+  tests/board-layout.browser.test.ts \
+  tests/board-interface-state.browser.test.ts \
+  tests/board-middle-click.browser.test.ts
 ```
 
 Scope that environment flag to these files. The geometry suite serves built
@@ -109,6 +114,19 @@ its private state. Both suites close their own browser/server resources and
 skip by default. Geometry checks cover horizontal overflow with and without the
 inspector, compact evidence visibility, and task-bounded list pulses with
 reduced-motion support.
+
+The middle-click suite serves one grouped family through
+`tests/family-board-server.ts`, waits for an available child-recency lookup,
+and confirms the inspector and the new browsing context share the child-tab
+destination. It performs a genuine middle-button gesture with `agent-browser`'s
+`mouse move`, `mouse down middle` and `mouse up middle` commands, then checks
+one opener request, no selection, no duplicate tab and an inert empty
+placeholder. It requires the `mouse` and `tab list --json` commands available
+in agent-browser 0.34.x. The browser launches with
+`--allowed-domains 127.0.0.1`; the page's `window.open` is replaced by a probe
+so the external Lody URL is recorded without leaving the loopback origin.
+Ordinary `click` still exercises real left-button selection and the inspector's
+link identity.
 
 `tests/native-browser-environment.ts` owns the shared opt-in switch and
 restores Bun's native globals once after the Happy DOM preload. Both native
@@ -669,10 +687,23 @@ Do not interpolate opaque IDs into browser URL path segments: dot segments are
 normalized even after `encodeURIComponent`. Lody web links retain a selected
 tab in the query; if their root path ID, or a native link's selected ID, is a
 dot segment, show an unavailable-link notice instead of guessing an external
-route. The inspector keeps web-root/tab-query construction in its private web
-link resolver and native URI construction in the target resolver. These helpers
-belong only to inspector navigation, not general URL rewriting. Copying the raw
-CLI identity remains supported.
+route. `src/ui/lody-link.ts` is the single canonical destination owner for both
+the inspector and middle-click navigation. `resolveLodyLinkTarget` validates a
+session, its displayed activity tab and workspace routing metadata;
+`resolveFamilyLodyLink` supplies a family's root context and selected member;
+and `openLodyThread` is the only place that calls `window.open`, using a blank
+target with `noopener,noreferrer`. Keep these helpers scoped to Lody thread
+navigation, not general URL rewriting, and reuse them instead of duplicating
+path or query construction. Copying the raw CLI identity remains supported.
+
+`src/ui/thread-navigation.ts` owns the pointer gesture contract. A middle
+`mousedown` suppresses the browser's autoscroll only when the family has an
+openable destination; a middle `auxclick` opens once and never selects. The
+mark's `click` handler ignores non-primary buttons, so pointer handling and
+keyboard activation retain the ordinary inspector route. Demo sessions,
+dot-segment identities and other unavailable destinations report no openable
+thread and make no `window.open` call. Empty placeholders are non-interactive
+spans outside this contract.
 
 Both singular Lody readers place their options before `--` and pass the exact
 session identity as the final operand. This includes option-like identities

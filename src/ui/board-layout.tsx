@@ -64,6 +64,8 @@ function BoardDisplay({
   currentGeneration,
   onSelect,
   onMarkNode,
+  canOpenThread,
+  onOpenThread,
   pulseRevisions,
   presentation,
   selectedSessionId,
@@ -72,6 +74,8 @@ function BoardDisplay({
   readonly currentGeneration: number;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
   readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
+  readonly canOpenThread: (family: SessionFamily) => boolean;
+  readonly onOpenThread: (family: SessionFamily) => boolean;
   readonly pulseRevisions: ReadonlyMap<string, number>;
   readonly presentation: Presentation;
   readonly selectedSessionId: string | null;
@@ -83,8 +87,10 @@ function BoardDisplay({
   if (presentation === 'list') {
     return (
       <SessionList
+        canOpenThread={canOpenThread}
         currentGeneration={currentGeneration}
         onMarkNode={onMarkNode}
+        onOpenThread={onOpenThread}
         onSelect={onSelect}
         pulseRevisions={pulseRevisions}
         selectedSessionId={selectedSessionId}
@@ -100,8 +106,10 @@ function BoardDisplay({
         <p className="empty-result">No sessions have a classified workflow stage.</p>
       ) : (
         <BoardBanks
+          canOpenThread={canOpenThread}
           currentGeneration={currentGeneration}
           onMarkNode={onMarkNode}
+          onOpenThread={onOpenThread}
           onSelect={onSelect}
           pulseRevisions={pulseRevisions}
           presentation={presentation}
@@ -110,8 +118,10 @@ function BoardDisplay({
         />
       )}
       <WorkflowExceptions
+        canOpenThread={canOpenThread}
         currentGeneration={currentGeneration}
         onMarkNode={onMarkNode}
+        onOpenThread={onOpenThread}
         onSelect={onSelect}
         pulseRevisions={pulseRevisions}
         selectedSessionId={selectedSessionId}
@@ -134,6 +144,8 @@ interface BoardLayoutProps {
   readonly onClose: () => void;
   readonly boardFallbackRef: RefObject<HTMLElement | null>;
   readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
+  readonly canOpenThread: (family: SessionFamily) => boolean;
+  readonly onOpenThread: (family: SessionFamily) => boolean;
 }
 
 /**
@@ -155,7 +167,9 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
     onFocusCapture,
     onClose,
     boardFallbackRef,
-    onSelect
+    onSelect,
+    canOpenThread,
+    onOpenThread
   } = props;
   const repositories = useMemo(() => groupByRepository(visibleSessions), [visibleSessions]);
   const isDemo = snapshot.collector.state === 'demo';
@@ -219,8 +233,10 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
         </div>
         <section aria-label="Session panorama" className="board-scroll">
           <BoardDisplay
+            canOpenThread={canOpenThread}
             currentGeneration={snapshot.collector.generation}
             onMarkNode={onMarkNode}
+            onOpenThread={onOpenThread}
             onSelect={onSelect}
             pulseRevisions={pulseRevisions}
             presentation={viewState.presentation}

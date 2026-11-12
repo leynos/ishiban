@@ -75,6 +75,17 @@ activity, and evidence freshness. List view offers larger selection targets.
 The 120-repository **Demo data** mode is explicitly synthetic and stops the
 live browser subscription while selected.
 
+Middle-click a real task mark in the table, matrix, list, or workflow-exception
+group to open its Lody thread in a new browsing context. The board uses the
+same canonical destination as the inspector's **Open in Lody** link. For a
+grouped family, it opens the displayed tab rather than the parent's thread,
+including the tab query that identifies a selected child. Your browser's popup
+policy can still block the new context. A middle-click does not select the task
+or open the inspector, and ordinary left-click selection is unchanged. The
+gesture is unavailable for demo tasks, for a link the inspector reports as
+unavailable, and on empty placeholders. Keyboard users open the inspector and
+follow **Open in Lody** instead.
+
 A solid oxide square with a tonal border marks a failed latest turn. The
 oxide/amber candy cane marks blocked activity, corresponding to Lody's
 `waiting` state. Labels retain the observed activity and workflow stage. A
@@ -365,6 +376,8 @@ The inspector's **Open in Lody** link opens the selected real session in its
 configured workspace. A configured workspace slug supplies the web link; when
 only the opaque workspace ID is available, the canonical `lody://` session link
 opens the Lody app. Synthetic demo sessions have no external session link.
+Middle-clicking a real task mark offers the same destination without selecting
+the task or opening the inspector.
 
 Failed latest turns include a **Last turn error** section. Supplied error text
 is displayed as plain text, with long messages bounded and scrollable. If Lody

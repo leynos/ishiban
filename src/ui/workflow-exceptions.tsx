@@ -16,7 +16,9 @@ function ExceptionGroup({
   selectedSessionId,
   pulseRevisions,
   onMarkNode,
-  onSelect
+  onSelect,
+  canOpenThread,
+  onOpenThread
 }: WorkflowExceptionsProps & {readonly stage: Extract<WorkflowStage, 'unclassified' | 'closed'>}): ReactElement {
   const stageSessions = sessions.filter((session) => session.context.stage === stage);
   const groupedSessions = groupByRepository(stageSessions);
@@ -34,8 +36,10 @@ function ExceptionGroup({
           <section className="exception-repository" key={repository.name}>
             <h3>{repository.name}</h3>
             <SessionList
+              canOpenThread={canOpenThread}
               currentGeneration={currentGeneration}
               onMarkNode={onMarkNode}
+              onOpenThread={onOpenThread}
               onSelect={onSelect}
               pulseRevisions={pulseRevisions}
               selectedSessionId={selectedSessionId}

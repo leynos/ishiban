@@ -2,10 +2,11 @@
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
-import {runCapturedCommand} from './browser-command';
+import {createBrowserSession} from './browser-session';
+import {builtAssetResponse, openEventStream} from './fixture-boundaries';
 import {isBrowserEnabled} from './native-browser-environment';
 
-const sessionName = `ishiban-layout-${process.pid}`;
+const {browser, browserJson} = createBrowserSession(`ishiban-layout-${process.pid}`);
 const snapshot = createDemoSnapshot();
 const liveSnapshot = {
   ...snapshot,
@@ -37,54 +38,12 @@ const sinks = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encoder = new TextEncoder();
 let server: ReturnType<typeof Bun.serve> | undefined;
 
-/** Run the actual browser CLI; for example, browser('eval', 'innerWidth'). */
-async function browser(...args: string[]): Promise<string> {
-  const {
-    stdout: output,
-    stderr: error,
-    status
-  } = await runCapturedCommand(['agent-browser', '--session', sessionName, ...args], 20_000);
-  if (status !== 0) {
-    throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
-  }
-  return output.trim();
-}
-
-/** Decode one bounded browser measurement returned by the owned CLI. */
-async function browserJson<Value>(expression: string): Promise<Value> {
-  return JSON.parse(await browser('eval', expression));
-}
-
-/** Keep a real SSE response open; for example, enqueue one observation in a test. */
-function eventResponse(): Response {
-  let ownedSink: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(sink) {
-      ownedSink = sink;
-      sinks.add(sink);
-      sink.enqueue(encoder.encode(': connected\n\n'));
-    },
-    cancel() {
-      if (ownedSink) sinks.delete(ownedSink);
-    }
-  });
-  return new Response(stream, {headers: {'content-type': 'text/event-stream'}});
-}
-
 /** Serve built assets and synthetic API boundaries; for example, GET /api/v1/snapshot. */
 function fixtureResponse(request: Request): Response {
   const path = new URL(request.url).pathname;
   if (path === '/api/v1/snapshot') return Response.json(servedSnapshot);
-  if (path === '/api/v1/events') return eventResponse();
-  const assets = new Map([
-    ['/', 'index.html'],
-    ['/app.js', 'app.js'],
-    ['/styles.css', 'styles.css']
-  ]);
-  const asset = assets.get(path);
-  return asset
-    ? new Response(Bun.file(new URL(`../dist/${asset}`, import.meta.url)))
-    : new Response(null, {status: 404});
+  if (path === '/api/v1/events') return openEventStream(sinks);
+  return builtAssetResponse(path);
 }
 
 /** Send a synthetic revision; for example, publishObservation(snapshot.cursor + 1). */

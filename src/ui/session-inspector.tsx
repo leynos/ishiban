@@ -5,6 +5,7 @@ import {AgentDetails} from './agent-details';
 import {usePullRequestTitles} from './pull-request-titles';
 import {selectStackTop, type PrStackFacts} from './pr-stack-order';
 import {activityOf, evidenceLabel, REPOSITORY_UNAVAILABLE, STAGE_LABELS} from './board-model';
+import {resolveLodyLinkTarget} from './lody-link';
 
 interface SessionInspectorProps {
   readonly session: Session;
@@ -18,51 +19,15 @@ interface SessionInspectorProps {
 }
 
 const WEB_PROTOCOLS = new Set(['http:', 'https:']);
-// URL parsers normalize dot-segment paths, even when IDs are percent-encoded.
-const URL_NORMALIZED_PATH_SEGMENTS = new Set(['.', '..']);
 const OBSERVED_AT_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   dateStyle: 'medium',
   timeStyle: 'short',
   timeZone: 'UTC'
 });
 
-type SessionLinkTarget =
-  | {readonly kind: 'synthetic'}
-  | {readonly kind: 'unavailable'}
-  | {readonly kind: 'link'; readonly href: string};
-
-/** Keep child identity in the query; for example, root/child uses /sessions/root?tab=session%3Achild. */
-function webSessionLinkTarget(context: Session, activity: Session, slug: string): SessionLinkTarget {
-  if (URL_NORMALIZED_PATH_SEGMENTS.has(context.sessionId)) return {kind: 'unavailable'};
-  const tabQuery =
-    activity.sessionId === context.sessionId ? '' : `?${new URLSearchParams({tab: `session:${activity.sessionId}`})}`;
-  return {
-    kind: 'link',
-    href: `https://lody.ai/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(context.sessionId)}${tabQuery}`
-  };
-}
-
-/** Resolve a safe Lody destination; for example, a native dot path is unavailable. */
-function resolveSessionLinkTarget({
-  session,
-  activitySession = session,
-  workspaceId,
-  workspaceSlug
-}: SessionInspectorProps): SessionLinkTarget {
-  if (activitySession.source === 'demo') return {kind: 'synthetic'};
-  const hasSlug = workspaceSlug !== undefined && workspaceSlug !== workspaceId;
-  const hasWebRoute = hasSlug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(workspaceSlug);
-  if (hasWebRoute) return webSessionLinkTarget(session, activitySession, workspaceSlug);
-  if (URL_NORMALIZED_PATH_SEGMENTS.has(activitySession.sessionId)) return {kind: 'unavailable'};
-  return {
-    kind: 'link',
-    href: `lody://session/${encodeURIComponent(activitySession.sessionId)}?workspace=${encodeURIComponent(workspaceId)}`
-  };
-}
-
 /** Link real sessions only; for example, an unknown slug uses Lody's native URI. */
 function SessionLink(props: SessionInspectorProps): ReactElement {
-  const target = resolveSessionLinkTarget(props);
+  const target = resolveLodyLinkTarget(props);
   if (target.kind === 'synthetic') return <p>Synthetic demo session</p>;
   if (target.kind === 'unavailable') {
     return <p>Lody link unavailable for this session identifier.</p>;
