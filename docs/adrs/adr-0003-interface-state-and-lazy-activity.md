@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Activity lifetime superseded by
-  [ADR 004](adr-004-persist-on-demand-activity.md).
+  [ADR 004](adr-0004-persist-on-demand-activity.md).
 - Date: 10 November 2026
 
 ## Context
