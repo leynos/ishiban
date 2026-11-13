@@ -1581,6 +1581,63 @@ collector applies migrations, while API startup verifies the existing Alembic
 head without upgrading it and fails when the journal schema is missing or
 outdated.
 
+### Reconciled streamed request boundary, 13 November 2026
+
+The saved pre-merge **Error — Testing (Overall)** row in
+[comment 6769534070](https://github.com/leynos/ishiban/pull/9#issuecomment-6769534070)
+reviewed `feb64537a56f9e7178a5f4f45b96bbee77f2e3c2` and left
+`4e7c9001539ecc1c8111ca072fd4676ab9d614ba` unreviewed. It asked for verifiable
+output from the per-chunk mutation test, and for a direct-helper test only if
+Falcon combined the ASGI frames.
+
+The requested output was published in
+[comment 6806492588](https://github.com/leynos/ishiban/pull/9#issuecomment-6806492588),
+and CodeRabbit
+[accepted it](https://github.com/leynos/ishiban/pull/9#issuecomment-6806514081).
+The acceptance states that the mutant returned 200 where the test requires
+413, that a single 8,193-byte chunk would have returned 413, and that no
+additional helper test or production change is needed for this boundary. It
+also records its limits: CodeRabbit inspected the source but did not run the
+test or mutation, the mutation and suite output were supplied evidence, and the
+saved pre-merge gate remained blocking with unverified freshness. It does not
+establish approval or merge readiness.
+
+Fresh verification bound that evidence to the landed source. Squash merge
+`c1b76c1671b18808f239ea8e7c20fc383571dc4a` and reviewed candidate
+`4e7c9001539ecc1c8111ca072fd4676ab9d614ba` share tree
+`ec378d18b7d524d113e5eb13f07a2f87dc947a03`; the recorded PR base is
+`c3be96ca2b748fcf130ed11a120923696cbd11a8`. The unchanged
+`ishiban/request_body.py` hashes to
+`659a7fb43911b67ce61a156388ebd8ef6e387ff021017f5c80eb1533c14c1d74`, and
+`tests/test_request_body_streaming.py` hashes to
+`b15200a911ec2542e83ebd94d14a5581a9dd63ffc80041dcf546485e108138fd`.
+
+In a detached worktree at `c1b76c1`,
+`uv run pytest -v tests/test_request_body_streaming.py::test_streamed_activity_body_accepts_exact_limit_and_rejects_next_byte`
+passed under Python 3.14.7, pytest 9.2.0, and Falcon 4.4.0. Replacing only the
+cumulative guard with `if len(chunk) > max_bytes:` made
+`uv run pytest -q tests/test_request_body_streaming.py` fail at
+`assert 200 == 413`, the cumulative-limit assertion, in 0.47 s. The source was
+restored to the same hash, `git status` was clean, and `make test` then
+reported 363 passed. The transient logs were
+`/tmp/pytest-focused-ishiban-issue10.out`,
+`/tmp/pytest-mutant-ishiban-issue10.out`, and
+`/tmp/make-test-ishiban-issue10.out`.
+
+The two frames contain 4,096 and 4,097 bytes, so neither chunk alone exceeds
+8,192. The per-chunk mutant returns 200 only if Falcon delivered the frames as
+separate stream iterations. Its failure therefore discharges the conditional
+direct-helper requirement for this case. This is bounded evidence for one
+endpoint and one mutation, not a formal proof; CodeRabbit did not execute the
+mutant independently, and other endpoints that share the helper were not
+mutated here.
+
+The row is stale and resolved at `c1b76c1`; the fresh run produced no
+counterexample. This entry supersedes the saved row for
+[issue #10](https://github.com/leynos/ishiban/issues/10) and
+[PR #9](https://github.com/leynos/ishiban/pull/9), because CodeRabbit documents
+no post-merge row revision and the row cannot be refreshed in place.
+
 ### Generated update-cue histories, 11 November 2026
 
 The new update-cue property drives the real hook across two sessions with an
