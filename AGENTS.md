@@ -82,7 +82,7 @@ applying suggestions without checking their assumptions.
   Never add task dispatch, session mutation or transcript scraping to the
   observer.
 - Derive workflow stage only from the explicit PR evidence in
-  [ADR 002](docs/adr-002-workflow-evidence.md). Agent activity, collector
+  [ADR 002](docs/adrs/adr-0002-workflow-evidence.md). Agent activity, collector
   connectivity and evidence freshness are separate facts; for example,
   `running` does not imply `Building`, and `waiting` does not imply a workflow
   dependency is blocked.
@@ -94,7 +94,7 @@ applying suggestions without checking their assumptions.
   activity sidecar and overlay it on current metadata; do not write it into the
   observation journal. A newer execution watermark wins, while metadata-only
   refreshes preserve a valid last-known result. See
-  [ADR 004](docs/adr-004-persist-on-demand-activity.md).
+  [ADR 004](docs/adrs/adr-0004-persist-on-demand-activity.md).
 
 ### Process and API boundaries
 
@@ -125,7 +125,7 @@ applying suggestions without checking their assumptions.
   session revision. Lazy enrichment preserves the durable cursor and does not
   pulse. Establish a quiet semantic baseline on collector startup; animate
   meaningful task changes only. See the update and batching bounds in
-  [ADR 005](docs/adr-005-batched-activity-and-update-cues.md).
+  [ADR 005](docs/adrs/adr-0005-batched-activity-and-update-cues.md).
 - Store only density and presentation in the signed MessagePack interface
   cookie. Do not move journal data or task selection into browser preferences.
   Keep synthetic demo sessions separate from live subscriptions and on-demand

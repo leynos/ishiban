@@ -75,7 +75,7 @@ ______________________________________________________________________
 The observer cannot recover transitions missed while it was offline or prove
 that a completed turn produced a successful task. PR metadata is polled and may
 be stale; unavailable titles remain unclassified. See the
-[workflow evidence decision](docs/adr-002-workflow-evidence.md).
+[workflow evidence decision](docs/adrs/adr-0002-workflow-evidence.md).
 
 ______________________________________________________________________
 

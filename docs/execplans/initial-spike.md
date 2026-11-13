@@ -474,8 +474,8 @@ The latest run exposed a lifetime mismatch: on-demand failures existed only in
 the current browser store, so a full refresh erased them. Retention also
 excluded persisted-source unknown projections produced at collector startup.
 The user now requires collected outcomes to survive page refreshes and process
-restarts. [ADR 004](../adr-004-persist-on-demand-activity.md) supersedes the
-browser-only lifetime in ADR 003.
+restarts. [ADR 004](../adrs/adr-0004-persist-on-demand-activity.md) supersedes
+the browser-only lifetime in ADR 003.
 
 M1: reproduce refresh loss through the actual Falcon API, then persist minimal
 runtime facts in a bounded workspace/session SQLite sidecar. Reopening an API
@@ -706,9 +706,9 @@ truncation, and a semantic full-set revision so hidden same-count changes can
 still produce a meaningful update cue. The inspector discloses a truncated
 count while retaining its Lody session link. No database migration or private
 working-set bound is claimed;
-[ADR 006](../adr-006-public-turn-previews-and-cursors.md) records the boundary
-and trade-off. Local red tests reproduced both unbounded behaviours; integrated
-gates and hosted reassessment remain pending.
+[ADR 006](../adrs/adr-0006-public-turn-previews-and-cursors.md) records the
+boundary and trade-off. Local red tests reproduced both unbounded behaviours;
+integrated gates and hosted reassessment remain pending.
 
 ### Batched activity transport bound, 10 November 2026
 
@@ -721,9 +721,10 @@ siblings. Reject an identity too large for its marker with HTTP 413 before
 streaming. The browser performs one owned bounded single-session fallback,
 including a current known projection if the batch raced a metadata update.
 Unrecoverable transport results display a quiet activity notice, not a turn
-error. [ADR 005](../adr-005-batched-activity-and-update-cues.md) records the
-boundary and [ADR 006](../adr-006-public-turn-previews-and-cursors.md) retains
-the private working-set trade-off.
+error. [ADR 005](../adrs/adr-0005-batched-activity-and-update-cues.md) records
+the boundary and
+[ADR 006](../adrs/adr-0006-public-turn-previews-and-cursors.md) retains the
+private working-set trade-off.
 
 **Verification and outcome.** A real ASGI-to-CmdMox regression first failed
 because a near-limit accepted observation and long catalogue title produced a
@@ -741,8 +742,8 @@ keeps its runtime activity, errors, agent details, and CLI identity. Derive
 family selection from per-member `latestHistoryAt`; do not copy recency onto
 the root projection or use message, read, or heartbeat timestamps. Keep
 presentation families separate from journal, API, and cache identities.
-[ADR 007](../adr-007-session-tab-families.md) records the approved behaviour,
-shared metadata-reader bounds, query fallback, and restart policy.
+[ADR 007](../adrs/adr-0007-session-tab-families.md) records the approved
+behaviour, shared metadata-reader bounds, query fallback, and restart policy.
 
 **Progress.** The nullable parent and creation-time fields, bounded per-member
 recency endpoint, shared session-show reader, query-based activity fallback,
@@ -826,7 +827,7 @@ the 512-entry browser cache; eight accepted multibyte IDs can exceed the
 the transport cooldown. Admit only complete visible families within a shared
 512-member budget, label non-admitted selection provisional, pack requests by
 actual encoded bytes, and cool down after an incomplete stream while retaining
-valid siblings. [ADR 007](../adr-007-session-tab-families.md) records the
+valid siblings. [ADR 007](../adrs/adr-0007-session-tab-families.md) records the
 ownership, cache-retention policy, and user-visible limit.
 
 **Progress and verification.** Red Bun regressions reproduced a 513-tab family
@@ -857,7 +858,7 @@ Falcon batch. Keep current status separate from last-known history, mark
 expired facts pending even for hidden families, and retain same-execution
 history only as provisional fallback. Use one pure client predicate for both
 recency and activity lookup admission; preserve raw catalogue and CLI IDs.
-[ADR 007](../adr-007-session-tab-families.md) records these boundaries.
+[ADR 007](../adrs/adr-0007-session-tab-families.md) records these boundaries.
 
 **Progress and verification.** Focused red regressions reproduced the expired
 winner and unsupported recency/activity batches. The repaired candidate passes
@@ -991,9 +992,9 @@ carry the decision to the existing storage adapter, which retains public JSON
 encoding and legacy-value handling. Journal ingestion and on-demand activity
 resolution continue through the shared adapter; cached sidecar restoration
 keeps its separate validated overlay and watermark checks.
-[ADR 008](../adr-008-runtime-evidence-policy.md) records the session-specific
-boundary; the database schema, public contract and PR workflow classification
-are unchanged.
+[ADR 008](../adrs/adr-0008-runtime-evidence-policy.md) records the
+session-specific boundary; the database schema, public contract and PR workflow
+classification are unchanged.
 
 Pure policy tests cover metadata versus persisted evidence and turn start,
 finish and reopen decisions. Adapter compatibility cases retain malformed

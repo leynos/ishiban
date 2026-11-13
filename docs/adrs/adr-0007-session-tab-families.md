@@ -179,9 +179,9 @@ session checks.
 
 ## References
 
-- [Observation proof-of-concept plan](execplans/initial-spike.md) tracks the
+- [Observation proof-of-concept plan](../execplans/initial-spike.md) tracks the
   implementation and candidate-specific validation.
-- [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
+- [Batched activity and update cues](adr-0005-batched-activity-and-update-cues.md)
   defines the existing bounded activity transport and quiet update baseline.
-- [Persisted on-demand activity](adr-004-persist-on-demand-activity.md)
+- [Persisted on-demand activity](adr-0004-persist-on-demand-activity.md)
   defines the separate durable runtime sidecar.
