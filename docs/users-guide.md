@@ -37,7 +37,12 @@ uv run ishiban serve
 ```
 
 `serve` serves the build in `dist/`, so run it from the checkout that contains
-the built interface. `collect` may run from any working directory. If the saved
+the built interface. The state directory is shared, so `collect` may run from
+any working directory. `uv run` discovers its project from the working
+directory, so select the checkout explicitly when starting outside it, for
+example
+`uv run --project /absolute/path/to/ishiban ishiban collect --workspace leynos`.
+An installed `ishiban` console script needs no project selection. If the saved
 workspace identity or browser build is missing, the server reports the required
 collector or build command before opening a listener.
 
@@ -121,7 +126,11 @@ if [ -e "$state_root/ishiban" ]; then
     printf 'Refusing to merge into an existing state directory.\n' >&2
     exit 1
   fi
-  mv "$state_root/ishiban" "$state_root/ishiban.before-migration"
+  if [ -e "$state_root/ishiban.before-migration" ]; then
+    printf 'Refusing to overwrite a preserved state directory.\n' >&2
+    exit 1
+  fi
+  mv "$state_root/ishiban" "$state_root/ishiban.before-migration" || exit 1
 fi
 mv .ishiban "$state_root/ishiban"
 ```

@@ -293,6 +293,43 @@ def test_documented_migration_preserves_a_fresh_default(
     )
 
 
+def test_documented_migration_rejects_an_existing_backup(
+    tmp_path: pathlib.Path, published_examples: dict[str, str]
+) -> None:
+    """An occupied backup name stops the example before either tree changes."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _seed_legacy_state(checkout / ".ishiban")
+    destination = tmp_path / "xdg-state" / "ishiban"
+    destination.mkdir(parents=True)
+    (destination / "workspace.json").write_bytes(b"fresh default")
+    preserved = tmp_path / "xdg-state" / "ishiban.before-migration"
+    preserved.mkdir()
+    sentinel = preserved / "workspace.json"
+    sentinel.write_bytes(b"earlier backup")
+    environment = _isolated_environment(tmp_path)
+    environment["PRESERVE_NEW_DEFAULT"] = "1"
+
+    result = _run_bash_example(
+        published_examples["migrate-state"], checkout, environment
+    )
+
+    assert result.returncode != 0, "An occupied backup must fail the example."
+    assert "Refusing to overwrite" in result.stderr, "The refusal must be explicit."
+    assert sentinel.read_bytes() == b"earlier backup", (
+        "The earlier backup must be unchanged."
+    )
+    assert (checkout / ".ishiban" / "workspace.json").is_file(), (
+        "The legacy directory must remain in place."
+    )
+    assert (destination / "workspace.json").read_bytes() == b"fresh default", (
+        "The fresh default must not receive the legacy files."
+    )
+    assert not (preserved / "ishiban").exists(), (
+        "The preservation move must not nest the default inside the backup."
+    )
+
+
 def test_documented_migration_rejects_an_unusable_home(
     tmp_path: pathlib.Path, published_examples: dict[str, str]
 ) -> None:
