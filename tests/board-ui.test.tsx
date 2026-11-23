@@ -108,6 +108,20 @@ describe('Ishiban board renderer', () => {
     expect(markup).not.toContain('last known turn failed');
   });
 
+  it('renders closed tooltip triggers without a native task title', () => {
+    const markup = renderBoard(makeSnapshot());
+    const document = new DOMParser().parseFromString(markup, 'text/html');
+    // Table marks carry the tooltip trigger; list items deliberately keep their own markup.
+    const marks = [...document.querySelectorAll('button.session-mark[data-session-id]')];
+
+    expect(marks.length).toBeGreaterThan(0);
+    for (const mark of marks) {
+      expect(mark.getAttribute('data-state')).toBe('closed');
+      expect(mark.hasAttribute('title')).toBe(false);
+    }
+    expect(markup).not.toContain('task-tooltip');
+  });
+
   it('renders 120 repositories and exposes the 6, 10, and 13 mark stage totals', () => {
     const markup = renderBoard(createDemoSnapshot());
     const repositoryRows = markup.match(/data-repository-row=/gu) ?? [];

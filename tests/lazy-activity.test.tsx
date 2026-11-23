@@ -2,20 +2,35 @@
 import {afterEach, expect, it} from 'bun:test';
 import fc from 'fast-check';
 import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {useSyncExternalStore} from 'react';
 import type {ReactElement} from 'react';
-import type {Session, Snapshot, SessionActivityFrame} from '../src/contracts';
+import type {Session, Snapshot} from '../src/contracts';
 import {createBoardStore, type BoardStore} from '../src/client';
-import {createDemoSnapshot} from '../src/demo';
 import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
 import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
+import {markByTitle} from './board-fixtures';
 import type {Deferred} from './deferred';
 import {
   ControlledIntersectionObserver,
   installControlledIntersectionObserver
 } from './controlled-intersection-observer';
-type ActivitySessionSpec = readonly [number, string, string, Session['source'], Session['state'], number];
+import {
+  DEMO_UNKNOWN_SESSION,
+  KNOWN_SESSION,
+  UNKNOWN_REAL_FOUR,
+  UNKNOWN_REAL_ONE,
+  UNKNOWN_REAL_THREE,
+  UNKNOWN_REAL_TWO,
+  activityFrame,
+  activitySession,
+  activitySnapshot,
+  earlyActivityResponse,
+  resolveBatch,
+  resolveRunningMember,
+  tooltipText
+} from './lazy-activity-fixtures';
 interface ActivityMergeScenario {
   readonly cursor: number;
   readonly responseRevision: number;
@@ -26,54 +41,6 @@ interface ActivityMergeScenario {
   readonly nextActivity: 'idle' | 'pending' | 'running' | 'waiting';
 }
 
-const seedSnapshot = createDemoSnapshot();
-
-/** Reuse demo projections while giving every fixture explicit source facts. */
-function activitySession(spec: ActivitySessionSpec): Session {
-  const [seedIndex, sessionId, title, source, state, lastEventId] = spec;
-  const session = seedSnapshot.sessions[seedIndex];
-  if (!session) throw new Error('The demo snapshot must contain activity fixture records.');
-  return {
-    ...session,
-    sessionId,
-    title,
-    source,
-    state,
-    lastEventId
-  };
-}
-const activitySpecs: readonly ActivitySessionSpec[] = [
-  [0, 'known', 'Known persisted activity', 'persisted', 'running', 80],
-  [1, 'demo-unknown', 'Demo unknown activity', 'demo', 'unknown', 81],
-  [2, 'persisted/session 01', 'Unknown persisted activity 01', 'persisted', 'unknown', 82],
-  [3, 'persisted-session-02', 'Unknown persisted activity 02', 'persisted', 'unknown', 83],
-  [4, 'persisted-session-03', 'Unknown persisted activity 03', 'persisted', 'unknown', 84],
-  [5, 'persisted-session-04', 'Unknown persisted activity 04', 'persisted', 'unknown', 85]
-];
-const activitySessions = activitySpecs.map((spec) => activitySession(spec));
-/** Fail clearly if the compact session fixture is missing a requested record. */
-function fixtureSession(index: number): Session {
-  const session = activitySessions[index];
-  if (!session) throw new Error('The activity fixture must contain the requested session.');
-  return session;
-}
-const KNOWN_SESSION = fixtureSession(0);
-const DEMO_UNKNOWN_SESSION = fixtureSession(1);
-const UNKNOWN_REAL_ONE = fixtureSession(2);
-const UNKNOWN_REAL_TWO = fixtureSession(3);
-const UNKNOWN_REAL_THREE = fixtureSession(4);
-const UNKNOWN_REAL_FOUR = fixtureSession(5);
-
-/** Build a connected workspace snapshot containing only the requested sessions. */
-function activitySnapshot(sessions: readonly Session[]): Snapshot {
-  return {
-    ...seedSnapshot,
-    workspaceId: 'workspace-lazy-activity',
-    cursor: 700,
-    collector: {...seedSnapshot.collector, state: 'connected'},
-    sessions: [...sessions]
-  };
-}
 /** Render real marks before starting their visibility observer. */
 function mountBoard(sessions: readonly Session[]) {
   const snapshot = activitySnapshot(sessions);
@@ -161,26 +128,6 @@ function expectBoundedPipeline(requests: readonly ActivityFetchRequest[], count:
     expectBatchPost(request, ids);
   }
 }
-/** Return a stream that exposes one frame before the batch completes. */
-function earlyActivityResponse(request: ActivityFetchRequest, frame: SessionActivityFrame): Response {
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`${JSON.stringify(frame)}\n`));
-        request.init.signal?.addEventListener('abort', () => controller.close(), {once: true});
-      }
-    })
-  );
-}
-/** Encode a completed member while preserving its explicit request identity. */
-function activityFrame(workspaceId: string, session: Session): SessionActivityFrame {
-  return {workspaceId, sessionId: session.sessionId, session};
-}
-/** Complete a streaming batch using independently validated NDJSON frames. */
-function resolveBatch(request: ActivityFetchRequest, frames: readonly SessionActivityFrame[]): void {
-  const body = `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`;
-  request.response.resolve(new Response(body, {headers: {'content-type': 'application/x-ndjson'}}));
-}
 /** Accept only same-workspace, same-session, current unknown revisions. */
 function activityReplyMatches(scenario: ActivityMergeScenario): boolean {
   return (
@@ -198,6 +145,15 @@ function currentSessionFor(scenario: ActivityMergeScenario): Session {
     lastEventId: scenario.responseRevision + (scenario.hasNewerRevision ? 1 : 0)
   };
 }
+/** Mount one unknown session, reveal it and wait for its first batch request. */
+async function revealedUnknownBoard() {
+  const board = activityBoard([UNKNOWN_REAL_ONE]);
+  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
+  act(() => board.observer.setVisibility(mark, true));
+  await waitForRequest(board.started, 0);
+  return {...board, mark};
+}
+
 /** Wait for a queued request to enter the controlled fetch boundary. */
 async function waitForRequest(started: readonly Deferred<void>[], index: number): Promise<void> {
   const signal = started[index];
@@ -303,9 +259,7 @@ it('rejects stale, foreign and mismatched members without discarding a valid bat
 });
 
 it('shares a pending lookup through metadata replay and accepts its current rebased result', async () => {
-  const {requests, started, snapshot, store, observer} = activityBoard([UNKNOWN_REAL_ONE]);
-  revealSessions(observer, [UNKNOWN_REAL_ONE]);
-  await waitForRequest(started, 0);
+  const {requests, snapshot, store} = await revealedUnknownBoard();
   const current: Session = {
     ...UNKNOWN_REAL_ONE,
     title: 'Updated metadata',
@@ -384,4 +338,42 @@ it('merges only matching unknown activity replies without changing the journal b
     }),
     {numRuns: 40, seed: 20_261_110}
   );
+});
+
+it('opens a tooltip without reading activity, selecting the task or moving the cursor', async () => {
+  const {requests, started, snapshot, store, observer} = activityBoard([UNKNOWN_REAL_ONE]);
+  const user = userEvent.setup();
+  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
+  await user.hover(mark);
+  await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull(), {timeout: 3000});
+
+  expect(requests).toHaveLength(0);
+  expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor);
+  expect(mark.getAttribute('aria-pressed')).toBe('false');
+  expect(screen.queryByRole('complementary', {name: 'Session inspector'})).toBeNull();
+
+  act(() => observer.setVisibility(mark, true));
+  await waitForRequest(started, 0);
+  expect(requests).toHaveLength(1);
+});
+
+it('updates open tooltip content from a held activity frame without a pulse or revision', async () => {
+  const {requests, snapshot, store, mark} = await revealedUnknownBoard();
+  await act(async () => {
+    mark.focus();
+  });
+  expect(tooltipText()).toContain('unknown');
+
+  resolveRunningMember(requestAt(requests, 0), snapshot);
+  await waitForActivity(store, UNKNOWN_REAL_ONE.sessionId, 'running');
+  await waitFor(() => expect(tooltipText()).toContain('running'));
+
+  const updatedMark = markByTitle(UNKNOWN_REAL_ONE.title);
+  expect(updatedMark === mark).toBe(true);
+  expect(updatedMark.getAttribute('data-update-revision')).toBeNull();
+  expect(updatedMark.querySelector('[data-session-update-pulse]')).toBeNull();
+  expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor);
+  expect(store.getSnapshot().snapshot?.sessions[0]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
+  expect(tooltipText()).toContain('Read on demand; not journalled');
+  expect(document.querySelector('.task-tooltip__title')?.textContent).toBe(UNKNOWN_REAL_ONE.title);
 });

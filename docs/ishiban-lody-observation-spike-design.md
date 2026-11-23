@@ -513,6 +513,29 @@ reference's oxide/amber candy cane for waiting (blocked) activity. Preserve
 non-colour labels and glyphs. A brief, reduced-motion-aware pulse marks newly
 received session updates; empty placeholders have no pointer feedback.
 
+Real task marks offer a formatted Radix tooltip on pointer hover and keyboard
+focus. It headlines the task title and presents repository, workflow stage,
+current-tab activity, condition, and evidence provenance as separate labelled
+rows, keeping each fact distinct rather than inferring one from another. The
+root family supplies task and workflow context; the selected tab supplies
+runtime facts, and a provisional selected tab is named explicitly. Opening a
+tooltip is passive: it uses the projection already held in the browser and
+cannot move the durable cursor, create a pulse, or add a Lody, GitHub, recency,
+or activity request. Empty cells remain inert with no tooltip or hover feedback.
+
+A single provider inside the board display applies one shared hover delay and
+skip window, while keyboard focus opens the tooltip immediately. Content is
+portalled to the document body and positioned with collision avoidance, so it
+is never clipped by the scrolling table, the sticky repository column, or the
+viewport edge. The tooltip carries a non-interactive pointer to the inspector,
+where errors and interactive links remain. It holds no focusable control. Its
+visual body is hidden from assistive technology and its concise description is
+exposed through the trigger while open. Its stacking level sits above the
+sticky board layers and the inspector but below the focused skip link, and
+reduced-motion preferences suppress the entry animation. Escape closes the
+tooltip before the inspector; moving the pointer into the tooltip keeps it
+readable, and focus stays on the mark.
+
 **Live workflow evidence:** A successful catalogue with no PR association is
 Planning. A uniquely associated active PR with a `Plan:` title is Ready; a
 non-plan draft is Building, and a non-plan ready-for-review PR is Refine.

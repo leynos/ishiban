@@ -3,9 +3,10 @@ import {useMemo, type FocusEvent, type ReactElement, type RefObject} from 'react
 import type {Snapshot} from '../contracts';
 import type {SessionFamily} from '../session-families';
 import {BoardControls} from './board-controls';
-import {BoardBanks, SessionList} from './board-table';
+import {BoardBanks, SessionList, type SessionSelectionProps} from './board-table';
 import {groupByRepository, type ActivityFilter, type Density, type Presentation, WORKFLOW_STAGES} from './board-model';
 import {SessionInspector} from './session-inspector';
+import {TaskTooltipProvider} from './task-tooltip';
 import {WorkflowExceptions} from './workflow-exceptions';
 
 /** Controlled board values shared by the layout and its parent. */
@@ -59,8 +60,22 @@ function SourceHealth({
   );
 }
 
-/** Render the selected table, list, or empty state. */
-function BoardDisplay({
+interface BoardDisplayProps extends SessionSelectionProps {
+  readonly presentation: Presentation;
+  readonly visibleSessions: readonly SessionFamily[];
+}
+
+/** Render the selected table, list, or empty state inside one tooltip provider. */
+function BoardDisplay(props: BoardDisplayProps): ReactElement {
+  return (
+    <TaskTooltipProvider>
+      <BoardDisplayContent {...props} />
+    </TaskTooltipProvider>
+  );
+}
+
+/** Render the selected presentation; each real task mark owns its tooltip trigger. */
+function BoardDisplayContent({
   currentGeneration,
   onSelect,
   onMarkNode,
@@ -68,15 +83,7 @@ function BoardDisplay({
   presentation,
   selectedSessionId,
   visibleSessions
-}: {
-  readonly currentGeneration: number;
-  readonly onSelect: (sessionId: string, trigger?: HTMLButtonElement) => void;
-  readonly onMarkNode: (sessionId: string, node: HTMLButtonElement | null) => void;
-  readonly pulseRevisions: ReadonlyMap<string, number>;
-  readonly presentation: Presentation;
-  readonly selectedSessionId: string | null;
-  readonly visibleSessions: readonly SessionFamily[];
-}): ReactElement {
+}: BoardDisplayProps): ReactElement {
   if (visibleSessions.length === 0) {
     return <p className="empty-result">No sessions match these filters.</p>;
   }
@@ -167,10 +174,20 @@ export function BoardLayout(props: BoardLayoutProps): ReactElement {
       data-presentation={viewState.presentation}
       onFocusCapture={onFocusCapture}
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && inspectorSession !== null) {
-          event.preventDefault();
-          onClose();
+        if (event.key !== 'Escape') {
+          return;
         }
+        // Radix's tooltip dismissable layer listens on the document capture
+        // phase and calls preventDefault when it consumes Escape, so a consumed
+        // event closes only the tooltip and leaves the inspector open.
+        if (event.defaultPrevented) {
+          return;
+        }
+        if (inspectorSession === null) {
+          return;
+        }
+        event.preventDefault();
+        onClose();
       }}
     >
       <a className="skip-link" href="#programme-board">

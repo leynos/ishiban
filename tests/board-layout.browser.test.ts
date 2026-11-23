@@ -1,8 +1,9 @@
 /** @file Exercise computed board geometry and real SSE pulses in Chromium. */
-import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
+import {describe, expect, it} from 'bun:test';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
-import {runCapturedCommand} from './browser-command';
+import {BROWSER_SUITE_TIMEOUTS, boardBrowserSuite} from './board-browser-suite';
+import {boardBrowser} from './board-browser-driver';
 import {isBrowserEnabled} from './native-browser-environment';
 
 const sessionName = `ishiban-layout-${process.pid}`;
@@ -32,80 +33,15 @@ const MODE_VIEW_EXPRESSION = `(()=>({workspace:document.querySelector('.board-wo
 const LIVE_CONNECTED_PREDICATE = `(()=>
   document.querySelector('.board-workspace')?.textContent?.includes('live-source-fixture')&&
   document.querySelector('.source-health span')?.textContent?.includes('Connected'))()`;
-let servedSnapshot = snapshot;
-const sinks = new Set<ReadableStreamDefaultController<Uint8Array>>();
-const encoder = new TextEncoder();
-let server: ReturnType<typeof Bun.serve> | undefined;
-
-/** Run the actual browser CLI; for example, browser('eval', 'innerWidth'). */
-async function browser(...args: string[]): Promise<string> {
-  const {
-    stdout: output,
-    stderr: error,
-    status
-  } = await runCapturedCommand(['agent-browser', '--session', sessionName, ...args], 20_000);
-  if (status !== 0) {
-    throw new Error(`Browser command ${JSON.stringify(args)} failed (${status}): ${error || output}`);
-  }
-  return output.trim();
-}
-
-/** Decode one bounded browser measurement returned by the owned CLI. */
-async function browserJson<Value>(expression: string): Promise<Value> {
-  return JSON.parse(await browser('eval', expression));
-}
-
-/** Keep a real SSE response open; for example, enqueue one observation in a test. */
-function eventResponse(): Response {
-  let ownedSink: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(sink) {
-      ownedSink = sink;
-      sinks.add(sink);
-      sink.enqueue(encoder.encode(': connected\n\n'));
-    },
-    cancel() {
-      if (ownedSink) sinks.delete(ownedSink);
-    }
-  });
-  return new Response(stream, {headers: {'content-type': 'text/event-stream'}});
-}
-
-/** Serve built assets and synthetic API boundaries; for example, GET /api/v1/snapshot. */
-function fixtureResponse(request: Request): Response {
-  const path = new URL(request.url).pathname;
-  if (path === '/api/v1/snapshot') return Response.json(servedSnapshot);
-  if (path === '/api/v1/events') return eventResponse();
-  const assets = new Map([
-    ['/', 'index.html'],
-    ['/app.js', 'app.js'],
-    ['/styles.css', 'styles.css']
-  ]);
-  const asset = assets.get(path);
-  return asset
-    ? new Response(Bun.file(new URL(`../dist/${asset}`, import.meta.url)))
-    : new Response(null, {status: 404});
-}
-
-/** Send a synthetic revision; for example, publishObservation(snapshot.cursor + 1). */
-function publishObservation(cursor: number): void {
-  const session = firstSession(snapshot);
-  const data = JSON.stringify({
-    cursor,
-    workspaceId: snapshot.workspaceId,
-    sessionId: session.sessionId,
-    projection: {...session, lastEventId: cursor, title: `${session.title} update ${cursor}`}
-  });
-  const message = encoder.encode(`id: ${cursor}\nevent: observation\ndata: ${data}\n\n`);
-  for (const sink of sinks) sink.enqueue(message);
-}
+const browser = boardBrowser(sessionName);
+let suite: ReturnType<typeof boardBrowserSuite>;
 
 /** Observe one task revision only; for example, watchPulse(snapshot.cursor + 1). */
 async function watchPulse(cursor: number): Promise<void> {
   const selector = JSON.stringify(
     `[data-session-id="${firstSession(snapshot).sessionId}"] [data-session-update-pulse="${cursor}"]`
   );
-  await browser(
+  await browser.run(
     'eval',
     `(()=>{
     window.layoutObserver?.disconnect();window.layoutPulse=null;
@@ -125,7 +61,7 @@ async function watchPulse(cursor: number): Promise<void> {
 
 /** Measure rendered board geometry; for example, await assertDockedGeometry(). */
 async function assertDockedGeometry(): Promise<void> {
-  const geometry = await browserJson<{
+  const geometry = await browser.json<{
     mainHeight: number;
     inspectorHeight: number;
     mainRight: number;
@@ -150,7 +86,7 @@ async function assertDockedGeometry(): Promise<void> {
 
 /** Measure the table pane; for example, await measureScrollPane(). */
 async function measureScrollPane() {
-  return browserJson<{left: number; width: number; content: number; page: number; viewport: number}>(
+  return browser.json<{left: number; width: number; content: number; page: number; viewport: number}>(
     `(()=>{const s=document.querySelector('.board-scroll');
         s.scrollLeft=s.scrollWidth;
         return {left:s.scrollLeft,width:s.clientWidth,content:s.scrollWidth,
@@ -162,15 +98,15 @@ async function measureScrollPane() {
 async function waitForSinkCount(expected: number): Promise<void> {
   const deadline = Date.now() + 2000;
   while (Date.now() < deadline) {
-    if (sinks.size === expected) return;
+    if (suite.fixture().sinks.size === expected) return;
     await Bun.sleep(20);
   }
-  throw new Error(`Expected ${expected} owned SSE streams; found ${sinks.size}.`);
+  throw new Error(`Expected ${expected} owned SSE streams; found ${suite.fixture().sinks.size}.`);
 }
 
 /** Count only observers that actually scan session marks. */
 async function installObserverProbe(): Promise<void> {
-  await browser(
+  await browser.run(
     'eval',
     `(()=>{const original=window.IntersectionObserver;
       window.modeObserver={markObservers:new Set(),closedObservers:new Set(),original};
@@ -189,8 +125,8 @@ async function installObserverProbe(): Promise<void> {
 
 /** Release the probe and return to an inert demo view after this case. */
 async function restoreModeFixture(): Promise<void> {
-  servedSnapshot = snapshot;
-  await browser(
+  suite.fixture().replace(snapshot);
+  await browser.run(
     'eval',
     `(()=>{const metrics=window.modeObserver;
       if(metrics)window.IntersectionObserver=metrics.original;
@@ -203,40 +139,40 @@ async function restoreModeFixture(): Promise<void> {
 
 /** Exercise the real app's source switch through visible browser controls. */
 async function verifyLiveDemoLiveSwitch(): Promise<void> {
-  servedSnapshot = liveSnapshot;
+  suite.fixture().replace(liveSnapshot);
   try {
-    await browser('reload');
-    await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
+    await browser.run('reload');
+    await browser.run('wait', '--fn', LIVE_CONNECTED_PREDICATE);
     await waitForSinkCount(1);
-    const live = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const live = await browser.json<ModeView>(MODE_VIEW_EXPRESSION);
     expect(live.workspace).toContain('live-source-fixture');
     expect(live.connection).toContain('Connected');
     expect(live.mark).toContain('Live source task');
 
-    await browser('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
-    await browser(
+    await browser.run('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
+    await browser.run(
       'wait',
       '--fn',
       'document.querySelector(".source-health")?.textContent?.includes("Demo data — no live connections")'
     );
     await waitForSinkCount(0);
-    const demo = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const demo = await browser.json<ModeView>(MODE_VIEW_EXPRESSION);
     expect(demo.workspace).toContain('leynos');
     expect(demo.connection).toContain('Demo data — no live connections');
     expect(demo.mark).toContain('Synthetic');
     expect(demo.mark).not.toContain('Live source task');
     await installObserverProbe();
 
-    await browser('find', 'role', 'button', 'click', '--name', 'Live · leynos', '--exact');
-    await browser('wait', '--fn', LIVE_CONNECTED_PREDICATE);
-    await browser('wait', '--fn', 'window.modeObserver?.markObservers.size >= 2');
+    await browser.run('find', 'role', 'button', 'click', '--name', 'Live · leynos', '--exact');
+    await browser.run('wait', '--fn', LIVE_CONNECTED_PREDICATE);
+    await browser.run('wait', '--fn', 'window.modeObserver?.markObservers.size >= 2');
     await waitForSinkCount(1);
-    const resumed = await browserJson<ModeView>(MODE_VIEW_EXPRESSION);
+    const resumed = await browser.json<ModeView>(MODE_VIEW_EXPRESSION);
     expect(resumed.connection).toContain('Connected');
     expect(resumed.mark).toContain('Live source task');
-    await browser('eval', 'window.modeObserver.captured=new Set(window.modeObserver.markObservers);true');
-    await browser('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
-    await browser(
+    await browser.run('eval', 'window.modeObserver.captured=new Set(window.modeObserver.markObservers);true');
+    await browser.run('find', 'role', 'button', 'click', '--name', 'Demo data · 120 repositories', '--exact');
+    await browser.run(
       'wait',
       '--fn',
       'Array.from(window.modeObserver?.captured ?? []).every((observer)=>window.modeObserver.closedObservers.has(observer))'
@@ -247,33 +183,12 @@ async function verifyLiveDemoLiveSwitch(): Promise<void> {
   }
 }
 
-/** Start the owned loopback fixture and its uniquely named Chromium session. */
-async function startBrowserFixture(): Promise<void> {
-  server = Bun.serve({hostname: '127.0.0.1', port: 0, fetch: fixtureResponse});
-  await browser('open', String(server.url));
-  await browser('set', 'viewport', '1280', '1200');
-}
-
 describe.skipIf(!isBrowserEnabled)('real board layout', () => {
-  beforeAll(startBrowserFixture, 75_000);
-
-  beforeEach(async () => {
-    await browser('reload');
-    await browser('wait', '--fn', 'document.querySelectorAll(".session-mark").length > 10');
-  }, 50_000);
-
-  afterAll(async () => {
-    try {
-      await browser('close');
-    } finally {
-      await server?.stop(true);
-      sinks.clear();
-    }
-  }, 35_000);
+  suite = boardBrowserSuite(snapshot, browser, BROWSER_SUITE_TIMEOUTS);
 
   it('hides compact evidence without hiding the activity glyph or accessible evidence', async () => {
-    await browser('select', 'select[aria-label="Mark density"]', 'compact');
-    const result = await browser(
+    await browser.run('select', 'select[aria-label="Mark density"]', 'compact');
+    const result = await browser.run(
       'eval',
       `(()=>{
       const mark=document.querySelector('button.session-mark');
@@ -293,7 +208,7 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
     expect(closed.page).toBe(closed.viewport);
     expect(closed.content).toBeGreaterThan(closed.width);
     expect(closed.left).toBeGreaterThan(0);
-    await browser('eval', "document.querySelector('button.session-mark').click()");
+    await browser.run('eval', "document.querySelector('button.session-mark').click()");
     const docked = await measureScrollPane();
     expect(docked.page).toBe(docked.viewport);
     expect(docked.width).toBeLessThan(closed.width);
@@ -302,8 +217,8 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   }, 240_000);
 
   it('hides a selected planning mark beneath the sticky repository column', async () => {
-    await browser('eval', "document.querySelector('button.session-mark').click()");
-    const result = await browser(
+    await browser.run('eval', "document.querySelector('button.session-mark').click()");
+    const result = await browser.run(
       'eval',
       `(()=>{
       const mark=document.querySelector('button.session-mark');
@@ -324,23 +239,23 @@ describe.skipIf(!isBrowserEnabled)('real board layout', () => {
   }, 240_000);
 
   it('bounds a live list pulse to its task button', async () => {
-    await browser('find', 'role', 'button', 'click', '--name', 'List', '--exact');
+    await browser.run('find', 'role', 'button', 'click', '--name', 'List', '--exact');
     await watchPulse(snapshot.cursor + 1);
-    expect(sinks.size).toBeGreaterThan(0);
-    publishObservation(snapshot.cursor + 1);
-    await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 1}`);
-    const bounds = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    expect(suite.fixture().sinks.size).toBeGreaterThan(0);
+    suite.fixture().publishObservation(snapshot.cursor + 1);
+    await browser.run('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 1}`);
+    const bounds = JSON.parse(await browser.run('eval', 'window.layoutPulse'));
     expect(bounds.cursor).toBe(snapshot.cursor + 1);
     expect(bounds.parentPosition).toBe('relative');
     expect(bounds.parentOverflow).toBe('clip');
     expect(bounds.pulseWidth).toBeLessThanOrEqual(bounds.taskWidth * 1.5 + 8);
     expect(bounds.pulseHeight).toBeLessThanOrEqual(bounds.taskHeight * 1.5 + 8);
-    await browser('set', 'media', 'light', 'reduced-motion');
-    await browser('wait', '--fn', 'matchMedia("(prefers-reduced-motion: reduce)").matches');
+    await browser.run('set', 'media', 'light', 'reduced-motion');
+    await browser.run('wait', '--fn', 'matchMedia("(prefers-reduced-motion: reduce)").matches');
     await watchPulse(snapshot.cursor + 2);
-    publishObservation(snapshot.cursor + 2);
-    await browser('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 2}`);
-    const reduced = JSON.parse(await browser('eval', 'window.layoutPulse'));
+    suite.fixture().publishObservation(snapshot.cursor + 2);
+    await browser.run('wait', '--fn', `window.layoutPulse?.cursor === ${snapshot.cursor + 2}`);
+    const reduced = JSON.parse(await browser.run('eval', 'window.layoutPulse'));
     expect(reduced.cursor).toBe(snapshot.cursor + 2);
     expect(reduced.animation).toBe('none');
     expect(reduced.display).toBe('none');

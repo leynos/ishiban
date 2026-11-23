@@ -55,6 +55,99 @@ export const DENSITY_LABELS: Record<Density, string> = {
   comfortable: 'Comfortable'
 };
 export const REPOSITORY_UNAVAILABLE = 'Repository not supplied';
+export const NO_CONDITIONS_LABEL = 'None reported';
+export const PROVISIONAL_RECENCY_NOTICE =
+  "Tab recency is pending or unavailable. This family's selected tab is provisional.";
+export const PROVISIONAL_BUDGET_NOTICE =
+  'This family cannot fit within the visible tab lookup budget. Its selected tab is provisional.';
+
+/** Independent blocked and failed-turn facts for one selected activity record. */
+export interface SessionCondition {
+  readonly isBlocked: boolean;
+  readonly hasLastTurnFailure: boolean;
+  readonly label: string;
+  readonly glyph: string | null;
+}
+
+/**
+ * Describe only explicit waiting activity and a supplied failed turn.
+ * @param session Raw activity record selected for the family.
+ * @returns The independent blocked and failed-turn facts for that record.
+ * @example
+ * conditionOf({...session, state: 'waiting'}).label; // 'blocked'
+ */
+export function conditionOf(session: Session): SessionCondition {
+  const isBlocked = session.state === 'waiting';
+  const hasLastTurnFailure = session.latestTurn?.state === 'failed';
+  const labels: string[] = [];
+  if (isBlocked) {
+    labels.push('blocked');
+  }
+  if (hasLastTurnFailure) {
+    labels.push('last known turn failed');
+  }
+  let glyph: string | null = null;
+  if (hasLastTurnFailure) {
+    glyph = '!';
+  } else if (isBlocked) {
+    glyph = '⌛';
+  }
+  return {isBlocked, hasLastTurnFailure, label: labels.join('; '), glyph};
+}
+
+/**
+ * Select the provisional-selection notice for the current family facts.
+ * @param recencyIncomplete Whether visible recency lookups remain pending or unavailable.
+ * @param recencyBudgetLimited Whether the family exceeded the visible lookup budget.
+ * @returns The applicable notice, or null when the selected tab is settled.
+ * @example
+ * provisionalSelectionNotice(false, false); // null
+ */
+export function provisionalSelectionNotice(recencyIncomplete: boolean, recencyBudgetLimited: boolean): string | null {
+  if (!recencyIncomplete) {
+    return null;
+  }
+  return recencyBudgetLimited ? PROVISIONAL_BUDGET_NOTICE : PROVISIONAL_RECENCY_NOTICE;
+}
+
+/** Structured task facts offered by a formatted tooltip. */
+export interface TaskTooltipFacts {
+  readonly title: string;
+  readonly repository: string;
+  readonly stage: string;
+  readonly activity: Activity;
+  readonly condition: string;
+  readonly evidence: string;
+  readonly provisionalNotice: string | null;
+}
+
+/**
+ * Project the existing family selection into formatted tooltip facts.
+ * Root context supplies task and workflow facts; the selected tab supplies
+ * runtime facts. Every field stays independent and no field is inferred.
+ * @param family One resolved session family with root context and selected activity.
+ * @param repositoryName Repository group name, already resolved from the root context.
+ * @param currentGeneration Current collector generation for evidence provenance.
+ * @returns The task's title and labelled, readable detail values.
+ * @example
+ * taskTooltipFacts(family, 'leynos/ishiban', 5).stage; // 'Refine'
+ */
+export function taskTooltipFacts(
+  family: SessionFamily,
+  repositoryName: string,
+  currentGeneration: number
+): TaskTooltipFacts {
+  const {context, activity} = family;
+  return {
+    title: context.title,
+    repository: repositoryName,
+    stage: STAGE_LABELS[context.stage],
+    activity: activityOf(activity.state),
+    condition: conditionOf(activity).label,
+    evidence: evidenceLabel(activity, currentGeneration),
+    provisionalNotice: provisionalSelectionNotice(family.recencyIncomplete, family.recencyBudgetLimited)
+  };
+}
 
 /**
  * Convert a runtime activity string without changing its workflow stage.

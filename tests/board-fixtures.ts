@@ -1,6 +1,23 @@
 /** @file Share small, immutable demo fixtures across board interaction tests. */
+import {screen} from '@testing-library/react';
 import type {Session, Snapshot} from '../src/contracts';
 import {createDemoSnapshot} from '../src/demo';
+
+/** Escape a literal title so it is matched inside an accessible name. */
+function escapeForRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
+}
+
+/**
+ * Find the rendered task mark whose accessible name contains this title.
+ * @param title Session title carried by the mark's accessible name.
+ * @returns The matching native task button.
+ * @example
+ * markByTitle('Synthetic planning task 01').getAttribute('data-stage'); // 'planning'
+ */
+export function markByTitle(title: string): HTMLElement {
+  return screen.getByRole('button', {name: new RegExp(escapeForRegExp(title), 'u')});
+}
 
 /**
  * Build a two-session board without changing the demo records' public shape.
