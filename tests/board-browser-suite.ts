@@ -9,34 +9,47 @@ export interface BoardBrowserSuite {
   fixture(): BoardBrowserFixture;
 }
 
-const SETUP_TIMEOUT_MS = 75_000;
-const CASE_TIMEOUT_MS = 50_000;
-const CLEANUP_TIMEOUT_MS = 35_000;
+/** Timer bounds shared by every Chromium suite. */
+export interface BrowserSuiteTimeouts {
+  readonly setupMs: number;
+  readonly caseMs: number;
+  readonly cleanupMs: number;
+}
+
+export const BROWSER_SUITE_TIMEOUTS: BrowserSuiteTimeouts = {setupMs: 75_000, caseMs: 50_000, cleanupMs: 35_000};
 
 /**
  * Register the shared open, reset and close lifecycle for one browser suite.
  * Every suite owns a private session name, so two suites can run at once.
- * Call it while the suite body executes, then use `fixture()` inside cases.
+ * Call it inside a `describe` body, never at module scope: a hook registered
+ * outside a skipped suite still runs, which would launch a browser even when
+ * the opt-in switch is unset.
  * @param snapshot Snapshot the fixture serves for the whole suite.
  * @param browser Browser driver already bound to this suite's session name.
+ * @param timeouts Timer bounds for setup, each case and cleanup.
  * @returns Access to the fixture started by this suite's `beforeAll`.
  * @example
- * const suite = boardBrowserSuite(createDemoSnapshot(), boardBrowser(sessionName));
- * // inside a case: suite.fixture().url
+ * describe.skipIf(!isBrowserEnabled)('board', () => {
+ *   const suite = boardBrowserSuite(createDemoSnapshot(), boardBrowser(sessionName), BROWSER_SUITE_TIMEOUTS);
+ * });
  */
-export function boardBrowserSuite(snapshot: Snapshot, browser: BoardBrowserDriver): BoardBrowserSuite {
+export function boardBrowserSuite(
+  snapshot: Snapshot,
+  browser: BoardBrowserDriver,
+  timeouts: BrowserSuiteTimeouts
+): BoardBrowserSuite {
   let started: BoardBrowserFixture | undefined;
 
   beforeAll(async () => {
     started = startBoardFixture(snapshot);
     await browser.run('open', started.url);
     await browser.run('set', 'viewport', '1280', '1200');
-  }, SETUP_TIMEOUT_MS);
+  }, timeouts.setupMs);
 
   beforeEach(async () => {
     await browser.run('reload');
     await browser.run('wait', '--fn', 'document.querySelectorAll(".session-mark").length > 10');
-  }, CASE_TIMEOUT_MS);
+  }, timeouts.caseMs);
 
   afterAll(async () => {
     try {
@@ -44,7 +57,7 @@ export function boardBrowserSuite(snapshot: Snapshot, browser: BoardBrowserDrive
     } finally {
       started?.stop();
     }
-  }, CLEANUP_TIMEOUT_MS);
+  }, timeouts.cleanupMs);
 
   return {
     fixture(): BoardBrowserFixture {

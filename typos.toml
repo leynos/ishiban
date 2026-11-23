@@ -62,6 +62,7 @@ extend-ignore-re = [
     "`color`",
     "`var\\.iamge_id` instead of `var\\.image_id`",
     "currentColor",
+    "getPropertyValue\\('(?:background-)?color'\\)",
 ]
 
 [default.extend-words]

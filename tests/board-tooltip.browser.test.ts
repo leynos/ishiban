@@ -2,7 +2,7 @@
 import {describe, expect, it} from 'bun:test';
 import {createDemoSnapshot} from '../src/demo';
 import {boardBrowser} from './board-browser-driver';
-import {boardBrowserSuite} from './board-browser-suite';
+import {BROWSER_SUITE_TIMEOUTS, boardBrowserSuite} from './board-browser-suite';
 import {isBrowserEnabled} from './native-browser-environment';
 
 const browser = boardBrowser(`ishiban-tooltip-${process.pid}`);
@@ -10,7 +10,6 @@ const snapshot = createDemoSnapshot();
 const MARK = 'button.session-mark:not(.session-mark--empty)';
 const TOOLTIP_OPEN = 'document.querySelector(".task-tooltip") !== null';
 const TOOLTIP_CLOSED = 'document.querySelector(".task-tooltip") === null';
-boardBrowserSuite(snapshot, browser);
 
 interface TooltipBox {
   readonly left: number;
@@ -97,7 +96,7 @@ async function verifyLayeringAndScroll(): Promise<void> {
   await browser.run('find', 'role', 'button', 'click', '--name', 'Synthetic planning task 01');
   await hoverOpen();
   const layering = await browser.json<{
-    topmostAtCenter: boolean;
+    topmostAtCentre: boolean;
     zIndex: number;
     stickyZIndex: number;
     inspectorZIndex: number;
@@ -105,12 +104,12 @@ async function verifyLayeringAndScroll(): Promise<void> {
     `(()=>{const tip=document.querySelector('.task-tooltip');const box=tip.getBoundingClientRect();
       const parse=(node)=>{const value=Number.parseInt(getComputedStyle(node).zIndex,10);
         return Number.isNaN(value)?0:value;};
-      return {topmostAtCenter:tip.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2)),
+      return {topmostAtCentre:tip.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2)),
         zIndex:parse(tip),
         stickyZIndex:parse(document.querySelector('.repository-name')),
         inspectorZIndex:parse(document.querySelector('.session-inspector'))};})()`
   );
-  expect(layering.topmostAtCenter).toBe(true);
+  expect(layering.topmostAtCentre).toBe(true);
   expect(layering.zIndex).toBeGreaterThan(layering.stickyZIndex);
   expect(layering.zIndex).toBeGreaterThan(layering.inspectorZIndex);
   await expectContainedTooltip();
@@ -146,19 +145,19 @@ async function verifyDensities(): Promise<void> {
     await hoverOpen();
     const styles = await browser.json<{
       background: string;
-      color: string;
+      text: string;
       width: number;
       maxWidth: number;
       density: string;
     }>(
       `(()=>{const tip=document.querySelector('.task-tooltip');const s=getComputedStyle(tip);
-        return {background:s.backgroundColor,color:s.color,width:tip.getBoundingClientRect().width,
-          maxWidth:Number.parseFloat(s.maxWidth),
+        return {background:s.getPropertyValue('background-color'),text:s.getPropertyValue('color'),
+          width:tip.getBoundingClientRect().width,maxWidth:Number.parseFloat(s.maxWidth),
           density:document.querySelector('.ishiban-board').getAttribute('data-density')};})()`
     );
     expect(styles.density).toBe(density);
     expect(styles.background).toBe('rgb(250, 249, 244)');
-    expect(styles.color).toBe('rgb(23, 32, 28)');
+    expect(styles.text).toBe('rgb(23, 32, 28)');
     expect(styles.width).toBeLessThanOrEqual(styles.maxWidth + 0.5);
     await expectContainedTooltip();
     await browser.run('press', 'Escape');
@@ -188,6 +187,8 @@ async function verifyNarrowViewports(): Promise<void> {
 }
 
 describe.skipIf(!isBrowserEnabled)('task tooltip in Chromium', () => {
+  boardBrowserSuite(snapshot, browser, BROWSER_SUITE_TIMEOUTS);
+
   it('portals content outside the scroll pane without moving table geometry', verifyPortalAndGeometry, 240_000);
 
   it('stays readable over the inspector and closes on ancestor scroll', verifyLayeringAndScroll, 240_000);

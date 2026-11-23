@@ -2,7 +2,7 @@
 import {describe, expect, it} from 'bun:test';
 import {createDemoSnapshot} from '../src/demo';
 import {firstSession} from './board-fixtures';
-import {boardBrowserSuite} from './board-browser-suite';
+import {BROWSER_SUITE_TIMEOUTS, boardBrowserSuite} from './board-browser-suite';
 import {boardBrowser} from './board-browser-driver';
 import {isBrowserEnabled} from './native-browser-environment';
 
@@ -34,7 +34,7 @@ const LIVE_CONNECTED_PREDICATE = `(()=>
   document.querySelector('.board-workspace')?.textContent?.includes('live-source-fixture')&&
   document.querySelector('.source-health span')?.textContent?.includes('Connected'))()`;
 const browser = boardBrowser(sessionName);
-const suite = boardBrowserSuite(snapshot, browser);
+let suite: ReturnType<typeof boardBrowserSuite>;
 
 /** Observe one task revision only; for example, watchPulse(snapshot.cursor + 1). */
 async function watchPulse(cursor: number): Promise<void> {
@@ -184,6 +184,8 @@ async function verifyLiveDemoLiveSwitch(): Promise<void> {
 }
 
 describe.skipIf(!isBrowserEnabled)('real board layout', () => {
+  suite = boardBrowserSuite(snapshot, browser, BROWSER_SUITE_TIMEOUTS);
+
   it('hides compact evidence without hiding the activity glyph or accessible evidence', async () => {
     await browser.run('select', 'select[aria-label="Mark density"]', 'compact');
     const result = await browser.run(

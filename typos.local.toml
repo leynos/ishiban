@@ -20,6 +20,7 @@ ignore = [
   '\bCARGO_TERM_COLOR\b',
   # CSS properties and values retain the spelling required by browsers.
   '\b(?:border-)?color\s*:',
+  "getPropertyValue\\('(?:background-)?color'\\)",
   '\b(?:align-items|justify-content|justify-items|text-align|place-items)\s*:\s*center\b',
   '\bscroll-behavior\s*:',
   '\boverscroll-behavior-inline\s*:',
