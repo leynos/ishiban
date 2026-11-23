@@ -38,8 +38,10 @@ class RetainedState:
     sidecar_rows: tuple[tuple[object, ...], ...]
 
 
-def sidecar_rows(directory: pathlib.Path) -> tuple[tuple[object, ...], ...]:
-    """Return every retained activity row for the ``w1`` workspace.
+def sidecar_rows(
+    directory: pathlib.Path, workspace_id: str
+) -> tuple[tuple[object, ...], ...]:
+    """Return every retained activity row for one workspace.
 
     Comparing whole rows, rather than only their count, detects an in-place
     update or upsert of an existing cached session.
@@ -57,7 +59,7 @@ def sidecar_rows(directory: pathlib.Path) -> tuple[tuple[object, ...], ...]:
             "SELECT workspace_id, session_id, base_revision, runtime_json,"
             " saved_at_ns FROM activity_runtime_cache"
             " WHERE workspace_id = ? ORDER BY session_id",
-            ("w1",),
+            (workspace_id,),
         ).fetchall()
     return tuple(tuple(row) for row in rows)
 
@@ -73,7 +75,7 @@ async def retained_state(store: Store, directory: pathlib.Path) -> RetainedState
     return RetainedState(
         events=await store.events(0),
         cursor=await store.current_cursor(),
-        sidecar_rows=sidecar_rows(directory),
+        sidecar_rows=sidecar_rows(directory, store.workspace_id),
     )
 
 
