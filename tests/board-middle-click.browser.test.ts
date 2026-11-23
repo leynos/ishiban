@@ -2,11 +2,13 @@
 import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'bun:test';
 import {Schema} from 'effect';
 import {createBrowserSession} from './browser-session';
+import {startEgressProxy, type EgressProxy} from './egress-proxy';
 import {FAMILY_SNAPSHOT, startFamilyBoardServer, type FamilyBoardServer} from './family-board-server';
 import {isBrowserEnabled} from './native-browser-environment';
 
 const {browser, browserJson, tabs, countTabs} = createBrowserSession(`ishiban-middle-click-${process.pid}`);
 const FAMILY_URL = 'https://lody.ai/leynos/sessions/root-0?tab=session%3Achild-0';
+const MINIMUM_BROWSER_VERSION = '0.34.0';
 const PROBE_STATE = 'window.__ishibanProbe';
 const MARK_SELECTOR = 'button[data-family-id="root-0"]';
 const READY_PREDICATE = `document.querySelector(${JSON.stringify(MARK_SELECTOR)})?.getAttribute('data-session-id') === 'child-0'`;
@@ -53,7 +55,31 @@ const InspectorStateSchema = Schema.Struct({
 });
 
 let fixture: FamilyBoardServer | undefined;
+let proxy: EgressProxy | undefined;
 let tabCount = 0;
+
+/** Parse the version from `agent-browser --version`; for example, 0.34.0. */
+function parseBrowserVersion(output: string): string {
+  const match = /^agent-browser (\d+\.\d+\.\d+)$/u.exec(output);
+  if (match?.[1] === undefined) throw new Error(`Unrecognized agent-browser version output: ${output}`);
+  return match[1];
+}
+
+/** Reject a browser CLI older than the documented gesture contract. */
+async function assertSupportedBrowser(): Promise<void> {
+  const version = parseBrowserVersion(await browser('--version'));
+  expect(Bun.semver.order(version, MINIMUM_BROWSER_VERSION)).toBeGreaterThanOrEqual(0);
+}
+
+/** Wait until the egress proxy records one refused tunnel to the target. */
+async function waitForConnectTarget(egress: EgressProxy, target: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (egress.connectTargets().includes(target)) return;
+    await Bun.sleep(50);
+  }
+  throw new Error(`Expected the egress proxy to record a tunnel to ${target}.`);
+}
 
 /** Centre the pointer over one rendered control before a low-level gesture. */
 async function pointAt(selector: string): Promise<{x: number; y: number}> {
@@ -165,6 +191,8 @@ async function verifyProbeNavigation(): Promise<void> {
   await middleClick('.session-mark--empty');
   const afterEmpty = await browserJson(PROBE_STATE, ProbeStateSchema);
   expect(afterEmpty.opens).toHaveLength(1);
+  expect(afterEmpty.mousedowns).toHaveLength(2);
+  expect(afterEmpty.mousedowns[1]).toEqual({family: null, defaultPrevented: false});
   expect(await readInspector()).toMatchObject({open: 'false', pressed: 'false'});
 
   await browser('click', MARK_SELECTOR);
@@ -188,6 +216,10 @@ async function verifyRealBrowsingContext(): Promise<void> {
 
   await middleClick(MARK_SELECTOR);
   await waitForTabs(tabCount + 1);
+  if (proxy === undefined) throw new Error('The egress proxy must be running.');
+  await waitForConnectTarget(proxy, 'lody.ai:443');
+  await Bun.sleep(1000);
+  expect(await countTabs()).toBe(tabCount + 1);
   const openTabs = await tabs();
   const lodyTabs = openTabs.filter((tab) => tab.url === FAMILY_URL);
   expect(lodyTabs).toHaveLength(1);
@@ -205,11 +237,11 @@ async function verifyRealBrowsingContext(): Promise<void> {
 
 describe.skipIf(!isBrowserEnabled)('real middle-click thread navigation', () => {
   beforeAll(async () => {
+    await assertSupportedBrowser();
+    proxy = startEgressProxy();
     fixture = startFamilyBoardServer();
-    await browser('open', fixture.url);
-    // agent-browser cannot attach network controls to a popup under its domain
-    // allowlist, so abort the canonical Lody requests instead of allowing egress.
-    await browser('network', 'route', 'https://lody.ai/**', '--abort');
+    // The proxy contains popups as well as the active tab; route controls do not.
+    await browser('--proxy', proxy.url, '--proxy-bypass', '127.0.0.1,localhost', 'open', fixture.url);
     await browser('set', 'viewport', '1280', '1200');
   }, 75_000);
 
@@ -219,6 +251,7 @@ describe.skipIf(!isBrowserEnabled)('real middle-click thread navigation', () => 
     try {
       await browser('close');
     } finally {
+      proxy?.stop();
       await fixture?.stop();
     }
   }, 35_000);
