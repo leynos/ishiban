@@ -19,10 +19,11 @@ const RECENCY_SETTLED_PREDICATE = `(()=>{
     !inspector.textContent.includes('provisional');
 })()`;
 const PROBE_EXPRESSION = `(()=>{
-  window.__ishibanProbe={opens:[],mousedowns:[],nativeOpen:window.open};
+  window.__ishibanProbe={opens:[],mousedowns:[],nativeOpen:window.open,passthrough:false};
   window.open=(url,target,features)=>{
     window.__ishibanProbe.opens.push({url:String(url),target:String(target),features:String(features)});
-    return null;
+    if(!window.__ishibanProbe.passthrough)return null;
+    return window.__ishibanProbe.nativeOpen.call(window,url,target,features);
   };
   document.addEventListener('mousedown',(event)=>{
     if(event.button!==1)return;
@@ -154,6 +155,19 @@ async function readInspector() {
   );
 }
 
+/** Wait for one recorded opener call and assert its canonical destination. */
+async function readSingleOpenerRequest() {
+  await browser('wait', '--fn', 'window.__ishibanProbe?.opens.length >= 1');
+  const probe = await browserJson(PROBE_STATE, ProbeStateSchema);
+  expect(probe.opens).toEqual([{url: FAMILY_URL, target: '_blank', features: 'noopener,noreferrer'}]);
+  return probe;
+}
+
+/** Assert the middle click left the task unselected and the inspector closed. */
+async function assertInspectorClosed(): Promise<void> {
+  expect(await readInspector()).toMatchObject({open: 'false', pressed: 'false', href: null});
+}
+
 /** Verify one probe-recorded middle click without opening a real tab. */
 async function verifyProbeNavigation(): Promise<void> {
   expect(FAMILY_SNAPSHOT.sessions.map((session) => session.sessionId)).toEqual(['root-0', 'child-0']);
@@ -179,14 +193,12 @@ async function verifyProbeNavigation(): Promise<void> {
   );
 
   await middleClick(MARK_SELECTOR);
-  await browser('wait', '--fn', 'window.__ishibanProbe?.opens.length >= 1');
-  const probe = await browserJson(PROBE_STATE, ProbeStateSchema);
-  expect(probe.opens).toEqual([{url: FAMILY_URL, target: '_blank', features: 'noopener,noreferrer'}]);
+  const probe = await readSingleOpenerRequest();
   expect(probe.mousedowns).toHaveLength(1);
   expect(probe.mousedowns[0]?.family).toBe('root-0');
   expect(probe.mousedowns[0]?.defaultPrevented).toBe(true);
   expect(await countTabs()).toBe(tabCount);
-  expect(await readInspector()).toMatchObject({open: 'false', pressed: 'false', href: null});
+  await assertInspectorClosed();
 
   await middleClick('.session-mark--empty');
   const afterEmpty = await browserJson(PROBE_STATE, ProbeStateSchema);
@@ -209,30 +221,53 @@ async function verifyProbeNavigation(): Promise<void> {
   expect(await countTabs()).toBe(tabCount);
 }
 
-/** Verify one unmocked middle click creates a genuine browser tab. */
-async function verifyRealBrowsingContext(): Promise<void> {
-  await browser('eval', 'window.open=window.__ishibanProbe.nativeOpen; true');
-  expect(await countTabs()).toBe(tabCount);
+/** Identities of the application tab and the one popup it opened. */
+interface RealTabPair {
+  readonly applicationTabId: string;
+  readonly popupTabId: string;
+}
 
-  await middleClick(MARK_SELECTOR);
+/** Wait for one settled popup and identify both real tabs; for example, one Lody tab. */
+async function waitForPopupTabs(): Promise<RealTabPair> {
   await waitForTabs(tabCount + 1);
-  if (proxy === undefined) throw new Error('The egress proxy must be running.');
-  await waitForConnectTarget(proxy, 'lody.ai:443');
   await Bun.sleep(1000);
   expect(await countTabs()).toBe(tabCount + 1);
   const openTabs = await tabs();
   const lodyTabs = openTabs.filter((tab) => tab.url === FAMILY_URL);
   expect(lodyTabs).toHaveLength(1);
-
   const applicationTab = openTabs.find((tab) => tab.url !== FAMILY_URL);
   const popupTab = lodyTabs[0];
   if (applicationTab === undefined || popupTab === undefined) {
     throw new Error('Expected one application tab and one Lody tab.');
   }
-  await browser('tab', applicationTab.tabId);
-  expect(await readInspector()).toMatchObject({open: 'false', pressed: 'false', href: null});
-  await browser('tab', 'close', popupTab.tabId);
-  await waitForTabs(tabCount);
+  return {applicationTabId: applicationTab.tabId, popupTabId: popupTab.tabId};
+}
+
+/** Restore the inert probe and close the popup after the real-tab case. */
+async function restoreRealTabs(realTabs: RealTabPair | undefined): Promise<void> {
+  await browser('eval', 'window.__ishibanProbe.passthrough=false; true').catch(() => null);
+  if (realTabs === undefined) return;
+  await browser('tab', realTabs.applicationTabId).catch(() => null);
+  await browser('tab', 'close', realTabs.popupTabId).catch(() => null);
+  await waitForTabs(tabCount).catch(() => null);
+}
+
+/** Verify one pass-through-probed middle click creates a genuine browser tab. */
+async function verifyRealBrowsingContext(): Promise<void> {
+  await browser('eval', 'window.__ishibanProbe.passthrough=true; true');
+  expect(await countTabs()).toBe(tabCount);
+  let realTabs: RealTabPair | undefined;
+  try {
+    await middleClick(MARK_SELECTOR);
+    if (proxy === undefined) throw new Error('The egress proxy must be running.');
+    await waitForConnectTarget(proxy, 'lody.ai:443');
+    realTabs = await waitForPopupTabs();
+    await browser('tab', realTabs.applicationTabId);
+    await readSingleOpenerRequest();
+    await assertInspectorClosed();
+  } finally {
+    await restoreRealTabs(realTabs);
+  }
 }
 
 describe.skipIf(!isBrowserEnabled)('real middle-click thread navigation', () => {

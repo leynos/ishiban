@@ -83,8 +83,9 @@ including the tab query that identifies a selected child. The browser's popup
 policy can still block the new context. A middle-click does not select the task
 or open the inspector, and ordinary left-click selection is unchanged. The
 gesture is unavailable for demo tasks, for a link the inspector reports as
-unavailable, and on empty placeholders. Keyboard users open the inspector and
-follow **Open in Lody** instead.
+unavailable, and on empty placeholders. Middle-button scrolling remains
+available on non-task board areas where the browser and platform support it.
+Keyboard users open the inspector and follow **Open in Lody** instead.
 
 A solid oxide square with a tonal border marks a failed latest turn. The
 oxide/amber candy cane marks blocked activity, corresponding to Lody's
