@@ -15,9 +15,9 @@ from cli_state_support import (
     stub_collector,
 )
 from falcon import testing
-from sqlalchemy.engine import make_url
 
 from ishiban import cli
+from ishiban.storage import Store
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -135,20 +135,29 @@ async def test_direct_collect_call_uses_the_shared_default(
     observer.assert_awaited_once()
 
 
-def test_database_url_preserves_url_significant_path_characters(
+@pytest.mark.asyncio
+async def test_database_url_opens_a_path_with_a_query_separator(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A state path containing ``?`` must still name the journal file."""
+    """A state path containing ``?`` must still create its journal and sidecar."""
     state = tmp_path / "state?query"
     state.mkdir()
+    store = Store(cli.database_url(state), "w1")
 
-    url = cli.database_url(state)
+    try:
+        await store.initialize()
+        await store.activity_snapshot()
+    finally:
+        await store.close()
 
-    assert url.endswith("%3Fquery/observatory.sqlite3"), (
-        "The query separator must be percent-encoded inside the path."
+    assert (state / "observatory.sqlite3").is_file(), (
+        "The journal must be created in the selected directory."
     )
-    assert make_url(url).database == str(state.resolve() / "observatory.sqlite3"), (
-        "SQLAlchemy must parse the journal path unchanged."
+    assert (state / "observatory.sqlite3.activity.sqlite3").is_file(), (
+        "The sidecar must be created beside the journal."
+    )
+    assert not (tmp_path / "state").exists(), (
+        "The query separator must not truncate the database path."
     )
 
 

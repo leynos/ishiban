@@ -54,21 +54,20 @@ class WorkspaceConfig(msgspec.Struct, rename="camel"):
     selector: str
 
 
-def database_url(directory: pathlib.Path) -> str:
+def database_url(directory: pathlib.Path) -> URL:
     """Return an absolute SQLite URL; for example, use the shared state directory.
 
-    The path is rendered through SQLAlchemy's URL builder so characters that are
-    significant in a URL, such as ``?``, remain part of the database path.
+    The URL object carries the decoded database path, so characters that are
+    significant in a URL, such as ``?``, never depend on how a particular
+    SQLAlchemy release escapes or unescapes a rendered string.
 
     Returns
     -------
-    str
+    sqlalchemy.engine.URL
         Absolute SQLite URL for the chosen state directory.
     """
     database = directory.resolve() / "observatory.sqlite3"
-    return URL.create("sqlite+aiosqlite", database=str(database)).render_as_string(
-        hide_password=False
-    )
+    return URL.create("sqlite+aiosqlite", database=str(database))
 
 
 def default_state_directory(*, command_chain: cabc.Sequence[str]) -> pathlib.Path:

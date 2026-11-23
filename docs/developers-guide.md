@@ -12,6 +12,14 @@ the Bun-built `dist/` directory and reads short SQLite transactions; on-demand
 API activity persists in its separate sidecar, as recorded in
 [ADR 004](adrs/adr-0004-persist-on-demand-activity.md).
 
+`ishiban.cli.database_url` returns a SQLAlchemy `URL` object rather than a
+rendered string, and `Store`, `ActivityCache` and `create_engine` accept
+`str | URL`. The decoded database path must survive the storage boundary: the
+SQLAlchemy 2.0 string renderer does not escape the database component while 2.1
+does, so a state path containing `?` would otherwise depend on the installed
+release. Keep new URL handling on the object form and normalize a string only
+through `make_url`.
+
 `ishiban.cli.default_state_directory` is the one resolver for the default
 directory shared by `collect` and `serve`. It reads `XDG_STATE_HOME` at call
 time, accepts only a non-empty absolute value, and otherwise falls back to

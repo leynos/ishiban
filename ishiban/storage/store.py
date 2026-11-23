@@ -13,6 +13,7 @@ from ishiban.storage.reader import read_cursor, read_detail, read_events, read_s
 from ishiban.storage.writer import JournalWriter
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from ishiban.detail_pagination import TurnPageCursor
@@ -30,7 +31,7 @@ class Store:
     await store.close()
     """
 
-    def __init__(self, database_url: str, workspace_id: str) -> None:
+    def __init__(self, database_url: str | URL, workspace_id: str) -> None:
         """Create a workspace-bound store without opening a connection."""
         self.workspace_id = workspace_id
         self._engine: AsyncEngine = create_engine(database_url)

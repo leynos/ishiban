@@ -22,6 +22,7 @@ from ishiban.storage.activity_projection import (
 from ishiban.storage.database import create_engine
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 MAX_ROWS_PER_WORKSPACE = 10_000
@@ -40,26 +41,24 @@ _RUNTIME_CACHE = sa.Table(
 )
 
 
-def _sidecar_url(journal_database_url: str) -> str:
+def _sidecar_url(journal_database_url: str | URL) -> URL:
     """Append the cache suffix to a file database while preserving memory URLs.
 
     For example, ``sqlite+aiosqlite:////tmp/journal.db`` maps to a sibling
-    ``journal.db.activity.sqlite3`` database.
+    ``journal.db.activity.sqlite3`` database. The returned URL object keeps a
+    decoded database path intact regardless of the SQLAlchemy release.
 
     Returns
     -------
-    str
+    sqlalchemy.engine.URL
         An SQLAlchemy SQLite URL for the independent activity sidecar.
     """
     url = make_url(journal_database_url)
     if url.query.get("mode") == "memory":
-        return url.set(database=":memory:", query={}).render_as_string(
-            hide_password=False
-        )
+        return url.set(database=":memory:", query={})
     if url.database is None or url.database in {"", ":memory:"}:
-        return url.render_as_string(hide_password=False)
-    sidecar_database = f"{url.database}.activity.sqlite3"
-    return url.set(database=sidecar_database).render_as_string(hide_password=False)
+        return url
+    return url.set(database=f"{url.database}.activity.sqlite3")
 
 
 def _projection_revision(projection: dict[str, object]) -> int:
@@ -173,12 +172,12 @@ class ActivityCache:
     turn without changing its title or durable journal revision.
     """
 
-    def __init__(self, journal_database_url: str, workspace_id: str) -> None:
+    def __init__(self, journal_database_url: str | URL, workspace_id: str) -> None:
         """Create an unopened sidecar engine for one journal and workspace.
 
         Parameters
         ----------
-        journal_database_url : str
+        journal_database_url : str or sqlalchemy.engine.URL
             Original async SQLite journal URL used to derive the sidecar path.
         workspace_id : str
             Workspace partition key stored with every runtime projection.
