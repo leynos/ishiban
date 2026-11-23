@@ -373,6 +373,11 @@ Test seams:
 - Use `opened_store`, `seed_unknown_sessions` and `remember_idle_activity` from
   `tests/storage_support.py` and `tests/batch_activity_support.py` for
   retained-data and sidecar scenarios.
+- Use `tests/enrichment_boundary_support.py` for retained-data boundary tests.
+  Its `retained_state` captures events, cursor and sidecar rows, `failing_spy`
+  registers a failing `lody` or `gh` spy, and `stream_replay` reads a bounded
+  events-route replay. A new boundary test should call these helpers rather
+  than re-implement the spy and state capture.
 - For retained-data queries, register `cmd-mox` spies for `lody` and `gh` with
   no expectations, call the route, then assert no invocations and unchanged
   journal events, cursor and every sidecar column.
@@ -395,7 +400,10 @@ constructors, and short presentation or transport-state branches. The snapshot
 and cursor-only store accessors retain their own initialization and transaction
 wrappers; their shared cursor SQL is extracted. The transport tests share only
 fetch-spy and virtual-clock ownership, keeping each failure scenario's
-assertions independent.
+assertions independent. `tests/test_collector_storage_recovery.py` and
+`tests/test_enrichment_boundary.py` share only typing-only imports; the
+exception is limited to that pair and must be rechecked when either module
+changes.
 
 On-demand activity and inspector metadata retain distinct response schemas and
 failure results, while sharing bounded subprocess ownership. Projection-only

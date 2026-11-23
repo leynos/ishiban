@@ -466,7 +466,8 @@ _Table 3: Guarantees mapped to existing regression tests._
 Additional focused coverage lives in `tests/test_session_show.py` for metadata
 reads and cleanup, `tests/test_session_recency_api.py` for per-member recency
 outcomes and `tests/test_pull_request_details.py` for bounded title lookup. The
-new `tests/test_enrichment_boundary.py` supplies the retained-data query
+new `tests/test_enrichment_boundary.py`, with helpers in
+`tests/enrichment_boundary_support.py`, supplies the retained-data query
 regression: snapshot, path and query session detail, the events route and event
 replay start no upstream process, leave every sidecar column unchanged, and
 leave journal events and the cursor unchanged while restoring retained activity
