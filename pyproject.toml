@@ -624,3 +624,7 @@ reason = "Keep explicit dependencies for independent family-selection, graph-ora
 [[tool.duplication_gate.allow]]
 members = ["tests/test_public_projection_properties.py", "tests/test_turn_transition_properties.py"]
 reason = "Keep explicit copy, typing and Hypothesis imports in independent public-preview and turn-transition property modules. The reviewed seven-line declaration fragment contains no executable scenario or oracle logic. A dependency facade or import alias solely to alter the clone metric would obscure these boundaries. Recheck this exact file pair when either module changes; do not extend it to shared algorithms. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/board-tooltip.browser.test.ts::tooltipBox", "tests/board-layout.browser.test.ts::measureScrollPane"]
+reason = "Keep the portalled tooltip's viewport, stacking and portal-ancestry measurement separate from the table pane's scroll-extent measurement. The reviewed eight-line fragment shares only a browser-command call shape and a rectangle read; the returned fields, the mutation each performs and the contract each asserts differ. A generic measurement wrapper would hide which geometry each Chromium case owns. See docs/developers-guide.md#duplication-review."

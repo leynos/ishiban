@@ -606,6 +606,64 @@ restoration behaviour. Its desktop grid reserves a right-hand column; narrow
 viewports stack the panel. The board owns its scroll viewport, including while
 the inspector is open. The former modal-only Radix Dialog dependency is removed.
 
+## Formatted task tooltips
+
+`@radix-ui/react-tooltip` 1.4.1 is the board's only Radix primitive dependency.
+`src/ui/task-tooltip.tsx` owns both the single `TaskTooltipProvider` rendered
+inside `BoardDisplay` and the `TaskTooltip` wrapper applied to real marks. The
+provider sets `delayDuration` and `skipDelayDuration` from the exported
+`TASK_TOOLTIP_DELAY_MS` and `TASK_TOOLTIP_SKIP_DELAY_MS` constants, both 300
+ms. Keyboard focus opens instantly because Radix does not delay it; only
+pointer hover waits. Add no per-root `delayDuration` override, so every mark
+shares one delay policy. `TaskTooltip` composes `Root`, `Trigger asChild`,
+`Portal` and `Content` over the existing native button. There is no wrapper
+element, so the mark keeps its accessible name, `data-*` identity, selection
+and inspector ARIA attributes, click handler, and `rootId` ref registration.
+
+Tooltip facts are pure. `taskTooltipFacts(family, repositoryName, generation)`
+in `src/ui/board-model.ts` reads the family's root context for the title and
+workflow stage and its selected tab for activity, condition and evidence.
+Workflow stage, activity, condition and evidence provenance stay independent
+fields; nothing is inferred from another. `conditionOf` and
+`provisionalSelectionNotice` also live there, and the inspector reuses the
+notice formatter so its wording and the tooltip's agree. Opening a tooltip
+makes no Lody, GitHub, recency or activity request, so it cannot move the
+durable cursor, create a pulse or take over bounded enrichment. Synthetic demo
+families stay outside every live read.
+
+Portal content mounts under `document.body`, clear of `.board-scroll` and the
+sticky repository column. `side="top"`, `sideOffset` and `collisionPadding`
+handle viewport edges, and `board-tooltip.css` bounds width and height with the
+`--radix-tooltip-content-available-width` and
+`--radix-tooltip-content-available-height` variables while wrapping long
+titles. The visual body is `aria-hidden`; `Tooltip.Content` carries an
+`aria-label` composed of the same facts plus the inspector hint, and Radix
+exposes that text through the trigger's `aria-describedby` only while open. No
+focusable content or raw HTML enters the tooltip. `z-index: 40` clears the
+sticky board layers at 1 and 2 and stays below the focused skip link at 50;
+`pointer-events` stay enabled so pointer travel into the tooltip keeps it open,
+and reduced-motion preferences suppress the entry animation.
+
+Radix's dismissable layer listens for Escape on the document capture phase and
+calls `preventDefault` when it consumes the key. `BoardLayout` therefore
+returns early on an already-prevented Escape, so the first press closes only
+the tooltip, and a second press closes the inspector and restores focus to the
+mark. Do not stop propagation or change focus restoration to achieve this
+ordering.
+
+The opt-in Chromium suites share three small fixtures.
+`tests/board-browser-fixture.ts` serves the built assets with a real SSE stream,
+`tests/board-browser-driver.ts` bounds one `agent-browser --session` call, and
+`tests/board-browser-suite.ts` registers the open, reset and close lifecycle
+for one privately named session. `tests/board-tooltip.browser.test.ts` holds
+the tooltip cases and `tests/board-layout.browser.test.ts` the geometry and
+pulse cases. Exercise hover through the CLI's real pointer rather than a
+synthetic event, and assert `data-state`, portal ancestry, `elementFromPoint`
+layering and computed colours instead of trusting a snapshot alone. Run both
+suites with
+`ISHIBAN_BROWSER_TESTS=1 bun test tests/board-tooltip.browser.test.ts
+tests/board-layout.browser.test.ts tests/board-interface-state.browser.test.ts`.
+
 ## Inspector navigation and turn diagnostics
 
 `serve` passes the marker's configured workspace selector to the snapshot API
