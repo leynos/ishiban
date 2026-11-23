@@ -360,9 +360,13 @@ Durable-effect rules:
   or PR associations; those remain collector evidence under
   [ADR 002](adrs/adr-0002-workflow-evidence.md).
 - Keep validation before use: protocol version, workspace identity, session
-  identity, known state and revision.
+  identity, known state and revision. Upstream results must report the
+  requested workspace; sidecar writes are scoped by the configured store
+  workspace rather than by a re-read workspace field.
 - Shared SQLite permissions do not enforce collector-only ownership. Code
   review and tests enforce it.
+- A new durable local effect needs an ADR. Reuse the existing activity sidecar
+  where last-known runtime evidence is enough rather than adding another store.
 
 Test seams:
 
@@ -372,8 +376,11 @@ Test seams:
 - For retained-data queries, register `cmd-mox` spies for `lody` and `gh` with
   no expectations, call the route, then assert no invocations and unchanged
   journal events, cursor and every sidecar column.
-- Use `ActivityResolutionOptions` for injected clocks and the reader
-  constructors for injected executables.
+- Use `ActivityResolutionOptions` for injected clocks and pass `clock` and
+  `lookup` to `PullRequestTitles` for title-cache timing and reads.
+- `LazyActivity` exposes neither an adapter nor a clock, so patch it, and the
+  collector, at module level as `tests/test_lazy_activity.py` does for
+  `_monotonic_time` and its cache bounds.
 - Keep dedicated child executables for chunking, delayed EOF, transport
   teardown, deadlines and cancellation, where command-response doubles cannot
   exercise the contract.

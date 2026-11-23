@@ -146,9 +146,12 @@ upstream mutation. They may perform a bounded upstream read and replace one row
 in a disposable, regenerable sidecar cache. That is analogous to a read-through
 cache rather than a command.
 
-`POST` is used for bounded batch reads because HTTP permits a request body on
-`POST` and because the browser must submit a set of identities. Neither batch
-route exposes a command, a job or a durable write.
+`POST` is used for batch activity and recency reads because HTTP permits a
+request body on `POST` and because the browser must submit a set of identities.
+Batch activity writes the same disposable sidecar as the singular activity
+route, because each pending member resolves through `resolve_activity` and
+`Store.remember_activity`. Neither batch route appends to the journal, advances
+the cursor or exposes a command or job.
 
 `AGENTS.md` states that Lody observations and associated GitHub pull-request
 lookups are read-only, and that task dispatch, session mutation and transcript
@@ -173,8 +176,9 @@ The exact boundary is:
 3. Only collector commands may write the journal or advance collector evidence.
 4. The API does not expose command routes for activity collection, sidecar
    writes or GitHub refresh.
-5. Typed partial outcomes are per member. A failed member does not fail the
-   collection.
+5. Typed partial outcomes are per member once the batch is in flight. Batch
+   preparation runs before the first frame, so a storage failure there aborts
+   the stream instead of becoming one member's result.
 6. Revision, workspace and identity checks precede every use of returned data.
 
 ### Pure policy and effect boundaries
@@ -289,9 +293,13 @@ Revision and identity:
 - The API resolves only `state == "unknown"` projections. A cache hit is used
   before any child starts. `includeKnown=true` returns current known evidence
   without a child.
-- Sidecar writes require a matching workspace, nonempty session identity, a
-  known state and a nonnegative base revision. An upsert cannot replace a row
-  with a greater base revision.
+- An upstream observation must report the requested workspace; a response from
+  another workspace is rejected before use.
+- Sidecar writes are scoped by the cache instance's configured workspace and
+  require a nonempty session identity, a known state and a nonnegative base
+  revision. The write does not re-read a workspace field from the supplied
+  projection; scoping comes from the store the API opened. An upsert cannot
+  replace a row with a greater base revision.
 
 Concurrency and caches:
 
@@ -412,6 +420,23 @@ the design, developer guide and regression test updates.
 - GitHub title lookups can return partial results; classification remains the
   collector's responsibility.
 
+Accepted POC limitations, recorded rather than fixed by this decision:
+
+- No atomic transaction spans the journal and the sidecar. A crash between the
+  two leaves last-known sidecar evidence that the revision guard, not a
+  rollback, reconciles.
+- An upsert accepts an equal base revision, so a later observation at the same
+  revision replaces the earlier cached runtime.
+- The singular activity `GET` has no storage-error catch; a sidecar failure
+  surfaces as a server error instead of a typed member outcome.
+- Batch preparation runs outside the per-member handler. A storage failure
+  while preparing the batch aborts the stream before any frame.
+- `PullRequestTitles` has no shielded, service-owned task contract, so a
+  cancelled request can cancel its own lookup rather than sharing one.
+- Dependency injection is partial: the collector and `LazyActivity` do not
+  expose adapters or clocks, so some effects are patched at module level in
+  tests instead of injected.
+
 ## Consequences
 
 The public contract and runtime behaviour do not change. The finding is
@@ -420,17 +445,21 @@ journal-write or task-dispatch defect.
 
 Existing regression evidence maps to the guarantees as follows:
 
-| Guarantee                                              | Existing regression evidence               |
-| ------------------------------------------------------ | ------------------------------------------ |
-| Single enrichment read is journal- and cursor-neutral  | `tests/test_activity_api.py`               |
-| Sidecar survives restarts and supersession             | `tests/test_activity_persistence.py`       |
-| Query fallback preserves identities without writes     | `tests/test_activity_query_api.py`         |
-| Execution watermark controls eligibility               | `tests/test_activity_revision.py`          |
-| Sidecar fields, revision guard, workspace scope, prune | `tests/test_activity_cache.py`             |
-| Batch frames, partial members and cancellation         | `tests/test_batch_activity_api.py`         |
-| Real ASGI-to-child batch path leaves the journal alone | `tests/test_batch_activity_end_to_end.py`  |
-| Revision-scoped TTL cache, concurrency and cleanup     | `tests/test_lazy_activity.py`              |
-| Inspector enrichment leaves the journal unchanged      | `tests/test_inspector_request_contract.py` |
+| Guarantee                                                | Existing regression evidence               |
+| -------------------------------------------------------- | ------------------------------------------ |
+| Single enrichment read is journal- and cursor-neutral    | `tests/test_activity_api.py`               |
+| Sidecar survives restarts and supersession               | `tests/test_activity_persistence.py`       |
+| Query fallback preserves identities without writes       | `tests/test_activity_query_api.py`         |
+| Execution watermark controls eligibility                 | `tests/test_activity_revision.py`          |
+| Sidecar fields, revision guard, workspace scope, prune   | `tests/test_activity_cache.py`             |
+| Metadata replay preserves a read; new execution does not | `tests/test_activity_rebase.py`            |
+| Batch frames, partial members and cancellation           | `tests/test_batch_activity_api.py`         |
+| A storage failure in one member keeps its siblings       | `tests/test_batch_activity_failures.py`    |
+| Real ASGI-to-child batch path leaves the journal alone   | `tests/test_batch_activity_end_to_end.py`  |
+| Revision-scoped TTL cache, concurrency and cleanup       | `tests/test_lazy_activity.py`              |
+| Queue waiting does not consume a child's own deadline    | `tests/test_lazy_activity_batch_limits.py` |
+| Inspector enrichment leaves the journal unchanged        | `tests/test_inspector_request_contract.py` |
+| Catalogue and PR provenance stay collector-owned         | `tests/test_storage_catalogue.py`          |
 
 _Table 3: Guarantees mapped to existing regression tests._
 
@@ -438,10 +467,10 @@ Additional focused coverage lives in `tests/test_session_show.py` for metadata
 reads and cleanup, `tests/test_session_recency_api.py` for per-member recency
 outcomes and `tests/test_pull_request_details.py` for bounded title lookup. The
 new `tests/test_enrichment_boundary.py` supplies the retained-data query
-regression: snapshot, path and query session detail, and event replay start no
-upstream process, leave the sidecar row count unchanged, and leave journal
-events and the cursor unchanged while restoring retained activity on the
-overlaid session.
+regression: snapshot, path and query session detail, the events route and event
+replay start no upstream process, leave every sidecar column unchanged, and
+leave journal events and the cursor unchanged while restoring retained activity
+on the overlaid session.
 
 ## Outstanding decisions
 
@@ -449,13 +478,19 @@ A future design with explicit command routes and pure query routes is warranted
 when any of these triggers applies:
 
 - the API runs more than one worker, or state must be shared across processes;
+- a second sidecar writer appears, for example a separate enrichment worker;
 - a task dispatch, upstream mutation or write-capable refresh operation is
   required;
 - refresh jobs need durable status, retries, cancellation or an audit trail;
 - authentication or per-user authorization is added;
+- Ghillie or work-item integration is added;
+- a public release freezes the HTTP contract, so later changes need a migration
+  path;
 - journal ownership moves behind a separate service or restricted database
   credentials;
 - retention or pruning of the journal becomes required;
+- private retention bounds become a requirement, as described in
+  [ADR 006](adr-0006-public-turn-previews-and-cursors.md);
 - measurements show that enrichment latency or subprocess pressure exceeds the
   accepted bounds;
 - cause codes for unresolved members become a product requirement;
