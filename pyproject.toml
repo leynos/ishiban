@@ -624,3 +624,15 @@ reason = "Keep explicit dependencies for independent family-selection, graph-ora
 [[tool.duplication_gate.allow]]
 members = ["tests/test_public_projection_properties.py", "tests/test_turn_transition_properties.py"]
 reason = "Keep explicit copy, typing and Hypothesis imports in independent public-preview and turn-transition property modules. The reviewed seven-line declaration fragment contains no executable scenario or oracle logic. A dependency facade or import alias solely to alter the clone metric would obscure these boundaries. Recheck this exact file pair when either module changes; do not extend it to shared algorithms. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/test_cli_state_directory.py", "tests/test_cli_workspace_marker.py"]
+reason = "Keep explicit imports for the shared-default location tests and the workspace-marker protection tests. The reviewed fragments are the command-fixture imports and repeated pytest fixture name lists; the command doubles, marker reader and assertions already use tests/cli_state_support.py. Coupling the two modules through an import facade would obscure which contract each test verifies. Recheck this exact pair when either module changes. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+members = ["tests/lody_process_support.py", "tests/test_cli_workspace_marker.py"]
+reason = "Keep the one-line private-directory creation explicit in each test helper; the shared line is a mkdir call, while the surrounding fake-executable and workspace-marker fixtures own different contracts. See docs/developers-guide.md#duplication-review."
+
+[[tool.duplication_gate.allow]]
+unit = "tests/test_user_guide_behaviour.py"
+reason = "Keep the published-example seeding, snapshot and assertion steps readable in one scenario module. The generated migration example and its expected-state fixture describe the same five filenames by necessity; a generic filesystem-snapshot framework would hide the exact bytes and modes this migration contract asserts. See docs/developers-guide.md#duplication-review."

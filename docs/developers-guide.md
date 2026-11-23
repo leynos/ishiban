@@ -360,8 +360,8 @@ snapshot. The same wheel runs the actual collector CLI against a dedicated fake
 Lody stream, persists an observer event and shuts down on SIGINT. Owned process
 groups are reaped if the test fails. This regression covers installed resources
 and streaming lifecycle rather than substituting command responses for
-packaging. Standalone Alembic commands use the synchronous SQLite driver and target
-`.ishiban/observatory.sqlite3` relative to the checkout's `alembic.ini`,
+packaging. Standalone Alembic commands use the synchronous SQLite driver and
+target `.ishiban/observatory.sqlite3` relative to the checkout's `alembic.ini`,
 independently of the caller's working directory. That repository-relative
 target is intentionally separate from the CLI's XDG default: `alembic.ini`
 stays unchanged, and operators run the collector instead when they want the

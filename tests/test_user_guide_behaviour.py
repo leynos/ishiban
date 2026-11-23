@@ -79,7 +79,6 @@ def run_documented_cli(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     cmd_mox: object,
-    isolated_xdg_state_home: pathlib.Path,
 ) -> GuideRun:
     """Parse published flags while replacing only external and endless edges.
 
@@ -123,7 +122,7 @@ def run_documented_cli(
         result_action="return_value",
     )
     return GuideRun(
-        isolated_xdg_state_home / "ishiban",
+        tmp_path / "xdg-state" / "ishiban",
         (collector_directory, server_directory),
         observer,
         listener,
@@ -173,6 +172,23 @@ def _run_bash_example(
     )
 
 
+def _state_snapshot(directory: pathlib.Path) -> dict[str, tuple[bytes, int]]:
+    """Read each legacy filename's exact bytes and permission bits.
+
+    Returns
+    -------
+    dict[str, tuple[bytes, int]]
+        The recorded content and mode for every expected legacy file.
+    """
+    return {
+        name: (
+            (directory / name).read_bytes(),
+            stat.S_IMODE((directory / name).stat().st_mode),
+        )
+        for name in LEGACY_FILES
+    }
+
+
 def _seed_legacy_state(directory: pathlib.Path) -> None:
     """Create representative legacy files with private and shared modes."""
     directory.mkdir(parents=True)
@@ -215,12 +231,9 @@ def test_documented_migration_moves_legacy_state_unchanged(
     assert stat.S_IMODE(destination.stat().st_mode) == 0o700, (
         "The moved directory must retain its private mode."
     )
-    for name, (content, mode) in LEGACY_FILES.items():
-        moved = destination / name
-        assert moved.read_bytes() == content, f"{name} must keep its exact bytes."
-        assert stat.S_IMODE(moved.stat().st_mode) == mode, (
-            f"{name} must keep its permissions."
-        )
+    assert _state_snapshot(destination) == LEGACY_FILES, (
+        "The move must preserve each file's exact bytes and permissions."
+    )
 
 
 def test_documented_migration_refuses_an_existing_destination(

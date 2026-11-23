@@ -45,8 +45,8 @@ This page locates the proof of concept's runtime components and verification.
 - Runtime state lives outside the checkout by default: `$XDG_STATE_HOME/ishiban`
   or `~/.local/state/ishiban`. It holds the SQLite journal, the
   `observatory.sqlite3.activity.sqlite3` on-demand sidecar, `workspace.json`,
-  the collector lock and `interface-state.key`. An explicit
-  `--state-directory` may place it anywhere.
+  the collector lock and `interface-state.key`. An explicit `--state-directory`
+  may place it anywhere.
 - `.ishiban/` is ignored and no longer the default. It remains the target of
   standalone Alembic commands relative to `alembic.ini`, and it can still hold
   legacy working-directory state from earlier builds. The

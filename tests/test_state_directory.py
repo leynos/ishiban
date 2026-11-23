@@ -50,7 +50,9 @@ def test_absolute_xdg_root_selects_the_shared_directory(
     """A valid absolute XDG root is used without resolving or creating it."""
     resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
 
-    assert resolved == isolated_xdg_state_home / "ishiban"
+    assert resolved == isolated_xdg_state_home / "ishiban", (
+        "A valid absolute XDG root must select its application directory."
+    )
     assert resolved.is_absolute(), "The default must not depend on the cwd."
     assert not resolved.exists(), "Resolution must not create directories."
 
@@ -60,13 +62,28 @@ def test_unset_xdg_root_falls_back_to_local_state(
 ) -> None:
     """An absent XDG state root selects $HOME/.local/state."""
     _remove_xdg_root(monkeypatch)
+    resolved, home = _resolved_with_home(tmp_path, monkeypatch, "")
+
+    assert resolved == home / ".local" / "state" / "ishiban", (
+        "An absent XDG root must fall back to the home state directory."
+    )
+    assert not resolved.exists(), "Resolution must not create directories."
+
+
+def _resolved_with_home(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> tuple[pathlib.Path, pathlib.Path]:
+    """Resolve the default under one configured XDG value and a private home.
+
+    Returns
+    -------
+    tuple[pathlib.Path, pathlib.Path]
+        The resolved default and the home directory that anchors the fallback.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", value)
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-
-    resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
-
-    assert resolved == home / ".local" / "state" / "ishiban"
-    assert not resolved.exists(), "Resolution must not create directories."
+    return cli.default_state_directory(command_chain=COMMAND_CHAIN), home
 
 
 @pytest.mark.parametrize(
@@ -76,13 +93,11 @@ def test_invalid_xdg_root_is_ignored(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, value: str
 ) -> None:
     """Empty and relative values are invalid under the XDG specification."""
-    monkeypatch.setenv("XDG_STATE_HOME", value)
-    home = tmp_path / "home"
-    monkeypatch.setenv("HOME", str(home))
+    resolved, home = _resolved_with_home(tmp_path, monkeypatch, value)
 
-    resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
-
-    assert resolved == home / ".local" / "state" / "ishiban"
+    assert resolved == home / ".local" / "state" / "ishiban", (
+        "An invalid XDG root must fall back to the home state directory."
+    )
     assert "~" not in str(resolved), "No tilde expansion may occur."
 
 
@@ -95,7 +110,9 @@ def test_nonexistent_xdg_root_is_returned_without_creation(
 
     resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
 
-    assert resolved == state_root / "ishiban"
+    assert resolved == state_root / "ishiban", (
+        "A missing XDG root must still be selected."
+    )
     assert not state_root.exists(), "Resolution must not create the XDG root."
 
 
@@ -139,7 +156,9 @@ def test_every_resolved_default_is_absolute(value: str) -> None:
         patch.setenv("HOME", str(home))
         resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
 
-    assert resolved == home / ".local" / "state" / "ishiban"
+    assert resolved == home / ".local" / "state" / "ishiban", (
+        "Every invalid XDG value must select the home fallback."
+    )
     assert resolved.is_absolute(), "The default must never be relative."
 
 
@@ -153,5 +172,7 @@ def test_resolver_does_not_expand_environment_variables(
 
     resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
 
-    assert resolved == state_root / "ishiban"
+    assert resolved == state_root / "ishiban", (
+        "A configured absolute XDG root must be used literally."
+    )
     assert "expanded" not in str(resolved), "Variables must not be expanded."
