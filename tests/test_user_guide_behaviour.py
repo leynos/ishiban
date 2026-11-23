@@ -265,6 +265,34 @@ def test_documented_migration_refuses_an_existing_destination(
     )
 
 
+def test_documented_migration_preserves_a_fresh_default(
+    tmp_path: pathlib.Path, published_examples: dict[str, str]
+) -> None:
+    """The upgrade path keeps the directory a first collect run created."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _seed_legacy_state(checkout / ".ishiban")
+    destination = tmp_path / "xdg-state" / "ishiban"
+    destination.mkdir(parents=True)
+    fresh_marker = b'{"workspaceId":"w1","selector":"leynos"}'
+    (destination / "workspace.json").write_bytes(fresh_marker)
+    environment = _isolated_environment(tmp_path)
+    environment["PRESERVE_NEW_DEFAULT"] = "1"
+
+    result = _run_bash_example(
+        published_examples["migrate-state"], checkout, environment
+    )
+
+    assert result.returncode == 0, result.stderr
+    preserved = tmp_path / "xdg-state" / "ishiban.before-migration"
+    assert (preserved / "workspace.json").read_bytes() == fresh_marker, (
+        "The fresh default must be preserved unchanged."
+    )
+    assert _state_snapshot(destination) == LEGACY_FILES, (
+        "The legacy state must replace the fresh default."
+    )
+
+
 def test_documented_migration_rejects_an_unusable_home(
     tmp_path: pathlib.Path, published_examples: dict[str, str]
 ) -> None:

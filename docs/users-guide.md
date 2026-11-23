@@ -82,8 +82,17 @@ that identity for `serve`.
 Earlier builds stored state in an ignored `.ishiban/` directory beside the
 checkout. When the current default is selected and such a directory still holds
 a workspace marker, `collect` prints a read-only notice naming both paths; it
-never opens, moves, or deletes the legacy files. If that state is the workspace
-you still use, migrate it once after stopping both processes:
+never opens, moves, or deletes the legacy files.
+
+That notice appears after the first run of the new build, which has also
+created and initialized the new default directory. If that fresh directory is
+still the only occupant, set `PRESERVE_NEW_DEFAULT=1` for one migration run to
+keep it as `<state_root>/ishiban.before-migration`. Confirm the migrated
+journal opens, then remove that preserved directory yourself when it is no
+longer needed. If no such directory exists yet, run the same example without
+the variable.
+
+Stop both processes, then migrate the legacy state once:
 
 <!-- tested-example: migrate-state -->
 ```bash
@@ -108,8 +117,11 @@ if [ ! -d .ishiban ]; then
 fi
 mkdir -p "$state_root"
 if [ -e "$state_root/ishiban" ]; then
-  printf 'Refusing to merge into an existing state directory.\n' >&2
-  exit 1
+  if [ "${PRESERVE_NEW_DEFAULT-}" != 1 ]; then
+    printf 'Refusing to merge into an existing state directory.\n' >&2
+    exit 1
+  fi
+  mv "$state_root/ishiban" "$state_root/ishiban.before-migration"
 fi
 mv .ishiban "$state_root/ishiban"
 ```
@@ -117,11 +129,12 @@ mv .ishiban "$state_root/ishiban"
 The move keeps the journal, its `-wal` and `-shm` files, the activity sidecar,
 `workspace.json`, the collector lock and `interface-state.key` together, with
 their permissions and ownership. Do not merge two state directories and do not
-delete either one: an existing destination makes the example stop, so review
-both workspaces first. To keep the old location instead, pass
-`--state-directory .ishiban` to both commands from that checkout. That explicit
-override is also the safe choice when several checkouts each have their own
-legacy `.ishiban` state, because one shared default can hold only one workspace.
+delete either one: a destination that already holds reviewed state makes the
+example stop, so compare both workspaces first. To keep the old location
+instead, pass `--state-directory .ishiban` to both commands from that checkout.
+That explicit override is also the safe choice when several checkouts each have
+their own legacy `.ishiban` state, because one shared default can hold only one
+workspace.
 
 ## Read the board
 
