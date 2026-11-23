@@ -167,12 +167,14 @@ def _warn_about_legacy_state(resolved: pathlib.Path) -> None:
     resolved : pathlib.Path
         The default state directory selected for this invocation.
     """
-    legacy = pathlib.Path.cwd() / LEGACY_STATE_DIRECTORY
     try:
+        legacy = pathlib.Path.cwd() / LEGACY_STATE_DIRECTORY
         if not (legacy / MARKER_FILENAME).is_file():
             return
         is_same_directory = legacy.resolve() == resolved.resolve()
     except OSError:
+        # An unreadable working directory cannot prove legacy state exists, and
+        # the notice must never turn a usable default into a failure.
         return
     if is_same_directory:
         return
