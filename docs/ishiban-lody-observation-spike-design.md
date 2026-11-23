@@ -776,8 +776,8 @@ facts. Board and resource integration have passed the repository gates and
 local browser acceptance checks; hosted Chromium evidence is not available. The
 ExecPlan records candidate revisions and the remaining review work.
 
-[adr-003]: adrs/adr-003-interface-state-and-lazy-activity.md
-[adr-004]: adrs/adr-004-persist-on-demand-activity.md
-[adr-005]: adrs/adr-005-batched-activity-and-update-cues.md
-[adr-007]: adrs/adr-007-session-tab-families.md
-[adr-008]: adrs/adr-008-runtime-evidence-policy.md
+[adr-003]: adrs/adr-0003-interface-state-and-lazy-activity.md
+[adr-004]: adrs/adr-0004-persist-on-demand-activity.md
+[adr-005]: adrs/adr-0005-batched-activity-and-update-cues.md
+[adr-007]: adrs/adr-0007-session-tab-families.md
+[adr-008]: adrs/adr-0008-runtime-evidence-policy.md

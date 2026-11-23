@@ -344,9 +344,10 @@ accepted POC split. Classify every new route by effect, not by HTTP method:
 - A retained-data query reads committed journal rows, events, health, the
   durable cursor or browser-supplied interface state. It may overlay the
   activity sidecar but must not start an upstream child or write durable state.
-- A bounded enrichment read may start one fixed, read-only `lody` or `gh` child
-  and may write only the activity sidecar. Keep its process, output, time,
-  cache and concurrency bounds explicit.
+- A singular bounded enrichment read may start at most one fixed, read-only
+  `lody` or `gh` child and may write only the activity sidecar. A batch may
+  start one child per pending member within its concurrency bound. Keep each
+  route's process, output, time, cache and concurrency bounds explicit.
 - A collector command has no HTTP route. Only the collector writes the journal,
   advances collector generations and owns evidence generation.
 - `POST` is acceptable for a bounded read that carries a JSON body; it is not

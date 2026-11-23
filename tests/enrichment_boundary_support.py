@@ -1,6 +1,7 @@
 """Shared fixtures and readers for the enrichment boundary regression tests."""
 
 import asyncio
+import contextlib as ctx
 import dataclasses as dc
 import sqlite3
 import typing as typ
@@ -49,7 +50,9 @@ def sidecar_rows(directory: pathlib.Path) -> tuple[tuple[object, ...], ...]:
         Sidecar rows ordered by session identity.
     """
     sidecar = directory / f"{JOURNAL_NAME}{SIDE_CAR_SUFFIX}"
-    with sqlite3.connect(sidecar) as connection:
+    # sqlite3's connection context manager only commits or rolls back; closing
+    # the handle as well avoids leaking it in the test process.
+    with ctx.closing(sqlite3.connect(sidecar)) as connection:
         rows = connection.execute(
             "SELECT workspace_id, session_id, base_revision, runtime_json,"
             " saved_at_ns FROM activity_runtime_cache"
