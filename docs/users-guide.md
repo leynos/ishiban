@@ -79,7 +79,7 @@ Middle-click a real task mark in the table, matrix, list, or workflow-exception
 group to open its Lody thread in a new browsing context. The board uses the
 same canonical destination as the inspector's **Open in Lody** link. For a
 grouped family, it opens the displayed tab rather than the parent's thread,
-including the tab query that identifies a selected child. Your browser's popup
+including the tab query that identifies a selected child. The browser's popup
 policy can still block the new context. A middle-click does not select the task
 or open the inspector, and ordinary left-click selection is unchanged. The
 gesture is unavailable for demo tasks, for a link the inspector reports as
