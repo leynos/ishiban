@@ -25,14 +25,22 @@ const PROBE_EXPRESSION = `(()=>{
     if(!window.__ishibanProbe.passthrough)return null;
     return window.__ishibanProbe.nativeOpen.call(window,url,target,features);
   };
-  document.addEventListener('mousedown',(event)=>{
+  window.__ishibanProbe.mousedownHandler=(event)=>{
     if(event.button!==1)return;
     const button=event.target instanceof Element?event.target.closest('button'):null;
     window.__ishibanProbe.mousedowns.push({
       family:button?.getAttribute('data-family-id')??null,
       defaultPrevented:event.defaultPrevented
     });
-  });
+  };
+  document.addEventListener('mousedown',window.__ishibanProbe.mousedownHandler);
+  return true;
+})()`;
+const RESTORE_PROBE_EXPRESSION = `(()=>{
+  const probe=window.__ishibanProbe;
+  if(!probe)return false;
+  window.open=probe.nativeOpen;
+  document.removeEventListener('mousedown',probe.mousedownHandler);
   return true;
 })()`;
 const PointSchema = Schema.Struct({x: Schema.Number, y: Schema.Number});
@@ -54,9 +62,11 @@ const InspectorStateSchema = Schema.Struct({
   sessionId: Schema.NullOr(Schema.String),
   selectedTab: Schema.Boolean
 });
+const RestoredSchema = Schema.Struct({restored: Schema.Boolean});
 
 let fixture: FamilyBoardServer | undefined;
 let proxy: EgressProxy | undefined;
+let baselineTabIds = new Set<string>();
 let tabCount = 0;
 
 /** Parse the version from `agent-browser --version`; for example, 0.34.0. */
@@ -131,8 +141,10 @@ async function installFreshPage(): Promise<void> {
   await browser('reload');
   await browser('wait', '--fn', READY_PREDICATE);
   await waitForRecency();
+  const openTabs = await tabs();
+  tabCount = openTabs.length;
+  baselineTabIds = new Set(openTabs.map((tab) => tab.tabId));
   await browser('eval', PROBE_EXPRESSION);
-  tabCount = await countTabs();
 }
 
 /** Read the inspector's canonical destination and selected identity. */
@@ -243,31 +255,66 @@ async function waitForPopupTabs(): Promise<RealTabPair> {
   return {applicationTabId: applicationTab.tabId, popupTabId: popupTab.tabId};
 }
 
-/** Restore the inert probe and close the popup after the real-tab case. */
-async function restoreRealTabs(realTabs: RealTabPair | undefined): Promise<void> {
-  await browser('eval', 'window.__ishibanProbe.passthrough=false; true').catch(() => null);
-  if (realTabs === undefined) return;
-  await browser('tab', realTabs.applicationTabId).catch(() => null);
-  await browser('tab', 'close', realTabs.popupTabId).catch(() => null);
-  await waitForTabs(tabCount).catch(() => null);
+/** Restore the probe and the baseline tab count in the application tab. */
+async function restoreRealTabs(): Promise<void> {
+  // Read the live tab list rather than the identities a successful assertion
+  // returned, so a failure before popup identification cannot leak an extra
+  // tab. Swallow cleanup errors so the original assertion stays the reported
+  // failure.
+  const openTabs = await tabs().catch(() => []);
+  const applicationTab = openTabs.find((tab) => baselineTabIds.has(tab.tabId));
+  if (applicationTab !== undefined) await browser('tab', applicationTab.tabId).catch(() => null);
+  await browser('eval', RESTORE_PROBE_EXPRESSION).catch(() => null);
+  for (const tab of openTabs.filter((open) => !baselineTabIds.has(open.tabId))) {
+    await browser('tab', 'close', tab.tabId).catch(() => null);
+  }
 }
 
 /** Verify one pass-through-probed middle click creates a genuine browser tab. */
 async function verifyRealBrowsingContext(): Promise<void> {
   await browser('eval', 'window.__ishibanProbe.passthrough=true; true');
   expect(await countTabs()).toBe(tabCount);
-  let realTabs: RealTabPair | undefined;
   try {
     await middleClick(MARK_SELECTOR);
     if (proxy === undefined) throw new Error('The egress proxy must be running.');
     await waitForConnectTarget(proxy, 'lody.ai:443');
-    realTabs = await waitForPopupTabs();
+    const realTabs = await waitForPopupTabs();
     await browser('tab', realTabs.applicationTabId);
     await readSingleOpenerRequest();
     await assertInspectorClosed();
   } finally {
-    await restoreRealTabs(realTabs);
+    await restoreRealTabs();
   }
+}
+
+/** Verify failed identification still restores the opener and closes duplicate tabs. */
+async function verifyFailureSafeCleanup(): Promise<void> {
+  await browser('eval', 'window.__ishibanProbe.passthrough=true; true');
+  await browser(
+    'eval',
+    `(()=>{
+      window.open(${JSON.stringify(FAMILY_URL)},'_blank','noopener,noreferrer');
+      window.open(${JSON.stringify(FAMILY_URL)},'_blank','noopener,noreferrer');
+      return true;
+    })()`
+  );
+  await waitForTabs(tabCount + 2);
+  let identificationFailed = false;
+  try {
+    expect(await countTabs()).toBe(tabCount + 3);
+  } catch {
+    identificationFailed = true;
+  } finally {
+    await restoreRealTabs();
+  }
+  expect(identificationFailed).toBe(true);
+  expect(await countTabs()).toBe(tabCount);
+  const restored = await browserJson('({restored: window.open === window.__ishibanProbe?.nativeOpen})', RestoredSchema);
+  expect(restored.restored).toBe(true);
+  const before = await browserJson(PROBE_STATE, ProbeStateSchema);
+  await middleClick('.session-mark--empty');
+  const after = await browserJson(PROBE_STATE, ProbeStateSchema);
+  expect(after.mousedowns).toHaveLength(before.mousedowns.length);
 }
 
 describe.skipIf(!isBrowserEnabled)('real middle-click thread navigation', () => {
@@ -294,4 +341,6 @@ describe.skipIf(!isBrowserEnabled)('real middle-click thread navigation', () => 
   it('opens the displayed child thread once and preserves the inspector route', verifyProbeNavigation, 240_000);
 
   it('opens the displayed child thread in a real browsing context', verifyRealBrowsingContext, 240_000);
+
+  it('restores the opener and closes duplicate tabs after failed identification', verifyFailureSafeCleanup, 240_000);
 });
