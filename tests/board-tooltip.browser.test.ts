@@ -39,6 +39,14 @@ async function hoverOpen(): Promise<void> {
   await browser.run('wait', '--fn', TOOLTIP_OPEN);
 }
 
+/** Select the first task, then reopen its tooltip after a real pointer leave. */
+async function selectTaskAndReopen(): Promise<void> {
+  await browser.run('find', 'role', 'button', 'click', '--name', 'Synthetic planning task 01');
+  // Radix reopens on pointermove only after pointerleave clears its move flag.
+  await browser.run('hover', '.board-heading h1');
+  await hoverOpen();
+}
+
 /** Assert the open tooltip is inside the given viewport and above the board layers. */
 async function expectContainedTooltip(width = 1280, height = 1200): Promise<void> {
   const box = await tooltipBox();
@@ -93,8 +101,7 @@ async function verifyPortalAndGeometry(): Promise<void> {
 
 /** Keep the tooltip over the sticky column and inspector, closing on ancestor scroll. */
 async function verifyLayeringAndScroll(): Promise<void> {
-  await browser.run('find', 'role', 'button', 'click', '--name', 'Synthetic planning task 01');
-  await hoverOpen();
+  await selectTaskAndReopen();
   const layering = await browser.json<{
     topmostAtCentre: boolean;
     zIndex: number;
@@ -124,8 +131,7 @@ async function verifyLayeringAndScroll(): Promise<void> {
 
 /** Close only the tooltip on the first Escape, then the inspector on the second. */
 async function verifyEscapeLayering(): Promise<void> {
-  await browser.run('find', 'role', 'button', 'click', '--name', 'Synthetic planning task 01');
-  await hoverOpen();
+  await selectTaskAndReopen();
   await browser.run('press', 'Escape');
   await browser.run('wait', '--fn', TOOLTIP_CLOSED);
   expect(await browser.run('eval', 'document.querySelector(".session-inspector") !== null')).toBe('true');
@@ -174,8 +180,7 @@ async function verifyNarrowViewports(): Promise<void> {
     await hoverOpen();
     await expectContainedTooltip(width, 900);
 
-    await browser.run('find', 'role', 'button', 'click', '--name', 'Synthetic planning task 01');
-    await hoverOpen();
+    await selectTaskAndReopen();
     await expectContainedTooltip(width, 900);
 
     await browser.run('press', 'Escape');
