@@ -5,9 +5,8 @@ import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useSyncExternalStore} from 'react';
 import type {ReactElement} from 'react';
-import type {Session, Snapshot, SessionActivityFrame} from '../src/contracts';
+import type {Session, Snapshot} from '../src/contracts';
 import {createBoardStore, type BoardStore} from '../src/client';
-import {createDemoSnapshot} from '../src/demo';
 import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
 import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
@@ -17,7 +16,21 @@ import {
   ControlledIntersectionObserver,
   installControlledIntersectionObserver
 } from './controlled-intersection-observer';
-type ActivitySessionSpec = readonly [number, string, string, Session['source'], Session['state'], number];
+import {
+  DEMO_UNKNOWN_SESSION,
+  KNOWN_SESSION,
+  UNKNOWN_REAL_FOUR,
+  UNKNOWN_REAL_ONE,
+  UNKNOWN_REAL_THREE,
+  UNKNOWN_REAL_TWO,
+  activityFrame,
+  activitySession,
+  activitySnapshot,
+  earlyActivityResponse,
+  resolveBatch,
+  resolveRunningMember,
+  tooltipText
+} from './lazy-activity-fixtures';
 interface ActivityMergeScenario {
   readonly cursor: number;
   readonly responseRevision: number;
@@ -28,54 +41,6 @@ interface ActivityMergeScenario {
   readonly nextActivity: 'idle' | 'pending' | 'running' | 'waiting';
 }
 
-const seedSnapshot = createDemoSnapshot();
-
-/** Reuse demo projections while giving every fixture explicit source facts. */
-function activitySession(spec: ActivitySessionSpec): Session {
-  const [seedIndex, sessionId, title, source, state, lastEventId] = spec;
-  const session = seedSnapshot.sessions[seedIndex];
-  if (!session) throw new Error('The demo snapshot must contain activity fixture records.');
-  return {
-    ...session,
-    sessionId,
-    title,
-    source,
-    state,
-    lastEventId
-  };
-}
-const activitySpecs: readonly ActivitySessionSpec[] = [
-  [0, 'known', 'Known persisted activity', 'persisted', 'running', 80],
-  [1, 'demo-unknown', 'Demo unknown activity', 'demo', 'unknown', 81],
-  [2, 'persisted/session 01', 'Unknown persisted activity 01', 'persisted', 'unknown', 82],
-  [3, 'persisted-session-02', 'Unknown persisted activity 02', 'persisted', 'unknown', 83],
-  [4, 'persisted-session-03', 'Unknown persisted activity 03', 'persisted', 'unknown', 84],
-  [5, 'persisted-session-04', 'Unknown persisted activity 04', 'persisted', 'unknown', 85]
-];
-const activitySessions = activitySpecs.map((spec) => activitySession(spec));
-/** Fail clearly if the compact session fixture is missing a requested record. */
-function fixtureSession(index: number): Session {
-  const session = activitySessions[index];
-  if (!session) throw new Error('The activity fixture must contain the requested session.');
-  return session;
-}
-const KNOWN_SESSION = fixtureSession(0);
-const DEMO_UNKNOWN_SESSION = fixtureSession(1);
-const UNKNOWN_REAL_ONE = fixtureSession(2);
-const UNKNOWN_REAL_TWO = fixtureSession(3);
-const UNKNOWN_REAL_THREE = fixtureSession(4);
-const UNKNOWN_REAL_FOUR = fixtureSession(5);
-
-/** Build a connected workspace snapshot containing only the requested sessions. */
-function activitySnapshot(sessions: readonly Session[]): Snapshot {
-  return {
-    ...seedSnapshot,
-    workspaceId: 'workspace-lazy-activity',
-    cursor: 700,
-    collector: {...seedSnapshot.collector, state: 'connected'},
-    sessions: [...sessions]
-  };
-}
 /** Render real marks before starting their visibility observer. */
 function mountBoard(sessions: readonly Session[]) {
   const snapshot = activitySnapshot(sessions);
@@ -122,9 +87,13 @@ function installFetch() {
   restoreFetch = fixture.restore;
   return fixture;
 }
+/** Find the actual rendered session mark by its accessible title. */
+function markFor(title: string): HTMLElement {
+  return screen.getByRole('button', {name: new RegExp(title, 'u')});
+}
 /** Send visible entries for selected real DOM marks. */
 function revealSessions(observer: ControlledIntersectionObserver, sessions: readonly Session[]): void {
-  for (const session of sessions) observer.setVisibility(markByTitle(session.title), true);
+  for (const session of sessions) observer.setVisibility(markFor(session.title), true);
 }
 /** Guard an expected pending request before controlling its response. */
 function requestAt(requests: readonly ActivityFetchRequest[], index: number): ActivityFetchRequest {
@@ -159,26 +128,6 @@ function expectBoundedPipeline(requests: readonly ActivityFetchRequest[], count:
     expectBatchPost(request, ids);
   }
 }
-/** Return a stream that exposes one frame before the batch completes. */
-function earlyActivityResponse(request: ActivityFetchRequest, frame: SessionActivityFrame): Response {
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`${JSON.stringify(frame)}\n`));
-        request.init.signal?.addEventListener('abort', () => controller.close(), {once: true});
-      }
-    })
-  );
-}
-/** Encode a completed member while preserving its explicit request identity. */
-function activityFrame(workspaceId: string, session: Session): SessionActivityFrame {
-  return {workspaceId, sessionId: session.sessionId, session};
-}
-/** Complete a streaming batch using independently validated NDJSON frames. */
-function resolveBatch(request: ActivityFetchRequest, frames: readonly SessionActivityFrame[]): void {
-  const body = `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`;
-  request.response.resolve(new Response(body, {headers: {'content-type': 'application/x-ndjson'}}));
-}
 /** Accept only same-workspace, same-session, current unknown revisions. */
 function activityReplyMatches(scenario: ActivityMergeScenario): boolean {
   return (
@@ -196,37 +145,20 @@ function currentSessionFor(scenario: ActivityMergeScenario): Session {
     lastEventId: scenario.responseRevision + (scenario.hasNewerRevision ? 1 : 0)
   };
 }
+/** Mount one unknown session, reveal it and wait for its first batch request. */
+async function revealedUnknownBoard() {
+  const board = activityBoard([UNKNOWN_REAL_ONE]);
+  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
+  act(() => board.observer.setVisibility(mark, true));
+  await waitForRequest(board.started, 0);
+  return {...board, mark};
+}
+
 /** Wait for a queued request to enter the controlled fetch boundary. */
 async function waitForRequest(started: readonly Deferred<void>[], index: number): Promise<void> {
   const signal = started[index];
   if (!signal) throw new Error('The expected queued activity request did not start.');
   await signal.promise;
-}
-/** Mount one unknown session and resolve its rendered mark. */
-function mountUnknownBoard() {
-  const board = activityBoard([UNKNOWN_REAL_ONE]);
-  return {...board, mark: markByTitle(UNKNOWN_REAL_ONE.title)};
-}
-/** Mount one unknown session, reveal it and wait for its first batch request. */
-async function revealedUnknownBoard() {
-  const board = mountUnknownBoard();
-  act(() => board.observer.setVisibility(board.mark, true));
-  await waitForRequest(board.started, 0);
-  return board;
-}
-/** Resolve the held first batch with this member's running lazy activity. */
-function resolveRunningMember(
-  request: ActivityFetchRequest,
-  snapshot: Snapshot,
-  overrides: Partial<Session> = {}
-): void {
-  resolveBatch(request, [
-    activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_ONE, ...overrides, state: 'running', activitySource: 'lazy'})
-  ]);
-}
-/** Return the open tooltip's rendered text while one is mounted. */
-function tooltipText(): string {
-  return document.querySelector('.task-tooltip')?.textContent ?? '';
 }
 
 afterEach(() => {
@@ -240,7 +172,7 @@ afterEach(() => {
 
 it('looks up the new tab when a visible family mark changes its raw session ID', async () => {
   const {requests, started, observer} = activityBoard([UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
-  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
+  const mark = markFor(UNKNOWN_REAL_ONE.title);
   act(() => observer.setVisibility(mark, true));
   await waitForRequest(started, 0);
   expectBatchPost(requestAt(requests, 0), [UNKNOWN_REAL_ONE.sessionId]);
@@ -261,8 +193,8 @@ it('batches visible unknown activity and allows immediate rediscovery after drop
     UNKNOWN_REAL_FOUR
   ]);
   revealSessions(observer, [DEMO_UNKNOWN_SESSION, KNOWN_SESSION, UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
-  observer.setVisibility(markByTitle(UNKNOWN_REAL_ONE.title), true);
-  const queuedMark = markByTitle(UNKNOWN_REAL_THREE.title);
+  observer.setVisibility(markFor(UNKNOWN_REAL_ONE.title), true);
+  const queuedMark = markFor(UNKNOWN_REAL_THREE.title);
   observer.setVisibility(queuedMark, true);
   observer.setVisibility(queuedMark, false);
   await waitForRequest(started, 0);
@@ -283,7 +215,7 @@ it('batches visible unknown activity and allows immediate rediscovery after drop
   expect(current?.cursor).toBe(snapshot.cursor);
   expect(current?.sessions[2]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
   expect(current?.sessions[2]?.activitySource).toBe('lazy');
-  const updatedMark = markByTitle(UNKNOWN_REAL_ONE.title);
+  const updatedMark = markFor(UNKNOWN_REAL_ONE.title);
   expect(updatedMark.getAttribute('data-update-revision')).toBeNull();
   expect(updatedMark.querySelector('[data-session-update-pulse]')).toBeNull();
   stopActivity();
@@ -341,7 +273,7 @@ it('shares a pending lookup through metadata replay and accepts its current reba
   resolveBatch(requestAt(requests, 0), [
     activityFrame(snapshot.workspaceId, {...current, state: 'running', activitySource: 'lazy'})
   ]);
-  await waitForActivity(store, UNKNOWN_REAL_ONE.sessionId, 'running');
+  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
   expect(store.getSnapshot().snapshot?.sessions[0]?.title).toBe('Updated metadata');
   expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor + 1);
   expect(requests).toHaveLength(1);
@@ -409,9 +341,9 @@ it('merges only matching unknown activity replies without changing the journal b
 });
 
 it('opens a tooltip without reading activity, selecting the task or moving the cursor', async () => {
-  const {requests, started, snapshot, store, observer, mark} = mountUnknownBoard();
+  const {requests, started, snapshot, store, observer} = activityBoard([UNKNOWN_REAL_ONE]);
   const user = userEvent.setup();
-
+  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
   await user.hover(mark);
   await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull(), {timeout: 3000});
 
