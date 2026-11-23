@@ -62,7 +62,10 @@ def test_unset_xdg_root_falls_back_to_local_state(
 ) -> None:
     """An absent XDG state root selects $HOME/.local/state."""
     _remove_xdg_root(monkeypatch)
-    resolved, home = _resolved_with_home(tmp_path, monkeypatch, "")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    resolved = cli.default_state_directory(command_chain=COMMAND_CHAIN)
 
     assert resolved == home / ".local" / "state" / "ishiban", (
         "An absent XDG root must fall back to the home state directory."

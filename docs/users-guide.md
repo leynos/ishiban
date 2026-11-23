@@ -91,7 +91,16 @@ you still use, migrate it once after stopping both processes:
 state_root="${XDG_STATE_HOME}"
 case "$state_root" in
   /*) ;;
-  *) state_root="$HOME/.local/state" ;;
+  *)
+    home="${HOME-}"
+    case "$home" in
+      /*) state_root="$home/.local/state" ;;
+      *)
+        printf 'Set an absolute XDG_STATE_HOME or HOME, or migrate with an explicit --state-directory.\n' >&2
+        exit 1
+        ;;
+    esac
+    ;;
 esac
 if [ ! -d .ishiban ]; then
   printf 'No legacy .ishiban directory in this working directory.\n' >&2

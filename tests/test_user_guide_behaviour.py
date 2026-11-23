@@ -263,3 +263,30 @@ def test_documented_migration_refuses_an_existing_destination(
     assert not (destination / "observatory.sqlite3").exists(), (
         "No legacy file may be merged into the destination."
     )
+
+
+def test_documented_migration_rejects_an_unusable_home(
+    tmp_path: pathlib.Path, published_examples: dict[str, str]
+) -> None:
+    """The example refuses to move state where the CLI could not reopen it."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _seed_legacy_state(checkout / ".ishiban")
+    environment = _isolated_environment(tmp_path)
+    environment["XDG_STATE_HOME"] = "relative-state"
+    environment["HOME"] = "relative-home"
+
+    result = _run_bash_example(
+        published_examples["migrate-state"], checkout, environment
+    )
+
+    assert result.returncode != 0, "An unusable home must fail the example."
+    assert "explicit --state-directory" in result.stderr, (
+        "The example must offer the explicit override."
+    )
+    assert (checkout / ".ishiban" / "workspace.json").is_file(), (
+        "No legacy file may move when the destination is unusable."
+    )
+    assert not (checkout / "relative-home").exists(), (
+        "The example must not create a relative destination."
+    )

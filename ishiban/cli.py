@@ -309,8 +309,8 @@ def serve(
     except msgspec.DecodeError as error:
         message = (
             f"Cannot read the saved workspace identity in {directory.resolve()}. "
-            "Start 'ishiban collect --workspace leynos' again, or pass the "
-            "--state-directory that holds this workspace."
+            "Restore workspace.json from a backup, or pass the --state-directory "
+            "that holds this workspace."
         )
         raise cyclopts.ValidationError(
             exception_message=message, command_chain=("serve",)
