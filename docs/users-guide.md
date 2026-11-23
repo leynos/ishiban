@@ -65,18 +65,19 @@ glyph to keep activity legible; the task's accessible label and inspector
 retain the evidence description. Table views scroll within their own pane,
 including while the inspector is open.
 
-Pointing at a task mark, or moving keyboard focus to it, opens a formatted
-tooltip. A 300 ms delay paces pointer reveals; focus and Tab open it at once,
-and a tooltip opened just after another closes appears without delay. The
-tooltip headlines the task title and lists its repository, workflow stage,
-current-tab activity, failure or blocked condition, and evidence provenance as
-separate, labelled rows. An empty condition reads as "None reported". When the
-selected tab is still provisional, the tooltip says so rather than implying a
-settled choice. Select the task to open the inspector for turn errors, evidence
-history, and interactive Lody and pull-request links; the tooltip itself never
-holds a control. Escape closes the tooltip first and the inspector second, and
-focus stays on the mark. Moving the pointer onto the tooltip keeps it readable.
-Empty cells never open a tooltip.
+Pointing at a task mark in Panorama or Matrix, or moving keyboard focus to it,
+opens a formatted tooltip. A 300 ms delay paces pointer reveals; focus and Tab
+open it at once, and a tooltip opened just after another closes appears without
+delay. The tooltip headlines the task title and lists its repository, workflow
+stage, current-tab activity, failure or blocked condition, and evidence
+provenance as separate, labelled rows. An empty condition reads as "None
+reported". When the selected tab is still provisional, the tooltip says so
+rather than implying a settled choice. Select the task to open the inspector
+for turn errors, evidence history, and interactive Lody and pull-request links;
+the tooltip itself never holds a control. Escape closes the tooltip first and
+the inspector second, and focus stays on the mark. Moving the pointer onto the
+tooltip keeps it readable. Empty cells never open a tooltip. List view keeps
+its larger session buttons unchanged.
 
 Select a mark or a session in List view to open the right-hand inspector. The
 inspector is hidden initially, docks beside the board, and leaves the board
