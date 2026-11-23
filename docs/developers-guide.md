@@ -659,10 +659,13 @@ for one privately named session. `tests/board-tooltip.browser.test.ts` holds
 the tooltip cases and `tests/board-layout.browser.test.ts` the geometry and
 pulse cases. Exercise hover through the CLI's real pointer rather than a
 synthetic event, and assert `data-state`, portal ancestry, `elementFromPoint`
-layering and computed colours instead of trusting a snapshot alone. Run both
-suites with
+layering and computed colours instead of trusting a snapshot alone. Run all
+three opt-in suites with
 `ISHIBAN_BROWSER_TESTS=1 bun test tests/board-tooltip.browser.test.ts
 tests/board-layout.browser.test.ts tests/board-interface-state.browser.test.ts`.
+The switch is read at module load, so a suite that forgets to guard its
+lifecycle would launch a browser even when the suites are meant to skip; keep
+every hook inside its `describe.skipIf(!isBrowserEnabled)` body.
 
 ## Inspector navigation and turn diagnostics
 
