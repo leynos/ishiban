@@ -6,11 +6,48 @@ This guide explains the contributor workflow for the Ishiban proof of concept.
 
 The [repository layout](repository-layout.md) locates the Python runtime,
 frontend, and tests. Run the collector and Falcon API as separate processes
-sharing one ignored state directory. The collector is the sole source-journal
-writer, with a local process lock and serialized SQLAlchemy transactions.
-Falcon serves the Bun-built `dist/` directory and reads short SQLite
-transactions; on-demand API activity persists in its separate sidecar, as
-recorded in [ADR 004](adrs/adr-0004-persist-on-demand-activity.md).
+sharing one state directory. The collector is the sole source-journal writer,
+with a local process lock and serialized SQLAlchemy transactions. Falcon serves
+the Bun-built `dist/` directory and reads short SQLite transactions; on-demand
+API activity persists in its separate sidecar, as recorded in
+[ADR 004](adrs/adr-0004-persist-on-demand-activity.md).
+
+`ishiban.cli.default_state_directory` is the one resolver for the default
+directory shared by `collect` and `serve`. It reads `XDG_STATE_HOME` at call
+time, accepts only a non-empty absolute value, and otherwise falls back to
+`$HOME/.local/state/ishiban`. Empty, unset and relative XDG values are invalid
+under the XDG Base Directory Specification, so they select the fallback rather
+than the working directory. The resolver performs no filesystem effects: it
+neither creates nor resolves the path, and it does not expand `~` or
+environment variables. It belongs only to these two CLI commands. Standalone
+Alembic commands continue to use the separate `alembic.ini` target described
+below, and other modules should call the resolver rather than reading
+`XDG_STATE_HOME` themselves.
+
+Both commands declare `state_directory: pathlib.Path | None = None`. The `None`
+value is an omission marker, not a path: the shared selection helper resolves
+the XDG default only for `None`, while every explicit override is returned
+unchanged, including a relative path. Cyclopts renders the stated default in
+help text instead of `None`, and the commands keep the recorded default in
+their parameter help. Do not replace the marker with a `Path(".ishiban")`
+default or compare an explicit override with that legacy path.
+
+When the default is selected, the helper checks whether
+`cwd/.ishiban/workspace.json` is a regular file and reports it once on standard
+error when it differs from the resolved directory. The notice is read-only: it
+does not open, parse, lock, move, or delete legacy state, and it never changes
+which directory the command uses. Migration is a documented, user-invoked move
+in the [users' guide](users-guide.md#migrate-working-directory-state).
+
+After the catalogue read and before journal initialization, `collect` reads any
+existing `workspace.json` through the shared marker reader. An undecodable
+marker or one that records a different `workspaceId` raises
+`cyclopts.ValidationError` and leaves the exact bytes and any existing journal
+untouched; the diagnostic names the saved and requested selectors and asks for
+a separate `--state-directory`. A matching identity republishes the requested
+selector, so `--workspace` remains the only selector input. `serve` uses the
+same reader and includes the resolved directory in its missing-marker
+diagnostic.
 
 Use `msgspec` at the CLI boundary, Effect Schema at the browser boundary, and
 keep workflow classification in `ishiban/workflow.py`. The browser applies
@@ -323,11 +360,14 @@ snapshot. The same wheel runs the actual collector CLI against a dedicated fake
 Lody stream, persists an observer event and shuts down on SIGINT. Owned process
 groups are reaped if the test fails. This regression covers installed resources
 and streaming lifecycle rather than substituting command responses for
-packaging. Standalone Alembic commands use the synchronous SQLite driver and
-target `.ishiban/observatory.sqlite3` relative to the checkout's `alembic.ini`,
-independently of the caller's working directory. Create that state directory
-first. A custom collector `--state-directory` continues to use its injected
-connection rather than the standalone URL.
+packaging. Standalone Alembic commands use the synchronous SQLite driver and target
+`.ishiban/observatory.sqlite3` relative to the checkout's `alembic.ini`,
+independently of the caller's working directory. That repository-relative
+target is intentionally separate from the CLI's XDG default: `alembic.ini`
+stays unchanged, and operators run the collector instead when they want the
+default location migrated. Create the `.ishiban/` directory first. A custom
+collector `--state-directory` continues to use its injected connection rather
+than the standalone URL.
 
 Storage assertion shapes live in `tests/storage_contracts.pyi`. These static
 contracts describe camel-case public JSON fields without constructing unused
@@ -476,6 +516,17 @@ observer replacement stops after one metadata reconciliation. The test-local
 projection types assert the retained PR fields and resulting stage; keep them
 local to this CLI contract. Native observer transport and cancellation remain
 in the process suites.
+
+`tests/test_cli_state_directory.py` owns the CLI state-location contract. It
+runs the real commands from different working directories, checks relative and
+absolute overrides, and verifies the marker guard, the read-only legacy notice,
+the activity sidecar location and signing-key reuse. `tests/conftest.py` sets
+`XDG_STATE_HOME` under each test's `tmp_path` for every test, so a command that
+omits `--state-directory` cannot reach the developer's real state. Tests that
+exercise fallback behaviour remove or replace that variable explicitly; `HOME`
+is not overridden globally. `tests/test_state_directory.py` keeps the resolver
+truth table, including the Hypothesis property that an invalid XDG value always
+resolves to an absolute path.
 
 `tests/test_request_body_streaming.py` invokes the real ASGI route with
 separate request frames and no `Content-Length`. It checks valid JSON at the

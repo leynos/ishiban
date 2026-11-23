@@ -44,15 +44,18 @@ In one terminal:
 uv run ishiban collect --workspace leynos
 ```
 
-In another terminal, from the same repository root:
+In another terminal, from the repository root that contains the built `dist/`:
 
 ```bash
 uv run ishiban serve
 ```
 
 Open <http://127.0.0.1:8765/>. Search repositories, select a task mark to
-inspect its evidence, or switch to **Demo data**. The collector and API share
-the ignored `.ishiban/` directory; press Ctrl+C in each terminal to stop them.
+inspect its evidence, or switch to **Demo data**. Both commands use the shared
+`$XDG_STATE_HOME/ishiban` state directory, or `~/.local/state/ishiban` when
+`XDG_STATE_HOME` is unset or invalid, so they can start from different
+directories. Press Ctrl+C in each terminal to stop them. Pass
+`--state-directory` to both commands to override the default.
 
 See the [users' guide](docs/users-guide.md) for configuration, source-health
 semantics, and the proof of concept's limits.

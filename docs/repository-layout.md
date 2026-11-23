@@ -42,8 +42,16 @@ This page locates the proof of concept's runtime components and verification.
 - `tests/` contains pytest, pytest-bdd, Hypothesis, and Bun verification.
 - `reference/ishiban-mockup.html` is the original visual reference.
 - `docs/execplans/initial-spike.md` records delivery and acceptance evidence.
-- `.ishiban/` is ignored private local state, including the SQLite journal.
-  Its `observatory.sqlite3.activity.sqlite3` sidecar retains on-demand outcomes.
+- Runtime state lives outside the checkout by default: `$XDG_STATE_HOME/ishiban`
+  or `~/.local/state/ishiban`. It holds the SQLite journal, the
+  `observatory.sqlite3.activity.sqlite3` on-demand sidecar, `workspace.json`,
+  the collector lock and `interface-state.key`. An explicit
+  `--state-directory` may place it anywhere.
+- `.ishiban/` is ignored and no longer the default. It remains the target of
+  standalone Alembic commands relative to `alembic.ini`, and it can still hold
+  legacy working-directory state from earlier builds. The
+  [users' guide](users-guide.md#migrate-working-directory-state) describes the
+  manual move.
 - `dist/` is ignored output built by Bun and Tailwind for Falcon to serve.
 
 Run commands and operational limits are documented in the

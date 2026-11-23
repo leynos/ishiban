@@ -15,12 +15,16 @@ DUPLICATE_MARKERS = (
 )
 
 
-def test_published_guide_has_four_executable_examples() -> None:
+def test_published_guide_has_five_executable_examples() -> None:
     """The loader must inspect the actual guide rather than copied commands."""
     examples = load_user_guide_examples()
-    assert set(examples) == {"setup", "collect", "serve", "act-validation"}, (
-        "Every published fence needs one stable tested-example marker."
-    )
+    assert set(examples) == {
+        "setup",
+        "collect",
+        "serve",
+        "migrate-state",
+        "act-validation",
+    }, "Every published fence needs one stable tested-example marker."
     assert all(
         shlex.split(line)
         for example in examples.values()
