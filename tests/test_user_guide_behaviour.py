@@ -208,6 +208,9 @@ def _isolated_environment(tmp_path: pathlib.Path) -> dict[str, str]:
         The inherited environment with isolated HOME and XDG_STATE_HOME.
     """
     environment = os.environ.copy()
+    # A developer's own opt-in must not silently select the preservation path
+    # in the scenarios that assert the default refusal.
+    environment.pop("PRESERVE_NEW_DEFAULT", None)
     environment["HOME"] = str(tmp_path / "home")
     environment["XDG_STATE_HOME"] = str(tmp_path / "xdg-state")
     return environment
