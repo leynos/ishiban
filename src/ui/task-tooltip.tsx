@@ -41,13 +41,10 @@ function detailRows(facts: TaskTooltipFacts): readonly DetailRow[] {
   ];
 }
 
-/** Compose the accessible summary, since the visual body is hidden from assistive technology. */
+/** Compose the supplementary description; the mark's own label already names every fact. */
 function describedBy(facts: TaskTooltipFacts): string {
-  const details = detailRows(facts)
-    .map((row) => `${row.label}: ${row.value}.`)
-    .join(' ');
   const notice = facts.provisionalNotice === null ? '' : `${facts.provisionalNotice} `;
-  return `${notice}${details} ${TASK_TOOLTIP_INSPECTOR_HINT}`;
+  return `${notice}${TASK_TOOLTIP_INSPECTOR_HINT}`;
 }
 
 /** Render labelled detail rows, an optional provisional row and the non-interactive hint. */

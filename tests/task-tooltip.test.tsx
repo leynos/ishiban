@@ -76,6 +76,19 @@ describe('task tooltip delivery', () => {
     expect(mark.getAttribute('aria-describedby')).toBe(content.querySelector('[role="tooltip"]')?.id ?? null);
   });
 
+  it('describes only the inspector hint and hides the visual body from assistive technology', async () => {
+    const {user} = renderTooltipBoard();
+    const mark = markByTitle('Synthetic planning task 01');
+    await focusMark(mark);
+
+    const content = tooltipElement();
+    if (content === null) throw new Error('The focused mark must render a tooltip.');
+    const described = document.querySelector(`#${CSS.escape(mark.getAttribute('aria-describedby') ?? '')}`);
+    expect(described?.textContent).toBe(TASK_TOOLTIP_INSPECTOR_HINT);
+    expect(content.querySelector('[aria-hidden="true"] .task-tooltip__title')).not.toBeNull();
+    await user.keyboard('{Escape}');
+  });
+
   it('keeps aria-describedby only while the tooltip is open', async () => {
     const {user} = renderTooltipBoard();
     const mark = markByTitle('Synthetic planning task 01');
