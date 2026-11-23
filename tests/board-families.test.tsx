@@ -1,6 +1,6 @@
 /** @file Verify one stable board mark combines root workflow and latest-tab activity. */
 import {afterEach, expect, it, setSystemTime} from 'bun:test';
-import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
+import {act, cleanup, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Board} from '../src/ui/board';
 import {createFamilySnapshot} from './board-fixtures';
@@ -8,6 +8,13 @@ import {installFamilyBrowser} from './family-browser-fixture';
 import {deferred, type Deferred} from './deferred';
 
 afterEach(cleanup);
+
+/** Return the portalled visual panel that owns the accessible tooltip node. */
+function tooltipPanel(tooltip: HTMLElement): HTMLElement {
+  const panel = tooltip.parentElement;
+  if (!panel) throw new Error('The tooltip description must sit inside its portalled panel.');
+  return panel;
+}
 
 it('shows one root workflow mark with the running child and stable inspector selection', async () => {
   const user = userEvent.setup();
@@ -192,15 +199,15 @@ it('opens a tooltip without requesting recency or changing the family selection'
     const mark = screen.getByRole('button', {name: /Root planning work; Refine; running/u});
 
     await user.hover(mark);
-    await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull(), {timeout: 3000});
+    const tooltip = await waitFor(() => screen.getByRole('tooltip'));
 
     expect(requested).toEqual([]);
     expect(mark.getAttribute('data-session-id')).toBe('child-0');
     expect(mark.getAttribute('data-family-id')).toBe('root-0');
     // Root context names the task while the selected child tab supplies runtime facts.
-    expect(document.querySelector('.task-tooltip__title')?.textContent).toBe('Root planning work');
-    expect(document.querySelector('.task-tooltip')?.textContent).toContain('running');
-    expect(document.querySelector('.task-tooltip')?.textContent).toContain('selected tab is provisional');
+    expect(screen.getByText('Root planning work')).toBeTruthy();
+    expect(within(tooltipPanel(tooltip)).getByText('running')).toBeTruthy();
+    expect(tooltip.textContent).toContain('selected tab is provisional');
   } finally {
     browser.restore();
   }
@@ -224,10 +231,10 @@ it('reads no live activity, recency or PR data for a synthetic demo mark', async
     await act(async () => {
       screen.getByRole('button', {name: /Root planning work; Refine; running/u}).focus();
     });
-    await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull());
+    const tooltip = await waitFor(() => screen.getByRole('tooltip'));
 
     expect(requested).toEqual([]);
-    expect(document.querySelector('.task-tooltip')?.textContent).toContain('Synthetic demo record');
+    expect(within(tooltipPanel(tooltip)).getByText('Synthetic demo record')).toBeTruthy();
   } finally {
     browser.restore();
   }
