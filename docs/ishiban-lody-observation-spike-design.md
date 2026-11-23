@@ -7,7 +7,8 @@ pending findings and incomplete external review coverage.
 
 Logical session-family grouping has passed the repository gates and local
 browser acceptance checks. Hosted Chromium evidence is not available; review
-reconciliation remains pending. See [ADR 007](adr-007-session-tab-families.md).
+reconciliation remains pending. See
+[ADR 007](adrs/adr-0007-session-tab-families.md).
 
 **Date:** 9 November 2026  
 **Scope:** Read-only observation of one Lody Cloud workspace  
@@ -32,7 +33,7 @@ control plane.
 success. The accepted PR conventions now use explicit catalogue associations
 and read-only GitHub title/status enrichment. CI conclusions, issue progress,
 and task-success inference remain outside this spike. See
-[ADR 002](adr-002-workflow-evidence.md).
+[ADR 002](adrs/adr-0002-workflow-evidence.md).
 
 ### Questions the spike must settle
 
@@ -322,7 +323,7 @@ compatibility, but expose only bounded, normalized fields via the public API.
 This is an append-only spike with **no retention pruning**; document that
 database growth needs a later policy.
 
-[ADR 006](adr-006-public-turn-previews-and-cursors.md) bounds the public
+[ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md) bounds the public
 `activeTurns` array to a deterministic 100-turn preview after sidecar activity
 restoration. An exact count, truncation flag, and full-set semantic revision
 retain the visible meaning of hidden turns. The private projection and source
@@ -331,13 +332,14 @@ SQL decoding, process memory, or the byte length of individual fields.
 
 ### Projection merge rules
 
-[ADR 008](adr-008-runtime-evidence-policy.md) separates pure runtime transition
-plans from their public-projection encoding. `ishiban/runtime_evidence.py`
-selects replacement, preservation and named-turn transitions from typed source
-records. The shared storage adapter applies those plans for journal ingestion
-and on-demand activity resolution, preserving legacy projection handling and
-optional field encoding. Cached sidecar restoration retains its separate
-validated overlay and watermark checks; neither persistence boundary changes.
+[ADR 008](adrs/adr-0008-runtime-evidence-policy.md) separates pure runtime
+transition plans from their public-projection encoding.
+`ishiban/runtime_evidence.py` selects replacement, preservation and named-turn
+transitions from typed source records. The shared storage adapter applies those
+plans for journal ingestion and on-demand activity resolution, preserving
+legacy projection handling and optional field encoding. Cached sidecar
+restoration retains its separate validated overlay and watermark checks;
+neither persistence boundary changes.
 
 - `snapshot` / `session.changed` with `source: persisted`: update current
   session state and reconcile `latestTurn` and `activeTurns` into `turns`.
@@ -378,8 +380,8 @@ continue. The browser may recover that member through the bounded
 single-session activity route. An identity too large even for a marker receives
 HTTP 413 before the stream starts. This transport limit leaves the private
 journal and cache complete; see
-[ADR 005](adr-005-batched-activity-and-update-cues.md) and
-[ADR 006](adr-006-public-turn-previews-and-cursors.md).
+[ADR 005](adrs/adr-0005-batched-activity-and-update-cues.md) and
+[ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md).
 
 Session detail returns at most 100 retained turns in ascending
 `(last_event_id, user_turn_id)` order. When more turns exist, `nextTurnCursor`
@@ -393,7 +395,7 @@ current materialized projection in its own database transaction, so concurrent
 turn updates can shift ranks and change later pages. This cursor does not
 promise a frozen historical snapshot. The public session preview and 30 most
 recent provenance events remain available on each page. See
-[ADR 006](adr-006-public-turn-previews-and-cursors.md).
+[ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md).
 
 Example `GET /api/v1/snapshot` shape (illustrative data):
 
@@ -457,8 +459,8 @@ turn-classification logic.
 
 ## 8. React + Effect v4 presentation
 
-The [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
-imported quality gates and Bun runtime used for bundling and testing.
+The [TypeScript tooling decision](adrs/adr-0001-typescript-tooling.md) records
+the imported quality gates and Bun runtime used for bundling and testing.
 
 Use React + TypeScript (Bun 1.4.x for bundling and testing), Effect **v4 core**
 for typed effects, lifecycle management, retry policy and runtime validation,
@@ -676,7 +678,7 @@ turn's actual diagnostic. Reopened turns clear stale errors.
 
 ## Remembered controls and lazy activity
 
-[ADR 003](adr-003-interface-state-and-lazy-activity.md) defines signed
+[ADR 003](adrs/adr-0003-interface-state-and-lazy-activity.md) defines signed
 MessagePack cookie storage for density/presentation and read-only lazy
 activity. The footer discloses the preference cookie. These mechanisms remain
 separate from the durable journal: lazy results preserve the local event
@@ -701,31 +703,32 @@ inspector demand. Metadata-only unknown updates must not erase browser-local
 on-demand activity; fresh execution evidence and workspace changes retain
 precedence.
 
-[ADR 004](adr-004-persist-on-demand-activity.md) extends the original activity
-lifetime with a workspace/session cache in a separate SQLite sidecar. API
-snapshots, detail and SSE restore those runtime fields onto current metadata;
-the durable journal and raw replay readers remain unchanged. Collector
-execution watermarks invalidate older cached outcomes even across missed
-updates. Refreshes and process restarts retain failures and supplied
+[ADR 004](adrs/adr-0004-persist-on-demand-activity.md) extends the original
+activity lifetime with a workspace/session cache in a separate SQLite sidecar.
+API snapshots, detail and SSE restore those runtime fields onto current
+metadata; the durable journal and raw replay readers remain unchanged.
+Collector execution watermarks invalidate older cached outcomes even across
+missed updates. Refreshes and process restarts retain failures and supplied
 diagnostics without creating events or collector evidence generations.
 
 ## Batched cold reads and restart cues
 
-[ADR 005](adr-005-batched-activity-and-update-cues.md) adds progressive batched
-activity reads with four shared observer slots. Metadata-only revision changes
-retain pending reads; actual execution watermarks invalidate them. The browser
-establishes a quiet baseline during collector startup and compares meaningful
-facts for subsequent pulses. Restart replay remains in the journal without
-creating a flood of update animations.
+[ADR 005](adrs/adr-0005-batched-activity-and-update-cues.md) adds progressive
+batched activity reads with four shared observer slots. Metadata-only revision
+changes retain pending reads; actual execution watermarks invalidate them. The
+browser establishes a quiet baseline during collector startup and compares
+meaningful facts for subsequent pulses. Restart replay remains in the journal
+without creating a flood of update animations.
 
 ## Logical session families
 
-[ADR 007](adr-007-session-tab-families.md) accepts one board entry per root
-session family, linked only by `parentSessionId`. The root supplies PR, branch,
-title, and workflow context; each actual tab retains its own runtime state,
-errors, agent details, and CLI identity. `SessionFamily` is a presentation view
-and leaves journal, API, and cache identities untouched. Inspector URLs retain
-the root route and add `?tab=session:<actual-member-id>` for a selected tab.
+[ADR 007](adrs/adr-0007-session-tab-families.md) accepts one board entry per
+root session family, linked only by `parentSessionId`. The root supplies PR,
+branch, title, and workflow context; each actual tab retains its own runtime
+state, errors, agent details, and CLI identity. `SessionFamily` is a
+presentation view and leaves journal, API, and cache identities untouched.
+Inspector URLs retain the root route and add `?tab=session:<actual-member-id>`
+for a selected tab.
 
 Visible families receive bounded per-member `latestHistoryAt` reads. Exact
 history time selects activity only when all member reads are available. While

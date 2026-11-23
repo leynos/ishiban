@@ -520,12 +520,8 @@ providing a historical record for future maintainers.
 
 ### Naming convention
 
-Name new ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to
-the `docs/` directory, for example
-`docs/adrs/adr-0009-async-fixtures-and-tests.md`. Existing published ADRs
-remain at their current locations, including `docs/adr-002-…` through
-`docs/adr-008-…`; preserve their inbound links and continue the repository's
-existing number sequence.
+Name ADR files using the pattern `adrs/adr-nnnn-title-slug.md`, relative to the
+`docs/` directory, for example `docs/adrs/adr-0001-async-fixtures-and-tests.md`.
 
 - `nnnn` is a four-digit, zero-padded serial number, unique among the ADRs in
   the repository and allocated independently of RFC numbers.
@@ -720,6 +716,9 @@ contents of the manual.
 - Place examples under `# Examples`. Let examples run as documentation tests
   when they can execute correctly, so the compiler verifies that they compile
   and behave as documented.
+- Import the documented item in each example. Rustdoc compiles a doctest as an
+  external crate that depends on the documented crate, so a bare call to the
+  item cannot resolve; use a hidden `# use crate_name::item;` line.
 - Use `no_run` for complete examples that must compile but must not execute,
   such as examples that require external resources, environment-specific setup,
   or a long-running service.
@@ -741,6 +740,7 @@ contents of the manual.
 /// # Examples
 ///
 /// ```rust
+/// # use mycrate::add;
 /// assert_eq!(add(2, 3), 5);
 /// ```
 #[inline]
@@ -748,6 +748,9 @@ pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 ```
+
+Only the outer fence needs `no_run`, because the snippet is a fragment; the
+inner doctest compiles and runs.
 
 ## Diagrams and images
 

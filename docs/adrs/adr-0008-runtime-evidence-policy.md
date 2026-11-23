@@ -56,7 +56,7 @@ decision.
 
 ## References
 
-- [Persisted on-demand activity](adr-004-persist-on-demand-activity.md) defines
+- [Persisted on-demand activity](adr-0004-persist-on-demand-activity.md) defines
   sidecar ownership and restoration.
-- [Observation design](ishiban-lody-observation-spike-design.md) records the
+- [Observation design](../ishiban-lody-observation-spike-design.md) records the
   projection merge rules and journal invariants.

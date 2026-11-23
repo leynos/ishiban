@@ -411,8 +411,8 @@ selected tab supplies its own title, activity, error, agent details, and copied
 CLI ID. The inspector keeps the root session route and adds
 `?tab=session:<selected-session-id>` when a child tab is selected. Search
 matches member session IDs and titles. Board counts and PR-workflow filters
-count families. See [ADR 007](adr-007-session-tab-families.md) for recency and
-selection details.
+count families. See [ADR 007](adrs/adr-0007-session-tab-families.md) for
+recency and selection details.
 
 The board reads tab history only for visible families. When too many tabs are
 visible to read as complete families within the local lookup budget, the

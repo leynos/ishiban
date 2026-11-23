@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 10 November 2026
 - Supersedes: the browser-only activity lifetime in
-  [ADR 003](adr-003-interface-state-and-lazy-activity.md).
+  [ADR 003](adr-0003-interface-state-and-lazy-activity.md).
 
 ## Context
 
@@ -40,7 +40,7 @@ revision and cannot override a later execution watermark, including when the
 browser missed the known update before another unknown projection. Late lookups
 are checked against the execution watermark and rebased onto current metadata
 when it is unchanged; cache upserts cannot replace entries based on newer
-revisions. [ADR 005](adr-005-batched-activity-and-update-cues.md) defines this
+revisions. [ADR 005](adr-0005-batched-activity-and-update-cues.md) defines this
 refinement and the batched transport.
 
 The shared activity resolver uses frozen internal resolution options for the

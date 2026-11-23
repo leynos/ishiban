@@ -403,28 +403,28 @@ package = true
 
 [[tool.duplication_gate.allow]]
 unit = "tools/oxlint-plugin-df12/jsdoc.js"
-reason = "Preserve imported visibility-specific AST visitors and distinct missing-documentation diagnostics; see docs/adr-001-typescript-tooling.md#duplication-review"
+reason = "Preserve imported visibility-specific AST visitors and distinct missing-documentation diagnostics; see docs/adrs/adr-0001-typescript-tooling.md#duplication-review"
 [[tool.duplication_gate.allow]]
 members = ["tools/oxlint-plugin-df12/complex-conditional.js::DoWhileStatement", "tools/oxlint-plugin-df12/complex-conditional.js::ForStatement", "tools/oxlint-plugin-df12/complex-conditional.js::IfStatement", "tools/oxlint-plugin-df12/complex-conditional.js::WhileStatement"]
-reason = "Keep explicit ESTree visitor names in the imported rule; each delegates to the same predicate checker. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Keep explicit ESTree visitor names in the imported rule; each delegates to the same predicate checker. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 members = ["tools/oxlint-plugin-df12/complex-conditional.js::checkPredicate", "tools/oxlint-plugin-df12/complex-conditional.js::complexConditionalOptions"]
-reason = "Keep option normalization separate from diagnostic reporting; structural subgraph similarity is not duplicated behaviour. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Keep option normalization separate from diagnostic reporting; structural subgraph similarity is not duplicated behaviour. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 members = ["tests/oxlint-complexity.test.js::isSyntheticAstNode", "tools/oxlint-plugin-df12/jsdoc-helpers.js::isAstNode"]
-reason = "Keep the property-test oracle independent from the implementation it verifies. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Keep the property-test oracle independent from the implementation it verifies. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 members = ["tools/oxlint-plugin-df12/complex-conditional.js::countPredicateOperators", "tools/oxlint-plugin-df12/complex-conditional.js::predicateNodeCount"]
-reason = "Keep recursive traversal separate from counting one node; the similar subgraph represents different responsibilities. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Keep recursive traversal separate from counting one node; the similar subgraph represents different responsibilities. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 members = ["tools/oxlint-plugin-df12/jsdoc-helpers.js::isPromiseObject", "tools/oxlint-plugin-df12/jsdoc-helpers.js::isRejectProperty"]
-reason = "Keep separate named predicates for the object and property halves of Promise.reject AST recognition. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Keep separate named predicates for the object and property halves of Promise.reject AST recognition. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 unit = "reference/ishiban-mockup.html"
-reason = "Preserve the supplied mockup stylesheet and its denser panorama overrides as reference material. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Preserve the supplied mockup stylesheet and its denser panorama overrides as reference material. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [[tool.duplication_gate.allow]]
 unit = "tools/oxlint-plugin-df12/jsdoc-helpers.js"
-reason = "Preserve imported AST-shape guards, including anonymous early-return fragments, without introducing a generic AST framework. See docs/adr-001-typescript-tooling.md#duplication-review."
+reason = "Preserve imported AST-shape guards, including anonymous early-return fragments, without introducing a generic AST framework. See docs/adrs/adr-0001-typescript-tooling.md#duplication-review."
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

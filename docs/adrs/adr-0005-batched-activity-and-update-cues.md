@@ -55,7 +55,7 @@ Key read reuse by the execution watermark rather than the metadata revision. A
 late read can rebase onto newer metadata only while `lastActivityEventId`
 remains unchanged and current state is unknown. New execution invalidates it.
 Persist only runtime fields and return current metadata and revision. This
-refines [ADR 004](adr-004-persist-on-demand-activity.md).
+refines [ADR 004](adr-0004-persist-on-demand-activity.md).
 
 Pulse tracking compares meaningful task facts, excluding observation times,
 revisions, generation, source and freshness bookkeeping. A new generation or

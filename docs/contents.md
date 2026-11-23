@@ -5,18 +5,18 @@ reference material.
 
 ## Design and reference
 
-- [Runtime evidence transition policy](adr-008-runtime-evidence-policy.md)
+- [Runtime evidence transition policy](adrs/adr-0008-runtime-evidence-policy.md)
   separates pure merge decisions from compatible public-projection encoding.
-- [Logical session families](adr-007-session-tab-families.md) records the
+- [Logical session families](adrs/adr-0007-session-tab-families.md) records the
   approved board grouping, per-tab recency, and bounded metadata-read policy.
-- [Public turn previews and fixed-size cursors](adr-006-public-turn-previews-and-cursors.md)
+- [Public turn previews and fixed-size cursors](adrs/adr-0006-public-turn-previews-and-cursors.md)
   bounds public active-turn arrays and detail continuation size.
-- [Batched activity and update cues](adr-005-batched-activity-and-update-cues.md)
+- [Batched activity and update cues](adrs/adr-0005-batched-activity-and-update-cues.md)
   bounds concurrent lazy reads and suppresses unchanged startup pulses.
 
-- [Persistent on-demand activity decision](adr-004-persist-on-demand-activity.md)
+- [Persistent on-demand activity decision](adrs/adr-0004-persist-on-demand-activity.md)
   preserves collected runtime outcomes across browser and process restarts.
-- [Interface state and lazy activity decision](adr-003-interface-state-and-lazy-activity.md)
+- [Interface state and lazy activity decision](adrs/adr-0003-interface-state-and-lazy-activity.md)
   separates signed MessagePack preferences and ephemeral activity reads from
   the durable observation journal.
 
@@ -26,10 +26,10 @@ reference material.
   [PR #9](https://github.com/leynos/ishiban/pull/9).
 - [Observation spike report](observation-spike-report.md) records bounded live,
   synthetic storage and fan-out, browser timing, and cleanup measurements.
-- [Workflow evidence decision](adr-002-workflow-evidence.md) defines the
+- [Workflow evidence decision](adrs/adr-0002-workflow-evidence.md) defines the
   PR-based stages and independent activity/freshness semantics.
 
-- [TypeScript tooling decision](adr-001-typescript-tooling.md) records the
+- [TypeScript tooling decision](adrs/adr-0001-typescript-tooling.md) records the
   imported linting, formatting, compiler policy, and Bun runtime pins.
 - [Lody observation spike design](ishiban-lody-observation-spike-design.md)
   defines the proposed read-only workspace observer, persistence model, live

@@ -10,7 +10,7 @@ sharing one ignored state directory. The collector is the sole source-journal
 writer, with a local process lock and serialized SQLAlchemy transactions.
 Falcon serves the Bun-built `dist/` directory and reads short SQLite
 transactions; on-demand API activity persists in its separate sidecar, as
-recorded in [ADR 004](adr-004-persist-on-demand-activity.md).
+recorded in [ADR 004](adrs/adr-0004-persist-on-demand-activity.md).
 
 Use `msgspec` at the CLI boundary, Effect Schema at the browser boundary, and
 keep workflow classification in `ishiban/workflow.py`. The browser applies
@@ -18,7 +18,7 @@ immutable post-event projections by cursor; it does not repeat the Python
 classifier. The client scopes fetch and EventSource lifetime with Effect,
 closes subscriptions on mode changes, and coalesces React notifications through
 animation frames. PR-stage evidence and its limitations are recorded in
-[ADR 002](adr-002-workflow-evidence.md).
+[ADR 002](adrs/adr-0002-workflow-evidence.md).
 
 `ishiban/runtime_evidence.py` owns pure observation and turn-transition plans
 over typed source records. Its frozen results use Python field names and have
@@ -28,8 +28,8 @@ optional turn shape. Journal ingestion and on-demand activity resolution use
 that same adapter. Cached sidecar restoration instead overlays validated facts
 through `ActivityCache.merge` and `storage/activity_projection.py`. Keep the
 transition responsibilities together rather than adding another merge
-implementation. [ADR 008](adr-008-runtime-evidence-policy.md) records this
-session-specific reuse boundary and its compatibility requirements.
+implementation. [ADR 008](adrs/adr-0008-runtime-evidence-policy.md) records
+this session-specific reuse boundary and its compatibility requirements.
 
 `plan_observation` returns either `MetadataObservation` or
 `PersistedObservation`; the former updates metadata provenance while the latter
@@ -215,7 +215,7 @@ JSDoc helpers to meet the repository's 400-line file limit. Those helpers are
 private to this plugin, and `tests/fixtures/oxlint.js` is private to its tests;
 neither is an application utility or public API. Preserve the plugin's bundled
 MIT licence when copying it elsewhere. The
-[tooling decision](adr-001-typescript-tooling.md) records its provenance,
+[tooling decision](adrs/adr-0001-typescript-tooling.md) records its provenance,
 dependency pins, and scope.
 
 Bun 1.4.x owns JavaScript testing and bundling. The tooling suite verifies the
@@ -630,14 +630,14 @@ there is no transcript scraping or additional history polling in the runtime.
 
 ## Preference cookies and cached activity
 
-[ADR 003](adr-003-interface-state-and-lazy-activity.md) defines the separation
-between the journal, browser preferences, and direct activity reads. The
-`interface-state` endpoint accepts only bounded, validated density/presentation
-updates. itsdangerous signs a msgspec MessagePack dictionary with a versioned
-salt; the private key in the state directory survives API restarts. Snapshot
-responses restore preferences from that cookie. The React preference hook owns
-ordered writes and save status; no initial-render write or localStorage cache
-is needed.
+[ADR 003](adrs/adr-0003-interface-state-and-lazy-activity.md) defines the
+separation between the journal, browser preferences, and direct activity reads.
+The `interface-state` endpoint accepts only bounded, validated
+density/presentation updates. itsdangerous signs a msgspec MessagePack
+dictionary with a versioned salt; the private key in the state directory
+survives API restarts. Snapshot responses restore preferences from that cookie.
+The React preference hook owns ordered writes and save status; no
+initial-render write or localStorage cache is needed.
 
 The production-app test in `tests/test_interface_state.py` carries an actual
 saved cookie into the snapshot endpoint and checks both non-default values.
@@ -731,9 +731,9 @@ and reaps the child without waiting indefinitely for transport EOF.
 
 Lazy activity is retained through metadata and persisted-source unknown
 updates, reconnect snapshots and full reloads. Incoming metadata and event
-cursors still advance. [ADR 004](adr-004-persist-on-demand-activity.md) defines
-the persistent cache and execution-watermark precedence. Direct lazy results
-still suppress their own pulses.
+cursors still advance. [ADR 004](adrs/adr-0004-persist-on-demand-activity.md)
+defines the persistent cache and execution-watermark precedence. Direct lazy
+results still suppress their own pulses.
 
 `storage.activity_cache.ActivityCache` owns only derived runtime observations
 in the journal's `.activity.sqlite3` sidecar. `Store.snapshot`, `Store.detail`
@@ -832,18 +832,18 @@ capture, not application subprocesses. See the
 [capture debugging record](debugging/debugging-plan-2026-11-11-multibyte-capture.md)
 for the bounded counterexample and transport comparison.
 
-[ADR 005](adr-005-batched-activity-and-update-cues.md) defines streaming batch
-activity and semantic pulse comparisons. `batch_activity_api` owns only bounded
-HTTP decoding and response-waiter cleanup; `activity_api.resolve_activity`
-shares projection restoration and lookup precedence with the single-session
-route. `src/activity-batch.ts` owns incremental UTF-8 NDJSON decoding and
-Effect frame validation. The browser limits each decoded frame to 1,048,576
-JavaScript UTF-16 code units, excluding its newline, and each response to eight
-MiB of received bytes. These helpers are specific to activity reads and are not
-generic transport APIs. The browser pipelines two four-member batches; the
-shared reader permits four children and 64 pending observations with a
-45-second total lifetime. Metadata replay preserves in-flight identity
-ownership and execution-watermark reuse.
+[ADR 005](adrs/adr-0005-batched-activity-and-update-cues.md) defines streaming
+batch activity and semantic pulse comparisons. `batch_activity_api` owns only
+bounded HTTP decoding and response-waiter cleanup;
+`activity_api.resolve_activity` shares projection restoration and lookup
+precedence with the single-session route. `src/activity-batch.ts` owns
+incremental UTF-8 NDJSON decoding and Effect frame validation. The browser
+limits each decoded frame to 1,048,576 JavaScript UTF-16 code units, excluding
+its newline, and each response to eight MiB of received bytes. These helpers
+are specific to activity reads and are not generic transport APIs. The browser
+pipelines two four-member batches; the shared reader permits four children and
+64 pending observations with a 45-second total lifetime. Metadata replay
+preserves in-flight identity ownership and execution-watermark reuse.
 
 The server separately pre-encodes each public batch frame, including its
 newline, against a 1,048,576-byte UTF-8 limit. An oversized member becomes a
@@ -860,11 +860,11 @@ signal, and revision guard remain local to activity transport. The fixed
 activity diagnostic is quiet, survives metadata-only refresh while the
 execution watermark is unchanged, and never changes a turn's error or the
 journal. This boundary does not cap private projection decoding or cache
-memory; see [ADR 006](adr-006-public-turn-previews-and-cursors.md).
+memory; see [ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md).
 
 ## Session family projection
 
-[ADR 007](adr-007-session-tab-families.md) defines logical grouping by
+[ADR 007](adrs/adr-0007-session-tab-families.md) defines logical grouping by
 `parentSessionId`. `src/session-families.ts` derives `rootId`, stable root
 context, selected activity member, and the unmodified session members. It is a
 presentation model; do not rewrite API projections, journal identities, or
@@ -1116,8 +1116,8 @@ detail, SSE, and single and batch activity responses. It selects a stable
 from user turn identity, state, and error. Stored projections and sidecar cache
 entries stay complete. This response bound does not limit private JSON, SQL
 decode work, process memory, or individual field byte length. See
-[ADR 006](adr-006-public-turn-previews-and-cursors.md) for the trade-off and
-reuse scope.
+[ADR 006](adrs/adr-0006-public-turn-previews-and-cursors.md) for the trade-off
+and reuse scope.
 
 `tests/board-fixtures.unknownRuntime` supplies only the shared unknown activity
 fields for board pulse and client retention tests. Each test keeps its own
