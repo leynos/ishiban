@@ -33,6 +33,7 @@
     "zod": "4.6.6"
   },
   "dependencies": {
+    "@radix-ui/react-tooltip": "1.4.1",
     "daisyui": "5.7.50",
     "effect": "4.1.2",
     "react": "19.3.1",

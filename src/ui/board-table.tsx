@@ -1,20 +1,22 @@
 /** @file Render repository stage cells and the larger session-list mode. */
 import type {ReactElement} from 'react';
-import type {Session} from '../contracts';
 import type {SessionFamily} from '../session-families';
 import {
   activityOf,
+  conditionOf,
   createBanks,
   countStage,
   evidenceLabel,
   REPOSITORY_UNAVAILABLE,
   STAGE_GUIDANCE,
   STAGE_LABELS,
+  taskTooltipFacts,
   WORKFLOW_STAGES,
   type Presentation,
   type RepositorySessions,
   type WorkflowStage
 } from './board-model';
+import {TaskTooltip} from './task-tooltip';
 
 const COMPACT_STAGE_LABELS: Record<WorkflowStage, string> = {
   planning: 'Plan',
@@ -44,33 +46,6 @@ type SessionListItemProps = SessionSelectionProps & {readonly session: SessionFa
 
 interface BoardBanksProps extends RepositoryTableProps {
   readonly presentation: Presentation;
-}
-
-interface SessionCondition {
-  readonly isBlocked: boolean;
-  readonly hasLastTurnFailure: boolean;
-  readonly label: string;
-  readonly glyph: string | null;
-}
-
-/** Describe only explicit waiting activity and a supplied failed turn. */
-function conditionOf(session: Session): SessionCondition {
-  const isBlocked = session.state === 'waiting';
-  const hasLastTurnFailure = session.latestTurn?.state === 'failed';
-  const labels: string[] = [];
-  if (isBlocked) {
-    labels.push('blocked');
-  }
-  if (hasLastTurnFailure) {
-    labels.push('last known turn failed');
-  }
-  let glyph: string | null = null;
-  if (hasLastTurnFailure) {
-    glyph = '!';
-  } else if (isBlocked) {
-    glyph = '⌛';
-  }
-  return {isBlocked, hasLastTurnFailure, label: labels.join('; '), glyph};
 }
 
 /** Compose the session's concise accessible name without inferring activity. */
@@ -133,33 +108,35 @@ function SessionMark({
   const provenance = evidenceLabel(session.activity, currentGeneration);
   const condition = conditionOf(session.activity);
   const label = sessionLabel(repository, session, currentGeneration);
+  const facts = taskTooltipFacts(session, repository, currentGeneration);
   return (
-    <button
-      aria-controls={selected ? 'session-inspector' : undefined}
-      aria-expanded={selected}
-      aria-label={label}
-      aria-pressed={selected}
-      className={`session-mark activity-${activity}`}
-      data-blocked={condition.isBlocked || undefined}
-      data-last-turn-failed={condition.hasLastTurnFailure || undefined}
-      data-family-id={session.rootId}
-      data-session-id={session.activity.sessionId}
-      data-stage={session.context.stage}
-      data-update-revision={pulseRevision}
-      onClick={(event) => onSelect(session.rootId, event.currentTarget)}
-      ref={(node) => onMarkNode(session.rootId, node)}
-      title={label}
-      type="button"
-    >
-      <span aria-hidden="true">{activitySymbol(activity)}</span>
-      {condition.glyph === null ? null : (
-        <span aria-hidden="true" className="session-mark__condition">
-          {condition.glyph}
-        </span>
-      )}
-      <small aria-hidden="true">{evidenceSymbol(provenance)}</small>
-      <UpdatePulse revision={pulseRevision} />
-    </button>
+    <TaskTooltip facts={facts}>
+      <button
+        aria-controls={selected ? 'session-inspector' : undefined}
+        aria-expanded={selected}
+        aria-label={label}
+        aria-pressed={selected}
+        className={`session-mark activity-${activity}`}
+        data-blocked={condition.isBlocked || undefined}
+        data-last-turn-failed={condition.hasLastTurnFailure || undefined}
+        data-family-id={session.rootId}
+        data-session-id={session.activity.sessionId}
+        data-stage={session.context.stage}
+        data-update-revision={pulseRevision}
+        onClick={(event) => onSelect(session.rootId, event.currentTarget)}
+        ref={(node) => onMarkNode(session.rootId, node)}
+        type="button"
+      >
+        <span aria-hidden="true">{activitySymbol(activity)}</span>
+        {condition.glyph === null ? null : (
+          <span aria-hidden="true" className="session-mark__condition">
+            {condition.glyph}
+          </span>
+        )}
+        <small aria-hidden="true">{evidenceSymbol(provenance)}</small>
+        <UpdatePulse revision={pulseRevision} />
+      </button>
+    </TaskTooltip>
   );
 }
 

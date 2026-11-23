@@ -1,0 +1,87 @@
+/*
+ * Formatted task tooltips.
+ *
+ * The content is portalled to the document body, so it is never clipped by the
+ * panorama scrollport or its sticky repository column. Its stacking level must
+ * therefore clear the sticky board layers (z-index 1 and 2) and sit below the
+ * focused skip link (z-index 50). Keep it clear of both: z-index 40.
+ */
+.task-tooltip {
+  @apply shadow-lg;
+  background: var(--color-base-100);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 24%, transparent);
+  border-radius: var(--radius-box);
+  color: var(--color-base-content);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  max-height: var(--radix-tooltip-content-available-height);
+  max-width: min(22rem, var(--radix-tooltip-content-available-width));
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  padding: 0.7rem 0.85rem;
+  pointer-events: auto;
+  width: max-content;
+  z-index: 40;
+}
+
+.task-tooltip[data-state] {
+  animation: task-tooltip-in 120ms ease-out;
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+}
+
+.task-tooltip__title {
+  font-size: 0.95rem;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Two columns keep each label scannable while long values wrap freely. */
+.task-tooltip__facts {
+  display: grid;
+  gap: 0.2rem 0.75rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0.55rem 0 0;
+}
+
+.task-tooltip__facts dt {
+  color: var(--color-neutral);
+  font-family: "Courier New", monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.task-tooltip__facts dd {
+  margin: 0;
+}
+
+.task-tooltip__provisional {
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-neutral);
+  font-size: 0.72rem;
+  margin: 0.55rem 0 0;
+  padding-left: 0.45rem;
+}
+
+.task-tooltip__hint {
+  color: var(--color-neutral);
+  font-size: 0.66rem;
+  margin: 0.55rem 0 0;
+}
+
+/* Entry fades in place; the pulse overlay instead expands and fades out. */
+@keyframes task-tooltip-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-tooltip[data-state] {
+    animation: none;
+  }
+}

@@ -178,3 +178,57 @@ it('marks a hidden-family inspector provisional when its settled history expires
     browser.restore();
   }
 });
+
+it('opens a tooltip without requesting recency or changing the family selection', async () => {
+  const snapshot = createFamilySnapshot(1);
+  const requested: string[][] = [];
+  const browser = installFamilyBrowser(async (_input, init) => {
+    requested.push(JSON.parse(String(init?.body)).sessionIds);
+    return new Response('');
+  });
+  try {
+    const user = userEvent.setup();
+    render(<Board connection="Connected" snapshot={snapshot} />);
+    const mark = screen.getByRole('button', {name: /Root planning work; Refine; running/u});
+
+    await user.hover(mark);
+    await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull(), {timeout: 3000});
+
+    expect(requested).toEqual([]);
+    expect(mark.getAttribute('data-session-id')).toBe('child-0');
+    expect(mark.getAttribute('data-family-id')).toBe('root-0');
+    // Root context names the task while the selected child tab supplies runtime facts.
+    expect(document.querySelector('.task-tooltip__title')?.textContent).toBe('Root planning work');
+    expect(document.querySelector('.task-tooltip')?.textContent).toContain('running');
+    expect(document.querySelector('.task-tooltip')?.textContent).toContain('selected tab is provisional');
+  } finally {
+    browser.restore();
+  }
+});
+
+it('reads no live activity, recency or PR data for a synthetic demo mark', async () => {
+  const snapshot = createFamilySnapshot(1);
+  // Synthetic demo families are excluded from every live lookup.
+  const demo = {
+    ...snapshot,
+    collector: {...snapshot.collector, state: 'demo' as const},
+    sessions: snapshot.sessions.map((session) => ({...session, source: 'demo' as const}))
+  };
+  const requested: string[] = [];
+  const browser = installFamilyBrowser(async (input) => {
+    requested.push(String(input));
+    return new Response('', {status: 500});
+  });
+  try {
+    render(<Board connection="demo" snapshot={demo} />);
+    await act(async () => {
+      screen.getByRole('button', {name: /Root planning work; Refine; running/u}).focus();
+    });
+    await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull());
+
+    expect(requested).toEqual([]);
+    expect(document.querySelector('.task-tooltip')?.textContent).toContain('Synthetic demo record');
+  } finally {
+    browser.restore();
+  }
+});

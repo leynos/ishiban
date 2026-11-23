@@ -2,6 +2,7 @@
 import {afterEach, expect, it} from 'bun:test';
 import fc from 'fast-check';
 import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {useSyncExternalStore} from 'react';
 import type {ReactElement} from 'react';
 import type {Session, Snapshot, SessionActivityFrame} from '../src/contracts';
@@ -10,6 +11,7 @@ import {createDemoSnapshot} from '../src/demo';
 import {startLazyActivity} from '../src/lazy-activity';
 import {Board} from '../src/ui/board';
 import {installActivityFetch, type ActivityFetchRequest} from './activity-fetch-fixture';
+import {markByTitle} from './board-fixtures';
 import type {Deferred} from './deferred';
 import {
   ControlledIntersectionObserver,
@@ -120,13 +122,9 @@ function installFetch() {
   restoreFetch = fixture.restore;
   return fixture;
 }
-/** Find the actual rendered session mark by its accessible title. */
-function markFor(title: string): HTMLElement {
-  return screen.getByRole('button', {name: new RegExp(title, 'u')});
-}
 /** Send visible entries for selected real DOM marks. */
 function revealSessions(observer: ControlledIntersectionObserver, sessions: readonly Session[]): void {
-  for (const session of sessions) observer.setVisibility(markFor(session.title), true);
+  for (const session of sessions) observer.setVisibility(markByTitle(session.title), true);
 }
 /** Guard an expected pending request before controlling its response. */
 function requestAt(requests: readonly ActivityFetchRequest[], index: number): ActivityFetchRequest {
@@ -204,6 +202,32 @@ async function waitForRequest(started: readonly Deferred<void>[], index: number)
   if (!signal) throw new Error('The expected queued activity request did not start.');
   await signal.promise;
 }
+/** Mount one unknown session and resolve its rendered mark. */
+function mountUnknownBoard() {
+  const board = activityBoard([UNKNOWN_REAL_ONE]);
+  return {...board, mark: markByTitle(UNKNOWN_REAL_ONE.title)};
+}
+/** Mount one unknown session, reveal it and wait for its first batch request. */
+async function revealedUnknownBoard() {
+  const board = mountUnknownBoard();
+  act(() => board.observer.setVisibility(board.mark, true));
+  await waitForRequest(board.started, 0);
+  return board;
+}
+/** Resolve the held first batch with this member's running lazy activity. */
+function resolveRunningMember(
+  request: ActivityFetchRequest,
+  snapshot: Snapshot,
+  overrides: Partial<Session> = {}
+): void {
+  resolveBatch(request, [
+    activityFrame(snapshot.workspaceId, {...UNKNOWN_REAL_ONE, ...overrides, state: 'running', activitySource: 'lazy'})
+  ]);
+}
+/** Return the open tooltip's rendered text while one is mounted. */
+function tooltipText(): string {
+  return document.querySelector('.task-tooltip')?.textContent ?? '';
+}
 
 afterEach(() => {
   stopActivity();
@@ -216,7 +240,7 @@ afterEach(() => {
 
 it('looks up the new tab when a visible family mark changes its raw session ID', async () => {
   const {requests, started, observer} = activityBoard([UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
-  const mark = markFor(UNKNOWN_REAL_ONE.title);
+  const mark = markByTitle(UNKNOWN_REAL_ONE.title);
   act(() => observer.setVisibility(mark, true));
   await waitForRequest(started, 0);
   expectBatchPost(requestAt(requests, 0), [UNKNOWN_REAL_ONE.sessionId]);
@@ -237,8 +261,8 @@ it('batches visible unknown activity and allows immediate rediscovery after drop
     UNKNOWN_REAL_FOUR
   ]);
   revealSessions(observer, [DEMO_UNKNOWN_SESSION, KNOWN_SESSION, UNKNOWN_REAL_ONE, UNKNOWN_REAL_TWO]);
-  observer.setVisibility(markFor(UNKNOWN_REAL_ONE.title), true);
-  const queuedMark = markFor(UNKNOWN_REAL_THREE.title);
+  observer.setVisibility(markByTitle(UNKNOWN_REAL_ONE.title), true);
+  const queuedMark = markByTitle(UNKNOWN_REAL_THREE.title);
   observer.setVisibility(queuedMark, true);
   observer.setVisibility(queuedMark, false);
   await waitForRequest(started, 0);
@@ -259,7 +283,7 @@ it('batches visible unknown activity and allows immediate rediscovery after drop
   expect(current?.cursor).toBe(snapshot.cursor);
   expect(current?.sessions[2]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
   expect(current?.sessions[2]?.activitySource).toBe('lazy');
-  const updatedMark = markFor(UNKNOWN_REAL_ONE.title);
+  const updatedMark = markByTitle(UNKNOWN_REAL_ONE.title);
   expect(updatedMark.getAttribute('data-update-revision')).toBeNull();
   expect(updatedMark.querySelector('[data-session-update-pulse]')).toBeNull();
   stopActivity();
@@ -303,9 +327,7 @@ it('rejects stale, foreign and mismatched members without discarding a valid bat
 });
 
 it('shares a pending lookup through metadata replay and accepts its current rebased result', async () => {
-  const {requests, started, snapshot, store, observer} = activityBoard([UNKNOWN_REAL_ONE]);
-  revealSessions(observer, [UNKNOWN_REAL_ONE]);
-  await waitForRequest(started, 0);
+  const {requests, snapshot, store} = await revealedUnknownBoard();
   const current: Session = {
     ...UNKNOWN_REAL_ONE,
     title: 'Updated metadata',
@@ -319,7 +341,7 @@ it('shares a pending lookup through metadata replay and accepts its current reba
   resolveBatch(requestAt(requests, 0), [
     activityFrame(snapshot.workspaceId, {...current, state: 'running', activitySource: 'lazy'})
   ]);
-  await waitFor(() => expect(store.getSnapshot().snapshot?.sessions[0]?.state).toBe('running'));
+  await waitForActivity(store, UNKNOWN_REAL_ONE.sessionId, 'running');
   expect(store.getSnapshot().snapshot?.sessions[0]?.title).toBe('Updated metadata');
   expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor + 1);
   expect(requests).toHaveLength(1);
@@ -384,4 +406,42 @@ it('merges only matching unknown activity replies without changing the journal b
     }),
     {numRuns: 40, seed: 20_261_110}
   );
+});
+
+it('opens a tooltip without reading activity, selecting the task or moving the cursor', async () => {
+  const {requests, started, snapshot, store, observer, mark} = mountUnknownBoard();
+  const user = userEvent.setup();
+
+  await user.hover(mark);
+  await waitFor(() => expect(document.querySelector('.task-tooltip')).not.toBeNull(), {timeout: 3000});
+
+  expect(requests).toHaveLength(0);
+  expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor);
+  expect(mark.getAttribute('aria-pressed')).toBe('false');
+  expect(screen.queryByRole('complementary', {name: 'Session inspector'})).toBeNull();
+
+  act(() => observer.setVisibility(mark, true));
+  await waitForRequest(started, 0);
+  expect(requests).toHaveLength(1);
+});
+
+it('updates open tooltip content from a held activity frame without a pulse or revision', async () => {
+  const {requests, snapshot, store, mark} = await revealedUnknownBoard();
+  await act(async () => {
+    mark.focus();
+  });
+  expect(tooltipText()).toContain('unknown');
+
+  resolveRunningMember(requestAt(requests, 0), snapshot);
+  await waitForActivity(store, UNKNOWN_REAL_ONE.sessionId, 'running');
+  await waitFor(() => expect(tooltipText()).toContain('running'));
+
+  const updatedMark = markByTitle(UNKNOWN_REAL_ONE.title);
+  expect(updatedMark === mark).toBe(true);
+  expect(updatedMark.getAttribute('data-update-revision')).toBeNull();
+  expect(updatedMark.querySelector('[data-session-update-pulse]')).toBeNull();
+  expect(store.getSnapshot().snapshot?.cursor).toBe(snapshot.cursor);
+  expect(store.getSnapshot().snapshot?.sessions[0]?.lastEventId).toBe(UNKNOWN_REAL_ONE.lastEventId);
+  expect(tooltipText()).toContain('Read on demand; not journalled');
+  expect(document.querySelector('.task-tooltip__title')?.textContent).toBe(UNKNOWN_REAL_ONE.title);
 });
