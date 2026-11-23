@@ -14,6 +14,9 @@ from cli_state_support import (
     stub_collector,
 )
 
+from ishiban import cli
+from ishiban.storage import Store
+
 if typ.TYPE_CHECKING:
     import pathlib
     from unittest import mock
@@ -98,7 +101,8 @@ def test_collect_refuses_an_undecodable_workspace_identity(
     _assert_rejection_preserved(state, sentinel, observer)
 
 
-def test_collect_republishes_the_requested_selector_for_the_same_identity(
+@pytest.mark.asyncio
+async def test_collect_republishes_the_requested_selector_for_the_same_identity(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     cmd_mox: CmdMox,
@@ -108,23 +112,28 @@ def test_collect_republishes_the_requested_selector_for_the_same_identity(
     stub_collector(monkeypatch)
     state = tmp_path / "state"
     _write_marker(state, msgspec.json.encode({"workspaceId": "w1", "selector": "old"}))
+    seeded = Store(cli.database_url(state), "w1")
+    await seeded.initialize()
+    generation = await seeded.begin_generation()
+    await seeded.health("following", generation)
+    await seeded.close()
     monkeypatch.chdir(tmp_path)
 
-    run_cli([
-        "collect",
-        "--workspace",
-        "second",
-        "--no-github",
-        "--state-directory",
-        str(state),
-    ])
+    await cli.collect(workspace="second", state_directory=state, github=False)
 
     assert read_marker(state) == {"workspaceId": "w1", "selector": "second"}, (
         "The requested selector must replace the saved one for the same workspace."
     )
-    assert (state / "observatory.sqlite3").is_file(), (
-        "A matching identity must retain and initialize its journal."
-    )
+    reopened = Store(cli.database_url(state), "w1")
+    try:
+        await reopened.initialize()
+        events = await reopened.events(after=0)
+    finally:
+        await reopened.close()
+    assert [event["eventType"] for event in events] == [
+        "generation.started",
+        "health.changed",
+    ], "A matching identity must retain every committed journal row."
 
 
 def test_default_collect_reports_legacy_state_without_changing_it(

@@ -15,6 +15,7 @@ from cli_state_support import (
     stub_collector,
 )
 from falcon import testing
+from sqlalchemy.engine import make_url
 
 from ishiban import cli
 
@@ -132,6 +133,23 @@ async def test_direct_collect_call_uses_the_shared_default(
         "A direct call must publish the marker in the shared default."
     )
     observer.assert_awaited_once()
+
+
+def test_database_url_preserves_url_significant_path_characters(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A state path containing ``?`` must still name the journal file."""
+    state = tmp_path / "state?query"
+    state.mkdir()
+
+    url = cli.database_url(state)
+
+    assert url.endswith("%3Fquery/observatory.sqlite3"), (
+        "The query separator must be percent-encoded inside the path."
+    )
+    assert make_url(url).database == str(state.resolve() / "observatory.sqlite3"), (
+        "SQLAlchemy must parse the journal path unchanged."
+    )
 
 
 def test_root_help_lists_both_commands(capsys: pytest.CaptureFixture[str]) -> None:

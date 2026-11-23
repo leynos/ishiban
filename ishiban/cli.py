@@ -13,6 +13,7 @@ import cyclopts
 import msgspec
 import uvicorn
 from cyclopts import Parameter
+from sqlalchemy.engine import URL
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -56,12 +57,18 @@ class WorkspaceConfig(msgspec.Struct, rename="camel"):
 def database_url(directory: pathlib.Path) -> str:
     """Return an absolute SQLite URL; for example, use the shared state directory.
 
+    The path is rendered through SQLAlchemy's URL builder so characters that are
+    significant in a URL, such as ``?``, remain part of the database path.
+
     Returns
     -------
     str
         Absolute SQLite URL for the chosen state directory.
     """
-    return f"sqlite+aiosqlite:///{directory.resolve() / 'observatory.sqlite3'}"
+    database = directory.resolve() / "observatory.sqlite3"
+    return URL.create("sqlite+aiosqlite", database=str(database)).render_as_string(
+        hide_password=False
+    )
 
 
 def default_state_directory(*, command_chain: cabc.Sequence[str]) -> pathlib.Path:
