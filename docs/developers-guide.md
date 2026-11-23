@@ -371,7 +371,7 @@ Test seams:
   retained-data and sidecar scenarios.
 - For retained-data queries, register `cmd-mox` spies for `lody` and `gh` with
   no expectations, call the route, then assert no invocations and unchanged
-  journal events, cursor and sidecar row count.
+  journal events, cursor and every sidecar column.
 - Use `ActivityResolutionOptions` for injected clocks and the reader
   constructors for injected executables.
 - Keep dedicated child executables for chunking, delayed EOF, transport
