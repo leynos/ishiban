@@ -1615,8 +1615,8 @@ Fresh verification bound that evidence to the landed source. Squash merge
 
 In a detached worktree at `c1b76c1`,
 `uv run pytest -v tests/test_request_body_streaming.py::test_streamed_activity_body_accepts_exact_limit_and_rejects_next_byte`
-passed under Python 3.14.7, pytest 9.2.0, and Falcon 4.4.0. Replacing only the
-cumulative guard with `if len(chunk) > max_bytes:` made
+passed under Python 3.14.7, uv 0.13.2, pytest 9.2.0, and Falcon 4.4.0.
+Replacing only the cumulative guard with `if len(chunk) > max_bytes:` made
 `uv run pytest -q tests/test_request_body_streaming.py` fail at
 `assert 200 == 413`, the cumulative-limit assertion, in 0.47 s. The source was
 restored to the same hash, `git status` was clean, and `make test` then
@@ -1632,6 +1632,12 @@ direct-helper requirement for this case. This is bounded evidence for one
 endpoint and one mutation, not a formal proof; CodeRabbit did not execute the
 mutant independently, and other endpoints that share the helper were not
 mutated here.
+
+These are scope limits, not counterexamples. The test cannot by itself exclude
+a "read all, then check total" implementation. It does not cover a declared or
+mismatched `Content-Length`, other fragmentation patterns, interrupted streams,
+or the interface-state route. The pre-extend check in `read_bounded_body` is
+what establishes the bounded behaviour in those cases.
 
 The row is stale and resolved at `c1b76c1`; the fresh run produced no
 counterexample. This entry supersedes the saved row for
