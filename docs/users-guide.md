@@ -36,20 +36,114 @@ After its workspace identity is saved, start Falcon in another terminal:
 uv run ishiban serve
 ```
 
-If the saved workspace identity or browser build is missing, the server reports
-the required collector or build command before opening a listener.
+`serve` serves the build in `dist/`, so run it from the checkout that contains
+the built interface. The state directory is shared, so `collect` may run from
+any working directory. `uv run` discovers its project from the working
+directory, so select the checkout explicitly when starting outside it, for
+example
+`uv run --project /absolute/path/to/ishiban ishiban collect --workspace leynos`.
+An installed `ishiban` console script needs no project selection. If the saved
+workspace identity or browser build is missing, the server reports the required
+collector or build command before opening a listener.
 
-Open <http://127.0.0.1:8765/>. The collector and API share the ignored
-`.ishiban/` directory; keep both commands in the same repository root or pass
-the same `--state-directory` to each. Only one collector may own that
-directory. The API uses one worker and binds to loopback. Press Ctrl+C in each
-terminal to stop its process. Falcon bounds shutdown of open event streams to
-three seconds. A later collector run reconciles fresh snapshots with the
-existing journal instead of erasing previous observations.
+Open <http://127.0.0.1:8765/>. The collector and API share one state directory
+outside the checkout, so launching them from different directories still
+selects the same journal. Only one collector may own that directory. The API
+uses one worker and binds to loopback. Press Ctrl+C in each terminal to stop
+its process. Falcon bounds shutdown of open event streams to three seconds. A
+later collector run reconciles fresh snapshots with the existing journal
+instead of erasing previous observations.
 
 `uv run ishiban collect --no-github` disables GitHub lookups. Catalogue
 associations remain visible, but active PRs without known titles cannot be
 classified as Ready, Building, or Refine.
+
+## Choose the state directory
+
+By default, both commands keep the journal, activity sidecar, `workspace.json`,
+collector lock and preference-signing key together in
+`$XDG_STATE_HOME/ishiban`. When `XDG_STATE_HOME` is unset or empty, or holds a
+relative path, the default is `~/.local/state/ishiban`, as the XDG Base
+Directory Specification requires. Ishiban never expands `~` or environment
+variables inside a configured value, and the default never depends on the
+current working directory. If neither a usable `XDG_STATE_HOME` nor an absolute
+`HOME` is available, the commands stop before creating anything and report the
+variable and the `--state-directory` override as remedies.
+
+Pass `--state-directory <path>` to both commands to override the default. An
+explicit path always wins over the XDG default; a relative path keeps its usual
+meaning and resolves against the directory where the command starts. Keep the
+same override for both processes, because `collect` and `serve` must select the
+same journal.
+
+Each directory holds exactly one workspace. `collect` refuses to replace a
+`workspace.json` that records a different workspace, leaving the existing
+marker and journal untouched, and asks for a separate `--state-directory`.
+`--workspace` alone selects the observed workspace; the saved marker restores
+that identity for `serve`.
+
+### Migrate working-directory state
+
+Earlier builds stored state in an ignored `.ishiban/` directory beside the
+checkout. When the current default is selected and such a directory still holds
+a workspace marker, `collect` prints a read-only notice naming both paths; it
+never opens, moves, or deletes the legacy files.
+
+That notice appears after the first run of the new build, which has also
+created and initialized the new default directory. If that fresh directory is
+still the only occupant, set `PRESERVE_NEW_DEFAULT=1` for one migration run to
+keep it as `<state_root>/ishiban.before-migration`. Confirm the migrated
+journal opens, then remove that preserved directory yourself when it is no
+longer needed. If no such directory exists yet, run the same example without
+the variable.
+
+Stop both processes, then migrate the legacy state once:
+
+<!-- tested-example: migrate-state -->
+```bash
+# Stop "ishiban collect" and "ishiban serve" before moving their state.
+state_root="${XDG_STATE_HOME}"
+case "$state_root" in
+  /*) ;;
+  *)
+    home="${HOME-}"
+    case "$home" in
+      /*) state_root="$home/.local/state" ;;
+      *)
+        printf 'Set an absolute XDG_STATE_HOME or HOME, or migrate with an explicit --state-directory.\n' >&2
+        exit 1
+        ;;
+    esac
+    ;;
+esac
+if [ ! -d .ishiban ]; then
+  printf 'No legacy .ishiban directory in this working directory.\n' >&2
+  exit 1
+fi
+mkdir -p "$state_root"
+if [ -e "$state_root/ishiban" ]; then
+  if [ "${PRESERVE_NEW_DEFAULT-}" != 1 ]; then
+    printf 'Refusing to merge into an existing state directory.\n' >&2
+    exit 1
+  fi
+  if [ -e "$state_root/ishiban.before-migration" ]; then
+    printf 'Refusing to overwrite a preserved state directory.\n' >&2
+    exit 1
+  fi
+  mv "$state_root/ishiban" "$state_root/ishiban.before-migration" || exit 1
+fi
+mv .ishiban "$state_root/ishiban"
+```
+
+The move keeps the journal, its `-wal` and `-shm` files, the activity sidecar,
+`workspace.json`, the collector lock and `interface-state.key` together, with
+their permissions and ownership. Do not merge two state directories and do not
+delete either one: a destination that already holds reviewed state makes the
+example stop, so compare both workspaces first. To keep the old location
+instead, pass `--state-directory .ishiban` to both commands from that checkout.
+That explicit override is also the safe choice when several checkouts each have
+their own legacy `.ishiban` state, because one shared default can hold only one
+workspace.
 
 ## Read the board
 
@@ -221,9 +315,10 @@ capacity guarantees. Stop the collector when observation is no longer needed.
 
 The local journal is append-only with no retention policy. It contains private
 session titles, repository associations, PR metadata, and observation evidence;
-keep `.ishiban/` private and out of Git. No authentication tokens or transcript
-bodies are written to the browser or journal. Access beyond loopback needs an
-explicit authentication and transport-security design before deployment.
+keep the resolved state directory private and out of Git. No authentication
+tokens or transcript bodies are written to the browser or journal. Access
+beyond loopback needs an explicit authentication and transport-security design
+before deployment.
 
 ## Quality Gates
 
@@ -393,9 +488,11 @@ sidecar, shared by windows viewing the same workspace. Newer execution evidence
 replaces them; metadata or unknown startup snapshots retain them. The displayed
 observation time describes when the runtime facts were read. To clear these
 last-known observations, stop the API and collector, remove
-`.ishiban/observatory.sqlite3.activity.sqlite3` (or the same filename under the
-shared `--state-directory`), then restart both processes and refresh the
-browser. Previously lost browser-only results need to be collected again.
+`observatory.sqlite3.activity.sqlite3` from the resolved state directory, then
+restart both processes and refresh the browser. The resolved directory is
+`$XDG_STATE_HOME/ishiban` or `~/.local/state/ishiban` by default, and the
+explicit `--state-directory` when one was passed. Previously lost browser-only
+results need to be collected again.
 
 The inspector uses the top PR in a stack as its linked heading, with the
 session title underneath. Prerequisites do not displace the PR that would merge

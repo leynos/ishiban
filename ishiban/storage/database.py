@@ -7,6 +7,7 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import event as sa_event
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 if typ.TYPE_CHECKING:
@@ -17,8 +18,12 @@ if typ.TYPE_CHECKING:
 EXPECTED_SCHEMA_HEAD = "0001_initial_journal"
 
 
-def create_engine(database_url: str) -> AsyncEngine:
+def create_engine(database_url: str | URL) -> AsyncEngine:
     """Create an async SQLite engine with explicit transaction semantics.
+
+    Accepting a URL object as well as a string keeps a decoded database path
+    intact, so a path containing a query separator never depends on a
+    particular SQLAlchemy release's string escaping.
 
     Returns
     -------
@@ -30,10 +35,11 @@ def create_engine(database_url: str) -> AsyncEngine:
     ValueError
         If ``database_url`` does not select the async SQLite dialect.
     """
-    if not database_url.startswith("sqlite+aiosqlite:"):
+    url = make_url(database_url)
+    if url.drivername != "sqlite+aiosqlite":
         raise ValueError
 
-    engine = create_async_engine(database_url, connect_args={"timeout": 5.0})
+    engine = create_async_engine(url, connect_args={"timeout": 5.0})
 
     @sa_event.listens_for(engine.sync_engine, "connect")
     def configure_connection(dbapi_connection: object, _: object) -> None:
