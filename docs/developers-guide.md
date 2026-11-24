@@ -336,6 +336,61 @@ runtime classes. The test helpers import them only for type checking.
 runtime entry points in the quality configuration; their implementations remain
 subject to linting and behavioural tests.
 
+## Enrichment command and query boundaries
+
+[ADR 0009](adrs/adr-0009-enrichment-command-query-boundary.md) records the
+accepted POC split. Classify every new route by effect, not by HTTP method:
+
+- A retained-data query reads committed journal rows, events, health, the
+  durable cursor or browser-supplied interface state. It may overlay the
+  activity sidecar but must not start an upstream child or write durable state.
+- A singular bounded enrichment read may start at most one fixed, read-only
+  `lody` or `gh` child and may write only the activity sidecar. A batch may
+  start one child per pending member within its concurrency bound. Keep each
+  route's process, output, time, cache and concurrency bounds explicit.
+- A collector command has no HTTP route. Only the collector writes the journal,
+  advances collector generations and owns evidence generation.
+- `POST` is acceptable for a bounded read that carries a JSON body; it is not
+  permission to add a command, job or task dispatch.
+
+Durable-effect rules:
+
+- Do not append or rewrite journal events, advance the cursor or invent
+  `lastEvidenceGeneration` from an API route.
+- Do not let inspector title or agent reads change workflow stage, stage reason
+  or PR associations; those remain collector evidence under
+  [ADR 002](adrs/adr-0002-workflow-evidence.md).
+- Keep validation before use: protocol version, workspace identity, session
+  identity, known state and revision. Upstream results must report the
+  requested workspace; sidecar writes are scoped by the configured store
+  workspace rather than by a re-read workspace field.
+- Shared SQLite permissions do not enforce collector-only ownership. Code
+  review and tests enforce it.
+- A new durable local effect needs an ADR. Reuse the existing activity sidecar
+  where last-known runtime evidence is enough rather than adding another store.
+
+Test seams:
+
+- Use `opened_store`, `seed_unknown_sessions` and `remember_idle_activity` from
+  `tests/storage_support.py` and `tests/batch_activity_support.py` for
+  retained-data and sidecar scenarios.
+- Use `tests/enrichment_boundary_support.py` for retained-data boundary tests.
+  Its `retained_state` captures events, cursor and sidecar rows, `failing_spy`
+  registers a failing `lody` or `gh` spy, and `stream_replay` reads a bounded
+  events-route replay. A new boundary test should call these helpers rather
+  than re-implement the spy and state capture.
+- For retained-data queries, register `cmd-mox` spies for `lody` and `gh` with
+  no expectations, call the route, then assert no invocations and unchanged
+  journal events, cursor and every sidecar column.
+- Use `ActivityResolutionOptions` for injected clocks and pass `clock` and
+  `lookup` to `PullRequestTitles` for title-cache timing and reads.
+- `LazyActivity` exposes neither an adapter nor a clock, so patch it, and the
+  collector, at module level as `tests/test_lazy_activity.py` does for
+  `_monotonic_time` and its cache bounds.
+- Keep dedicated child executables for chunking, delayed EOF, transport
+  teardown, deadlines and cancellation, where command-response doubles cannot
+  exercise the contract.
+
 ## Duplication review
 
 The spike consolidates decoded string access, UTC timestamps, session lookup,
@@ -346,7 +401,10 @@ constructors, and short presentation or transport-state branches. The snapshot
 and cursor-only store accessors retain their own initialization and transaction
 wrappers; their shared cursor SQL is extracted. The transport tests share only
 fetch-spy and virtual-clock ownership, keeping each failure scenario's
-assertions independent.
+assertions independent. `tests/test_collector_storage_recovery.py` and
+`tests/test_enrichment_boundary.py` share only typing-only imports; the
+exception is limited to that pair and must be rechecked when either module
+changes.
 
 On-demand activity and inspector metadata retain distinct response schemas and
 failure results, while sharing bounded subprocess ownership. Projection-only
