@@ -308,6 +308,9 @@ The local cache that keeps the gate usable when the authority is temporarily
 unreachable is ignored by Git. Add only narrow project-specific terms and
 exclusions to `typos.local.toml`; never edit generated `typos.toml` by hand.
 
+The builder requires Python 3.14 or newer, so the Makefile passes
+`--python 3.14` to `uv tool run`; keep it when the interpreter matrix changes.
+
 ## Proof-of-concept boundary conventions
 
 The API marks responses `Cache-Control: no-store`. Browser assets currently
