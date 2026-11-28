@@ -2,7 +2,8 @@
 import type {ReactElement} from 'react';
 import type {SessionFamily} from '../session-families';
 import {groupByRepository, STAGE_LABELS, type WorkflowStage} from './board-model';
-import {SessionList, type SessionSelectionProps} from './board-table';
+import type {SessionSelectionProps} from './session-mark';
+import {SessionList} from './session-list';
 
 interface WorkflowExceptionsProps extends SessionSelectionProps {
   readonly sessions: readonly SessionFamily[];
@@ -16,7 +17,9 @@ function ExceptionGroup({
   selectedSessionId,
   pulseRevisions,
   onMarkNode,
-  onSelect
+  onSelect,
+  canOpenThread,
+  onOpenThread
 }: WorkflowExceptionsProps & {readonly stage: Extract<WorkflowStage, 'unclassified' | 'closed'>}): ReactElement {
   const stageSessions = sessions.filter((session) => session.context.stage === stage);
   const groupedSessions = groupByRepository(stageSessions);
@@ -34,8 +37,10 @@ function ExceptionGroup({
           <section className="exception-repository" key={repository.name}>
             <h3>{repository.name}</h3>
             <SessionList
+              canOpenThread={canOpenThread}
               currentGeneration={currentGeneration}
               onMarkNode={onMarkNode}
+              onOpenThread={onOpenThread}
               onSelect={onSelect}
               pulseRevisions={pulseRevisions}
               selectedSessionId={selectedSessionId}
