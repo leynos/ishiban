@@ -31,6 +31,7 @@ extend-exclude = [
 locale = "en-gb"
 extend-ignore-re = [
     "\"canceled\"",
+    "(?m)^FORBIDDEN_SHORT = \"UPn\"$",
     "(?m)^\\s*yield\\* Fiber\\.interrupt\\(connection\\);$",
     "(?m)^import \\{Effect, Fiber\\} from 'effect';$",
     "(?m)^type RecoveryScenario = \\(store: BoardStore, connection: Fiber\\.Fiber<void, unknown>\\) => Effect\\.Effect<void>;$",
