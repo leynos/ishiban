@@ -12,6 +12,9 @@ accepted = []
 
 [patterns]
 ignore = [
+  # The vendored uv_gate.py lists uv's short flags (-U, -P, -n) as the string
+  # "UPn"; the file is byte-for-byte canonical, so exempt that one line.
+  '(?m)^FORBIDDEN_SHORT = "UPn"$',
   # Inline code spans were masked by the previous dictionary snapshot; kept
   # until the shared dictionary rules on it.
   '`[^`\n]+`',

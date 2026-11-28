@@ -153,7 +153,7 @@ async def test_act_command_sets_pytest_environment_without_running_act(
     make = shutil.which("make")
     assert make is not None, "The local Makefile contract needs installed make."
     dry_run = await _run_example([make, "--dry-run", *argv[1:]], REPOSITORY_ROOT)
-    pytest_lines = [line for line in dry_run.splitlines() if " run pytest -v " in line]
+    pytest_lines = [line for line in dry_run.splitlines() if " -- pytest -v " in line]
     assert len(pytest_lines) == 1, "Dry-run must expose one pytest invocation."
     assert "RUN_ACT_VALIDATION=1" in pytest_lines[0], (
         "WITH_ACT=1 must reach pytest as the opt-in environment variable."

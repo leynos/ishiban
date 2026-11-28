@@ -311,6 +311,19 @@ exclusions to `typos.local.toml`; never edit generated `typos.toml` by hand.
 The builder requires Python 3.14 or newer, so the Makefile passes
 `--python 3.14` to `uv tool run`; keep it when the interpreter matrix changes.
 
+Every other uv call goes through the vendored `scripts/uv_gate.py` helper
+(`UV_GATE`), which `make` runs with `python3` 3.9 or newer. It finds `uv` on
+`PATH` (outside `~/.lody`), uses the global uv cache and runs offline first
+with at most one online attempt; there is no `UV` override. `make build` runs
+`prepare`, so a stale `uv.lock` fails the build instead of being rewritten.
+`scripts/uv_gate.py` is the shared-actions helper copied byte for byte: update
+it by copying the canonical file, never by editing it, and it is excluded from
+the Python targets and from the duplication gate. A `uv` that reports only
+`Git operation failed` for a Git source missing from the cache is not retried
+online by the helper: warm the cache once with `uv tool run` on that source.
+The helper was verified here with uv 0.13.7, which names the offline reason for
+a cold cache; an older uv needs that warm-up before the first `make` run.
+
 ## Proof-of-concept boundary conventions
 
 The API marks responses `Cache-Control: no-store`. Browser assets currently

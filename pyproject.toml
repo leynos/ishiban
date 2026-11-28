@@ -369,7 +369,8 @@ mode = "syntax,semantic,near"
 min-size = 24
 surface = "all"
 top = 0
-exclude = [".venv/**", ".uv-cache/**", ".uv-tools/**", ".tools/**", ".git/**"]
+# scripts/uv_gate.py is vendored byte for byte, so it cannot be refactored.
+exclude = [".venv/**", ".uv-cache/**", ".uv-tools/**", ".tools/**", ".git/**", "scripts/uv_gate.py"]
 
 # Skylos treats test-classified paths as entry points, so Vulture supplies
 # dead-helper detection there. Names collected by pytest are entry points;
