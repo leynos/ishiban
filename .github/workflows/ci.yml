@@ -16,7 +16,6 @@ jobs:
   lint-test:
     runs-on: ubuntu-latest
     env:
-      CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
 
     steps:
@@ -131,7 +130,7 @@ jobs:
           output-path: coverage.xml
           format: cobertura
           artefact-name-suffix: ishiban
-          publish-artefact: ${{ env.ACT != 'true' }}
+          publish-artefact: 'false'
           with-ratchet: 'true'
           # Serial coverage preserves dynamically imported Alembic migration hits.
           pytest-workers: ''
