@@ -70,15 +70,7 @@ PYLINT = $(UV_ENV) $(UV_GATE) tool --managed-python --python $(PYLINT_PYTHON) --
 all: check-python-sources build build-web check-fmt lint typecheck test
 	+$(MAKE) spelling
 
-define ensure_uv
-	@command -v $(UV) >/dev/null 2>&1 || { \
-	  printf "Error: uv is required, but '%s' was not found or is not executable\n" "$(UV)" >&2; \
-	  exit 1; \
-	}
-endef
-
 build: ## Build virtual-env and install deps
-	$(call ensure_uv)
 	$(UV_ENV) $(UV_GATE) prepare --group dev
 
 install-js: ## Install the locked TypeScript tooling with Bun 1.4.x
@@ -109,7 +101,6 @@ build-web: install-js ## Build the Tailwind styles and Bun browser bundle
 	$(BUN) run build
 
 build-release: ## Build artefacts (sdist & wheel)
-	$(call ensure_uv)
 	$(UV_ENV) $(UV_GATE) run -- python -m build --sdist --wheel
 
 clean: ## Remove build artefacts
